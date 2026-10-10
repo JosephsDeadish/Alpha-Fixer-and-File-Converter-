@@ -4,6 +4,8 @@ Alpha & RGBA Adjuster tab widget.
 import datetime
 import logging
 import os
+import shutil
+import tempfile
 import time
 from pathlib import Path
 
@@ -16,14 +18,59 @@ from PyQt6.QtWidgets import (
     QSpinBox, QCheckBox, QFileDialog,
     QProgressBar, QGroupBox, QScrollArea,
     QGridLayout, QLineEdit, QSplitter,
-    QMessageBox, QTextEdit,
+    QMessageBox, QTextEdit, QMenu,
+    QAbstractSpinBox,
 )
 
 from ..core.presets import PresetManager
-from ..core.alpha_processor import collect_files
+from ..core.alpha_processor import collect_files, SUPPORTED_READ, _has_wand
 from ..core.worker import AlphaWorker
 from .drop_list import DropFileList
 from .preview_pane import BeforeAfterWidget
+from ..core.file_converter import svg_input_available
+
+
+def _alpha_capability_summary() -> str:
+    svg_ready = svg_input_available()
+    parts = [
+        "Ready: raster alpha/RGBA processing and preview tools are available.",
+    ]
+    if svg_ready:
+        parts.append("SVG inputs ready (bundled QtSvg or an available renderer).")
+    else:
+        parts.append("SVG inputs unavailable: SVG renderer runtime missing.")
+    if _has_wand():
+        parts.append("Complex DDS helpers ready.")
+    else:
+        parts.append("Complex DDS helpers limited without ImageMagick/wand.")
+    return " ".join(parts)
+
+
+def _alpha_capability_has_limits() -> bool:
+    return not svg_input_available() or not _has_wand()
+
+
+def _alpha_capability_details() -> str:
+    lines = [
+        _alpha_capability_summary(),
+        "",
+        "Optional alpha-path dependencies:",
+        "• SVG input: "
+        + ("ready" if svg_input_available() else "limited (SVG renderer runtime missing)"),
+        "• ImageMagick/wand: "
+        + ("ready" if _has_wand() else "limited (complex DDS inspection / compressed DDS helpers unavailable)"),
+    ]
+    return "\n".join(lines)
+
+
+def _alpha_next_step_text(has_files: bool, preview_path: str, helper_text: str) -> str:
+    if not has_files:
+        return "Next step: add image files to preview or process, then choose a preset or manual adjustments."
+    if preview_path:
+        if "atlas" in helper_text.lower() or "heat-map" in helper_text.lower():
+            return "Next step: review the preview helpers, fine-tune the adjustments, then process the batch or send zones to Selective Alpha."
+        return "Next step: review the before/after preview, fine-tune the adjustments, then process the batch when ready."
+    return "Next step: select a queued image to inspect the preview, then adjust settings or run the batch."
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +186,95 @@ class _AlphaPreviewLoader(QThread):
                 pass  # receiver destroyed; nothing to do
 
 
+
+# ---------------------------------------------------------------------------
+# Background worker: expand directories to file lists without blocking the UI
+# ---------------------------------------------------------------------------
+
+class _FileCollectThread(QThread):
+    """Walk directories in a background thread, emitting batches of found paths.
+
+    Use this whenever the incoming paths might include large directories that
+    would block the Qt event loop if scanned synchronously.  The caller should
+    connect ``files_found`` to process batches of paths as they arrive, and
+    ``finished`` (inherited from QThread) to perform final clean-up.
+    """
+
+    #: Emitted with a list of newly discovered file paths every CHUNK files.
+    files_found = pyqtSignal(list)
+    #: Total number of files found (emitted once on completion).
+    scan_done = pyqtSignal(int)
+
+    _CHUNK = 500  # emit a signal every N files so the UI can add them progressively
+
+    def __init__(self, paths: list[str], extensions: set, recursive: bool):
+        super().__init__()
+        self._paths = paths
+        self._extensions = extensions
+        self._recursive = recursive
+        self._stop = False
+
+    def stop(self) -> None:
+        """Request early termination (e.g. when the user adds another batch)."""
+        self._stop = True
+
+    def run(self) -> None:
+        buffer: list[str] = []
+        total = 0
+        for p in self._paths:
+            if self._stop:
+                break
+            p = os.path.normpath(p)
+            if os.path.isfile(p):
+                if Path(p).suffix.lower() in self._extensions:
+                    buffer.append(p)
+                    total += 1
+                    if len(buffer) >= self._CHUNK:
+                        try:
+                            self.files_found.emit(list(buffer))
+                        except RuntimeError:
+                            return
+                        buffer.clear()
+            elif os.path.isdir(p):
+                if self._recursive:
+                    for root, _, files in os.walk(p):
+                        if self._stop:
+                            break
+                        for f in files:
+                            if Path(f).suffix.lower() in self._extensions:
+                                buffer.append(os.path.join(root, f))
+                                total += 1
+                                if len(buffer) >= self._CHUNK:
+                                    try:
+                                        self.files_found.emit(list(buffer))
+                                    except RuntimeError:
+                                        return
+                                    buffer.clear()
+                else:
+                    for f in os.listdir(p):
+                        if self._stop:
+                            break
+                        fp = os.path.join(p, f)
+                        if os.path.isfile(fp) and Path(f).suffix.lower() in self._extensions:
+                            buffer.append(fp)
+                            total += 1
+                            if len(buffer) >= self._CHUNK:
+                                try:
+                                    self.files_found.emit(list(buffer))
+                                except RuntimeError:
+                                    return
+                                buffer.clear()
+        if buffer:
+            try:
+                self.files_found.emit(buffer)
+            except RuntimeError:
+                return
+        try:
+            self.scan_done.emit(total)
+        except RuntimeError:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Main tab widget
 # ---------------------------------------------------------------------------
@@ -170,25 +306,55 @@ class AlphaFixerTab(QWidget):
     # Emitted when files are first dragged over the drop zone.
     drag_entered = pyqtSignal()
     preview_refreshed = pyqtSignal()
+    # Emitted when the user right-clicks the alpha-vis preview and chooses to
+    # share detected zone masks with the Selective Alpha tool.
+    # Carries a list of (alpha_value: int, bool_mask: np.ndarray) tuples.
+    zone_masks_shared = pyqtSignal(list)
+    # Emitted when the output directory is changed (browse or typed).
+    # Carries the new path string (empty string = same as source).
+    output_dir_changed = pyqtSignal(str)
+    status_notice = pyqtSignal(str, int)
+    queue_status_changed = pyqtSignal(str)
+    SHORTCUT_DEFS = (
+        ("alpha_run", "F5", "Start processing batch", "Alpha & RGBA"),
+        ("alpha_stop", "Escape", "Stop the current operation", "Alpha & RGBA"),
+        ("alpha_add_files", "Ctrl+O", "Add image files to the queue", "Alpha & RGBA"),
+        ("alpha_add_folder", "Ctrl+Shift+O", "Add a folder to the queue", "Alpha & RGBA"),
+    )
 
     def __init__(self, preset_manager: PresetManager, settings_manager, parent=None):
         super().__init__(parent)
         self._presets = preset_manager
         self._settings = settings_manager
         self._worker = None
+        # Background file-collection thread (avoids UI freeze on large folders)
+        self._collect_thread: _FileCollectThread | None = None
+        self._last_thumb_pause_count = 0
         # ETA tracking for large batch runs
         self._batch_start_time: float = 0.0
         self._batch_total: int = 0
+        self._stop_requested = False
+        self._batch_outputs: dict[str, str] = {}
         # Compare preview state
         self._preview_path: str | None = None
         self._preview_loader: _AlphaPreviewLoader | None = None
+        self._preview_request_id = 0
+        self._retired_preview_loaders: set[_AlphaPreviewLoader] = set()
         # Debounce timer so rapid fine-tune slider changes don't flood with threads
         self._preview_debounce = QTimer(self)
         self._preview_debounce.setSingleShot(True)
         self._preview_debounce.setInterval(150)  # ms -- wait for user to settle
         self._preview_debounce.timeout.connect(self._update_compare)
+        # Spinner timer: animates the run button text while processing
+        self._spinner_timer = QTimer(self)
+        self._spinner_timer.setInterval(150)
+        self._spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        self._spinner_idx = 0
+        self._spinner_timer.timeout.connect(self._tick_spinner)
         self._setup_ui()
+        self.queue_status_changed.connect(self._refresh_session_status)
         self._setup_shortcuts()
+        self._refresh_session_status()
 
     # ------------------------------------------------------------------
     # UI construction
@@ -196,8 +362,8 @@ class AlphaFixerTab(QWidget):
 
     def _setup_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(12, 12, 12, 12)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(8)
 
         # Header – uses the default-theme label; updated to the active theme via update_theme()
         from .theme_engine import get_theme_tab_labels
@@ -206,6 +372,24 @@ class AlphaFixerTab(QWidget):
         hdr.setObjectName("header")
         self._hdr = hdr
         main_layout.addWidget(hdr)
+
+        self._capability_lbl = QLabel(_alpha_capability_summary())
+        self._capability_lbl.setWordWrap(True)
+        self._capability_lbl.setProperty(
+            "capabilityState", "limited" if _alpha_capability_has_limits() else "ready"
+        )
+        self._capability_lbl.setToolTip(_alpha_capability_details())
+        main_layout.addWidget(self._capability_lbl)
+        self._session_status_lbl = QLabel("")
+        self._session_status_lbl.setWordWrap(True)
+        self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._session_status_lbl.setProperty("toolGuidance", True)
+        main_layout.addWidget(self._session_status_lbl)
+        self._next_step_lbl = QLabel("Next step: add image files to preview or process, then choose a preset or manual adjustments.")
+        self._next_step_lbl.setWordWrap(True)
+        self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._next_step_lbl.setProperty("toolGuidance", True)
+        main_layout.addWidget(self._next_step_lbl)
 
         outer_splitter = QSplitter(Qt.Orientation.Horizontal)
         outer_splitter.setChildrenCollapsible(False)
@@ -216,8 +400,8 @@ class AlphaFixerTab(QWidget):
         left = QWidget()
         left.setMinimumWidth(320)
         lv = QVBoxLayout(left)
-        lv.setContentsMargins(0, 0, 6, 0)
-        lv.setSpacing(6)
+        lv.setContentsMargins(0, 0, 4, 0)
+        lv.setSpacing(5)
 
         lbl_files = QLabel("Input Files / Folders  (drag & drop supported)")
         lbl_files.setObjectName("section")
@@ -244,7 +428,7 @@ class AlphaFixerTab(QWidget):
         grp_out = QGroupBox("Output")
         self._grp_out = grp_out
         go_layout = QGridLayout(grp_out)
-        go_layout.setContentsMargins(10, 14, 10, 12)
+        go_layout.setContentsMargins(8, 12, 8, 10)
         go_layout.setColumnStretch(0, 0)
         go_layout.setColumnStretch(1, 1)
         go_layout.setColumnMinimumWidth(0, 120)
@@ -329,6 +513,7 @@ class AlphaFixerTab(QWidget):
 
         # ---- Before/after compare panel (outside scroll area, always visible) ----
         compare_area = QWidget()
+        self._compare_area = compare_area   # kept for show/hide when popping out
         ca_layout = QVBoxLayout(compare_area)
         ca_layout.setContentsMargins(0, 0, 0, 0)
         ca_layout.setSpacing(2)
@@ -349,6 +534,31 @@ class AlphaFixerTab(QWidget):
             "This is purely a visual aid — it does NOT change how files are processed."
         )
         ca_layout.addWidget(self._alpha_vis_check)
+        # Atlas detection toggle (item 11)
+        self._atlas_detect_check = QCheckBox("🗺  Detect Atlas")
+        self._atlas_detect_check.setChecked(False)
+        self._atlas_detect_check.setToolTip(
+            "Detect sprite atlas cells in the preview image.\n"
+            "Draws colored bounding boxes around each detected sprite region.\n"
+            "Works by finding mostly transparent seam rows/columns that\n"
+            "separate individual sprites in a texture atlas/sprite sheet.\n"
+            "Works with or independently of 'Highlight Alpha Values'."
+        )
+        ca_layout.addWidget(self._atlas_detect_check)
+        preview_hint = QLabel(
+            "Preview helpers only change the viewer, not the processed file."
+        )
+        self._preview_hint_lbl = preview_hint
+        preview_hint.setProperty("toolGuidance", True)
+        preview_hint.setWordWrap(True)
+        ca_layout.addWidget(preview_hint)
+        self._preview_helper_lbl = QLabel("Preview helpers idle.")
+        self._preview_helper_lbl.setObjectName("alphaPreviewHelperStatus")
+        self._preview_helper_lbl.setProperty("toolGuidance", True)
+        self._preview_helper_lbl.setWordWrap(True)
+        ca_layout.addWidget(self._preview_helper_lbl)
+        # Atlas region list for overlay drawing (updated when atlas detect is on)
+        self._atlas_cells: list[tuple[int, int, int, int]] = []
 
         # Row: [Before stats panel] [BeforeAfterWidget] [After stats panel]
         compare_row = QHBoxLayout()
@@ -375,11 +585,26 @@ class AlphaFixerTab(QWidget):
 
         self._compare = BeforeAfterWidget()
         self._compare.setMinimumHeight(180)
+        # Right-click on the compare preview lets users export detected alpha
+        # zones directly to the Selective Alpha tool (cross-tool clipboard).
+        self._compare.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._compare.customContextMenuRequested.connect(self._on_compare_context_menu)
 
         compare_row.addWidget(self._before_stats_lbl, 0)
         compare_row.addWidget(self._compare, 1)
         compare_row.addWidget(self._after_stats_lbl, 0)
         ca_layout.addLayout(compare_row, 1)
+
+        # "Redock" button shown when the compare panel is popped out
+        self._btn_dock_back = QPushButton("⇙  Redock Preview")
+        self._btn_dock_back.setMinimumHeight(30)
+        self._btn_dock_back.setToolTip(
+            "The preview is currently in a floating window.\n"
+            "Click to close the floating window and redock the preview here."
+        )
+        self._btn_dock_back.setVisible(False)
+        self._btn_dock_back.clicked.connect(self._on_dock_back_clicked)
+        ca_layout.addWidget(self._btn_dock_back)
 
         # Left column: vertical splitter – controls/file-list panel on top
         # (scrollable), compare panel on the bottom (always fully visible).
@@ -389,6 +614,8 @@ class AlphaFixerTab(QWidget):
         left_vsplit.addWidget(left_scroll)
         left_vsplit.addWidget(compare_area)
         left_vsplit.setSizes([420, 380])
+        self._left_vsplit = left_vsplit          # saved so pop-out can resize it
+        self._left_vsplit_normal_sizes: list[int] = [420, 380]
         outer_splitter.addWidget(left_vsplit)
 
         # ==============================================================
@@ -397,8 +624,8 @@ class AlphaFixerTab(QWidget):
         right = QWidget()
         right.setMinimumWidth(380)
         rv = QVBoxLayout(right)
-        rv.setContentsMargins(6, 0, 0, 0)
-        rv.setSpacing(8)
+        rv.setContentsMargins(4, 0, 0, 0)
+        rv.setSpacing(6)
 
         # Run controls – at the very top so the Process button is always
         # immediately visible when the tab is opened.
@@ -421,11 +648,31 @@ class AlphaFixerTab(QWidget):
         self._status_lbl.setObjectName("subheader")
         rv.addWidget(self._status_lbl)
 
+        # Undo Last Batch button — hidden until a successful in-place batch (item 10)
+        self._btn_undo_batch = QPushButton("↩  Undo Last Batch")
+        self._btn_undo_batch.setStyleSheet(
+            "QPushButton { background: #7a4800; color: #ffe0a0; border: 1px solid #ff9800; "
+            "border-radius: 4px; padding: 4px 8px; }"
+            "QPushButton:hover { background: #a05800; }"
+            "QPushButton:pressed { background: #5a3000; }"
+        )
+        self._btn_undo_batch.setMinimumHeight(30)
+        self._btn_undo_batch.setToolTip(
+            "Restore the original files from the last batch that was processed in-place.\n"
+            "The backup is kept until the next batch replaces it."
+        )
+        self._btn_undo_batch.setVisible(False)
+        self._btn_undo_batch.clicked.connect(self._on_undo_batch)
+        rv.addWidget(self._btn_undo_batch)
+        # Track backup manifest: list of (original_path, backup_path) tuples
+        self._last_backup_pairs: list[tuple[str, str]] = []
+        self._last_backup_dir: str = ""
+
         # Alpha channel settings section
         grp_tune = QGroupBox("Alpha Channel Settings")
         self._grp_tune = grp_tune
         gt_layout = QGridLayout(grp_tune)
-        gt_layout.setContentsMargins(10, 14, 10, 12)
+        gt_layout.setContentsMargins(8, 12, 8, 10)
         gt_layout.setColumnStretch(0, 0)
         gt_layout.setColumnStretch(1, 1)
         gt_layout.setColumnMinimumWidth(0, 165)
@@ -451,6 +698,7 @@ class AlphaFixerTab(QWidget):
         lbl_cmin.setMinimumHeight(24)
         gt_layout.addWidget(lbl_cmin, 1, 0)
         self._clamp_min_spin = QSpinBox()
+        self._clamp_min_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._clamp_min_spin.setRange(0, 255)
         self._clamp_min_spin.setValue(0)
         self._clamp_min_spin.setMinimumHeight(26)
@@ -469,6 +717,7 @@ class AlphaFixerTab(QWidget):
         lbl_cmax.setMinimumHeight(24)
         gt_layout.addWidget(lbl_cmax, 2, 0)
         self._clamp_max_spin = QSpinBox()
+        self._clamp_max_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._clamp_max_spin.setRange(0, 255)
         self._clamp_max_spin.setValue(255)
         self._clamp_max_spin.setMinimumHeight(26)
@@ -485,6 +734,11 @@ class AlphaFixerTab(QWidget):
 
         # ── Simple checkboxes ───────────────────────────────────────────────────
         self._invert_check = QCheckBox("Invert alpha (swap transparent ↔ opaque)")
+        self._invert_check.setToolTip(
+            "Flip every alpha value: 0 becomes 255 and 255 becomes 0.\n"
+            "Use this when a texture's transparency is inside-out —\n"
+            "e.g. the opaque area should be transparent and vice versa."
+        )
         gt_layout.addWidget(self._invert_check, 3, 0, 1, 2)
 
         self._binary_cut_check = QCheckBox("Binary cut (\u2265 threshold \u2192 255, else \u2192 0)")
@@ -514,6 +768,7 @@ class AlphaFixerTab(QWidget):
         )
         gt_layout.addWidget(lbl_thresh, 6, 0)
         self._threshold_spin = QSpinBox()
+        self._threshold_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._threshold_spin.setRange(0, 255)
         self._threshold_spin.setValue(0)
         self._threshold_spin.setMinimumHeight(26)
@@ -536,6 +791,7 @@ class AlphaFixerTab(QWidget):
         lbl_red.setMinimumHeight(24)
         gt_layout.addWidget(lbl_red, 12, 0)
         self._red_spin = QSpinBox()
+        self._red_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._red_spin.setRange(-255, 255)
         self._red_spin.setValue(0)
         self._red_spin.setPrefix("R ")
@@ -546,6 +802,7 @@ class AlphaFixerTab(QWidget):
         lbl_green.setMinimumHeight(24)
         gt_layout.addWidget(lbl_green, 13, 0)
         self._green_spin = QSpinBox()
+        self._green_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._green_spin.setRange(-255, 255)
         self._green_spin.setValue(0)
         self._green_spin.setPrefix("G ")
@@ -556,6 +813,7 @@ class AlphaFixerTab(QWidget):
         lbl_blue.setMinimumHeight(24)
         gt_layout.addWidget(lbl_blue, 14, 0)
         self._blue_spin = QSpinBox()
+        self._blue_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._blue_spin.setRange(-255, 255)
         self._blue_spin.setValue(0)
         self._blue_spin.setPrefix("B ")
@@ -566,6 +824,7 @@ class AlphaFixerTab(QWidget):
         lbl_alpha_adj.setMinimumHeight(24)
         gt_layout.addWidget(lbl_alpha_adj, 15, 0)
         self._alpha_delta_spin = QSpinBox()
+        self._alpha_delta_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._alpha_delta_spin.setRange(-255, 255)
         self._alpha_delta_spin.setValue(0)
         self._alpha_delta_spin.setPrefix("A\u25b3 ")
@@ -579,6 +838,16 @@ class AlphaFixerTab(QWidget):
             "the alpha fix. Useful for colour-correcting game textures."
         )
         gt_layout.addWidget(self._apply_rgb_check, 16, 0, 1, 2)
+
+        for label, control in (
+            (lbl_cmin, self._clamp_min_spin), (lbl_cmax, self._clamp_max_spin),
+            (lbl_thresh, self._threshold_spin), (lbl_red, self._red_spin),
+            (lbl_green, self._green_spin), (lbl_blue, self._blue_spin),
+            (lbl_alpha_adj, self._alpha_delta_spin),
+        ):
+            label.setBuddy(control)
+            control.setAccessibleName(label.text().rstrip(":"))
+        self._threshold_spin.setAccessibleDescription(lbl_thresh.toolTip())
 
         rv.addWidget(grp_tune)
 
@@ -615,6 +884,10 @@ class AlphaFixerTab(QWidget):
         self._file_list.file_removed.connect(self.files_removed)
         self._file_list.list_cleared.connect(self.list_cleared)
         self._file_list.drag_entered.connect(self.drag_entered)
+        self._file_list.thumbnail_failed.connect(self._on_thumbnail_failed)
+        self._file_list.thumbnail_status_changed.connect(self._on_thumbnail_status_changed)
+        self._file_list.thumbnails_auto_paused.connect(self._on_thumbnails_auto_paused)
+        self._file_list.batch_import_completed.connect(self._on_batch_import_completed)
         # Selection → compare preview
         self._file_list.currentRowChanged.connect(self._on_selection_changed)
         # Fine-tune controls → refresh compare preview AND live params label
@@ -630,6 +903,17 @@ class AlphaFixerTab(QWidget):
         self._apply_rgb_check.toggled.connect(self._on_finetune_changed)
         # Alpha visualization toggle → re-apply overlay without re-processing
         self._alpha_vis_check.toggled.connect(self._on_alpha_vis_toggled)
+        # Atlas detection toggle → re-detect atlas and update overlay (item 11)
+        self._atlas_detect_check.toggled.connect(self._on_atlas_detect_toggled)
+        self._alpha_vis_check.toggled.connect(
+            lambda checked: self._settings.set("alpha_preview_highlight", checked)
+        )
+        self._atlas_detect_check.toggled.connect(
+            lambda checked: self._settings.set("alpha_preview_detect_atlas", checked)
+        )
+        # Pop-out button: include the Highlight Alpha Values checkbox in the
+        # floating window so users can toggle the overlay there too.
+        self._compare.popout_requested.connect(self._on_compare_popout)
         # Persist batch options so they survive app restarts
         self._recursive_check.toggled.connect(
             lambda v: self._settings.set("batch_recursive", v)
@@ -637,14 +921,33 @@ class AlphaFixerTab(QWidget):
         self._suffix_edit.textChanged.connect(
             lambda t: self._settings.set("output_suffix", t)
         )
+        self._alpha_vis_check.setChecked(self._settings.get("alpha_preview_highlight", False))
+        self._atlas_detect_check.setChecked(self._settings.get("alpha_preview_detect_atlas", False))
         # Initialise the live params label
         self._refresh_finetune_label()
+        self._refresh_preview_helper_status()
 
     def _setup_shortcuts(self):
-        QShortcut(QKeySequence("F5"), self).activated.connect(self._run)
-        QShortcut(QKeySequence("Escape"), self).activated.connect(self._stop)
-        QShortcut(QKeySequence("Ctrl+O"), self).activated.connect(self._add_files)
-        QShortcut(QKeySequence("Ctrl+Shift+O"), self).activated.connect(self._add_folder)
+        self._shortcut_objects: dict[str, QShortcut] = {}
+        self._bind_shortcut("alpha_run", "F5", self._run)
+        self._bind_shortcut("alpha_stop", "Escape", self._stop)
+        self._bind_shortcut("alpha_add_files", "Ctrl+O", self._add_files)
+        self._bind_shortcut("alpha_add_folder", "Ctrl+Shift+O", self._add_folder)
+
+    @classmethod
+    def shortcut_definitions(cls) -> tuple[tuple[str, str, str, str], ...]:
+        return cls.SHORTCUT_DEFS
+
+    def update_shortcut_binding(self, shortcut_id: str, key_sequence: str) -> None:
+        shortcut = getattr(self, "_shortcut_objects", {}).get(shortcut_id)
+        if shortcut is not None:
+            shortcut.setKey(QKeySequence(key_sequence))
+
+    def _bind_shortcut(self, shortcut_id: str, default: str, slot) -> None:
+        key_sequence = self._settings.get_shortcut_binding(shortcut_id, default)
+        shortcut = QShortcut(QKeySequence(key_sequence), self)
+        shortcut.activated.connect(slot)
+        self._shortcut_objects[shortcut_id] = shortcut
 
     # ------------------------------------------------------------------
     # Tooltip registration
@@ -682,6 +985,10 @@ class AlphaFixerTab(QWidget):
         mgr.register(self._progress, "processing_progress")
         mgr.register(self._status_lbl, "alpha_status_lbl")
         mgr.register(self._alpha_vis_check, "alpha_vis_check")
+        mgr.register(self._atlas_detect_check, "alpha_atlas_detect_check")
+        # Group boxes (prevent stale-id tooltip bleed from settings dialog widgets)
+        mgr.register(self._grp_out, "alpha_output_group")
+        mgr.register(self._grp_tune, "alpha_tune_group")
 
     def update_theme(self, theme_name: str) -> None:
         """Update inner header, section labels and group-box titles to match the active theme."""
@@ -704,7 +1011,7 @@ class AlphaFixerTab(QWidget):
         last_dir = self._settings.get("last_input_dir", "")
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Files", last_dir,
-            "Images (*.png *.dds *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif *.ppm *.pcx *.avif *.qoi *.svg);;All Files (*)",
+            "Images (*.png *.dds *.jpg *.jpeg *.jfif *.jpe *.bmp *.tiff *.tif *.webp *.tga *.ico *.gif *.ppm *.pcx *.avif *.qoi *.svg *.jp2);;All Files (*)",
         )
         if paths:
             self._settings.set("last_input_dir", os.path.dirname(paths[0]))
@@ -715,40 +1022,184 @@ class AlphaFixerTab(QWidget):
         folder = QFileDialog.getExistingDirectory(self, "Select Folder", last_dir)
         if folder:
             self._settings.set("last_input_dir", folder)
-            recursive = self._recursive_check.isChecked()
-            files = collect_files([folder], recursive=recursive)
-            self._add_to_list(files)
+            self._add_to_list([folder])
 
     def _add_to_list(self, paths: list[str]):
-        """Add paths using the batch helper to stay responsive for large imports."""
+        """Expand directories, filter to supported formats, then add to list.
+
+        Individual file paths are added synchronously (fast path).
+        Directory paths are expanded in a background ``_FileCollectThread``
+        so the Qt event loop stays responsive even when scanning very large
+        folders (100 000+ files).
+        """
+        # Fast path: individual files only → expand synchronously (no thread overhead)
+        individual = [p for p in paths if os.path.isfile(p)]
+        dirs = [p for p in paths if os.path.isdir(p)]
+
+        unsupported_count = sum(
+            1 for p in individual
+            if Path(p).suffix.lower() not in SUPPORTED_READ
+        )
+        valid_files = [p for p in individual if Path(p).suffix.lower() in SUPPORTED_READ]
+
         was_empty = self._file_list.count() == 0
-        self._file_list.add_paths_batch(paths)
-        # Auto-select the first item so the preview pane shows immediately
-        if was_empty and self._file_list.count() > 0:
-            self._file_list.setCurrentRow(0)
-        # Notify main window so it can play the file-add sound
-        if paths:
+        if valid_files:
+            self._file_list.add_paths_batch(valid_files)
+            if was_empty and self._file_list.count() > 0:
+                self._file_list.setCurrentRow(0)
             self.files_added.emit()
+        if unsupported_count:
+            self._log_msg(
+                f"⚠ {unsupported_count} file(s) skipped — format not supported "
+                f"(supported: {', '.join(sorted(SUPPORTED_READ))})"
+            )
+
+        if dirs:
+            # Stop any previous collection thread before starting a new one
+            if self._collect_thread is not None and self._collect_thread.isRunning():
+                self._collect_thread.stop()
+
+            recursive = self._recursive_check.isChecked()
+            thread = _FileCollectThread(dirs, SUPPORTED_READ, recursive)
+
+            def _on_files_found(batch: list[str], current_thread=thread) -> None:
+                if self._collect_thread is not current_thread:
+                    return
+                pre = self._file_list.count() == 0
+                self._file_list.add_paths_batch(batch)
+                if pre and self._file_list.count() > 0:
+                    self._file_list.setCurrentRow(0)
+                self.files_added.emit()
+
+            def _on_scan_done(total: int, current_thread=thread) -> None:
+                if self._collect_thread is current_thread:
+                    self._collect_thread = None
+                if total:
+                    self._log_msg(f"📁 Folder scan complete — {total} image(s) found.")
+
+            thread.files_found.connect(_on_files_found)
+            thread.scan_done.connect(_on_scan_done)
+            thread.finished.connect(thread.deleteLater)
+            self._collect_thread = thread
+            thread.start()
+
         # Trigger game/ROM folder detection for the added paths
         self._detect_rom(paths)
 
     @pyqtSlot(int)
     def _update_file_count(self, n: int):
-        self._file_count_lbl.setText(
-            f"{n} file{'s' if n != 1 else ''}  |  F5 to process  |  Esc to stop"
+        parts = [f"{n} file{'s' if n != 1 else ''}", "F5 to process", "Esc to stop"]
+        summary = self._file_list.get_thumbnail_summary()
+        pending = int(summary.get("pending_count", 0) or 0)
+        failed = int(summary.get("failure_count", 0) or 0)
+        if bool(summary.get("auto_paused")):
+            parts.append("thumbnail previews paused")
+        elif pending > 0:
+            parts.append(f"{pending} preview{'s' if pending != 1 else ''} pending")
+        if failed > 0:
+            parts.append(self._thumbnail_failure_status_text(summary))
+        self._file_count_lbl.setText("  |  ".join(parts))
+        self.queue_status_changed.emit(self.get_queue_status_text())
+
+    def get_queue_status_text(self) -> str:
+        count = int(self._file_list.count())
+        if count <= 0:
+            return ""
+        parts = [f"📁 {count} queued"]
+        summary = self._file_list.get_thumbnail_summary()
+        pending = int(summary.get("pending_count", 0) or 0)
+        failed = int(summary.get("failure_count", 0) or 0)
+        if bool(summary.get("auto_paused")):
+            parts.append("thumbnail previews paused")
+        elif pending > 0:
+            parts.append(f"{pending} preview{'s' if pending != 1 else ''} pending")
+        if failed > 0:
+            parts.append(self._thumbnail_failure_status_text(summary))
+        return "  •  ".join(parts)
+
+    def get_status_bar_text(self) -> str:
+        summary = self.get_queue_status_text() or "🎨 Alpha ready"
+        extras: list[str] = []
+        if self._preview_path:
+            extras.append(f"preview {os.path.basename(self._preview_path)}")
+        helper = self._preview_helper_lbl.text().strip() if hasattr(self, "_preview_helper_lbl") else ""
+        helper_lower = helper.lower()
+        if helper:
+            if helper.startswith("Preview helpers: "):
+                extras.append(helper[len("Preview helpers: "):].rstrip("."))
+            elif not helper_lower.startswith("preview helpers ready"):
+                extras.append(helper.rstrip("."))
+        return summary + ("  •  " + "  •  ".join(extras) if extras else "")
+
+    def _refresh_session_status(self, *_args) -> None:
+        status = self.get_status_bar_text().strip()
+        helper_text = self._preview_helper_lbl.text().strip() if hasattr(self, "_preview_helper_lbl") else ""
+        next_text = _alpha_next_step_text(bool(self.get_queue_status_text()), self._preview_path or "", helper_text)
+        self._next_step_lbl.setText(next_text)
+        self._next_step_lbl.setToolTip(next_text)
+        text = f"Tool status: {status}" if status else "Tool status: ready"
+        if next_text:
+            text += f"\nNext: {next_text.removeprefix('Next step:').strip()}"
+        self._session_status_lbl.setText(text)
+        self._session_status_lbl.setToolTip((status + "\n\n" + next_text).strip() or text)
+
+    def _thumbnail_failure_status_text(self, summary: dict[str, object]) -> str:
+        failed = int(summary.get("failure_count", 0) or 0)
+        categories = summary.get("failure_categories") or {}
+        if isinstance(categories, dict):
+            if categories.get("decode"):
+                return f"{failed} preview failure{'s' if failed != 1 else ''} (decode)"
+            if categories.get("memory"):
+                return f"{failed} preview failure{'s' if failed != 1 else ''} (memory)"
+            if categories.get("missing"):
+                return f"{failed} preview failure{'s' if failed != 1 else ''} (missing)"
+        return f"{failed} preview failure{'s' if failed != 1 else ''}"
+
+    @pyqtSlot(bool, int, int, int)
+    def _on_thumbnail_status_changed(self, _paused: bool, _pending: int, _failed: int, _loaded: int) -> None:
+        self._update_file_count(self._file_list.count())
+
+    @pyqtSlot(int, int)
+    def _on_thumbnails_auto_paused(self, item_count: int, threshold: int) -> None:
+        if item_count == self._last_thumb_pause_count:
+            return
+        self._last_thumb_pause_count = item_count
+        message = (
+            f"⚠ Thumbnail previews auto-paused for large queue — {item_count:,} queued (threshold {threshold:,})."
         )
+        self._log_msg(message)
+        self.status_notice.emit(message, 10000)
+        self._update_file_count(self._file_list.count())
+
+    @pyqtSlot(int, int, int)
+    def _on_batch_import_completed(self, added: int, deduped: int, requested: int) -> None:
+        if requested <= 0:
+            return
+        note = (
+            f"Added {added} new file{'s' if added != 1 else ''}"
+            + (f"; skipped {deduped} duplicate{'s' if deduped != 1 else ''}" if deduped else "")
+            + "."
+        )
+        self._log_msg(f"📥 {note}")
+        self.status_notice.emit(f"Alpha queue: {note}", 6000)
+        self._update_file_count(self._file_list.count())
 
     @pyqtSlot(int)
     def _on_selection_changed(self, row: int):
+        self._preview_debounce.stop()
+        self._stop_preview_loader()
+        self._compare.clear()
+        self._before_stats_lbl.setText("")
+        self._after_stats_lbl.setText("")
+        self._atlas_cells = []
         item = self._file_list.item(row)
         if item and os.path.isfile(item.text()):
             self._preview_path = item.text()
             self._preview_debounce.start()
         else:
             self._preview_path = None
-            self._compare.clear()
-            self._before_stats_lbl.setText("")
-            self._after_stats_lbl.setText("")
+        self._refresh_preview_helper_status()
+        self.queue_status_changed.emit(self.get_queue_status_text())
 
     # ------------------------------------------------------------------
     # ROM / game folder detection
@@ -840,14 +1291,9 @@ class AlphaFixerTab(QWidget):
         # Disconnect the previous loader's signals before replacing it so that
         # a stale thread finishing late cannot overwrite the current result.
         # Also ask the thread to abandon its work so CPU is freed quickly.
-        if self._preview_loader is not None:
-            self._preview_loader.stop()
-            try:
-                self._preview_loader.preview_ready.disconnect()
-                self._preview_loader.stats_ready.disconnect()
-                self._preview_loader.failed.disconnect()
-            except RuntimeError:
-                pass  # already disconnected
+        self._stop_preview_loader()
+        request_id = self._preview_request_id
+        path = self._preview_path
 
         manual = self._build_manual_params()
 
@@ -864,10 +1310,52 @@ class AlphaFixerTab(QWidget):
         self._preview_loader = _AlphaPreviewLoader(
             self._preview_path, preset=None, manual_params=manual
         )
-        self._preview_loader.preview_ready.connect(self._on_compare_ready)
-        self._preview_loader.stats_ready.connect(self._on_stats_ready)
-        self._preview_loader.failed.connect(self._on_compare_failed)
+        self._preview_loader.preview_ready.connect(
+            lambda before, after: self._apply_preview_result(
+                request_id, path, self._on_compare_ready, before, after,
+            )
+        )
+        self._preview_loader.stats_ready.connect(
+            lambda before, after: self._apply_preview_result(
+                request_id, path, self._on_stats_ready, before, after,
+            )
+        )
+        self._preview_loader.failed.connect(
+            lambda error: self._apply_preview_result(
+                request_id, path, self._on_compare_failed, error,
+            )
+        )
         self._preview_loader.start()
+
+    def _apply_preview_result(self, request_id, path, callback, *args) -> None:
+        if request_id == self._preview_request_id and path == self._preview_path:
+            callback(*args)
+
+    def _stop_preview_loader(self) -> None:
+        self._preview_request_id += 1
+        loader = self._preview_loader
+        self._preview_loader = None
+        if loader is None:
+            return
+        loader.stop()
+        for signal in (loader.preview_ready, loader.stats_ready, loader.failed):
+            try:
+                signal.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+        if loader.isRunning():
+            self._retired_preview_loaders.add(loader)
+            loader.finished.connect(lambda: self._release_preview_loader(loader))
+            # The thread may finish between isRunning() and connecting finished.
+            if not loader.isRunning():
+                self._release_preview_loader(loader)
+        else:
+            loader.deleteLater()
+
+    def _release_preview_loader(self, loader) -> None:
+        if loader in self._retired_preview_loaders:
+            self._retired_preview_loaders.remove(loader)
+            loader.deleteLater()
 
     # ------------------------------------------------------------------
     # Alpha visualization helpers
@@ -877,20 +1365,21 @@ class AlphaFixerTab(QWidget):
     def _alpha_vis_overlay(qi: QImage) -> QImage:
         """
         Return a copy of *qi* (Format_ARGB32) with a false-colour heat-map
-        blended over the alpha channel, plus tiny text labels showing the
-        numeric alpha value sampled across the image on a sparse grid.
+        blended over the alpha channel, plus compact badges showing dominant
+        alpha values without flooding busy previews with overlapping labels.
 
         Colour key:
           α = 0   → vivid red    (fully transparent)
           α = 128 → yellow       (semi-transparent)
           α = 255 → vivid green  (fully opaque)
 
-        The heat-map is drawn at 70 % opacity so the underlying colours remain
-        visible while the alpha structure is clearly legible.  Text labels are
+        The heat-map is drawn with moderate opacity so the underlying colours
+        remain visible while the alpha structure stays legible. Text badges are
         omitted for images smaller than 32 × 32 pixels.
         """
         import numpy as np
-        from PyQt6.QtGui import QImage as _QI, QPainter, QColor, QFont, QPen
+        from PyQt6.QtCore import QRectF
+        from PyQt6.QtGui import QBrush, QImage as _QI, QPainter, QColor, QFont, QPen
 
         # Work in Format_ARGB32 so we have direct byte access
         src = qi.convertToFormat(_QI.Format.Format_ARGB32)
@@ -922,8 +1411,9 @@ class AlphaFixerTab(QWidget):
                           255).astype(np.uint8)
         heat_b = np.zeros((h, w), dtype=np.uint8)
 
-        # Blend: out = heat * 0.70 + original * 0.30
-        blend = 0.70
+        # Blend: keep enough of the source visible that image structure does
+        # not disappear under the helper overlay.
+        blend = 0.58
         arr[:, :, 2] = np.clip(heat_r * blend + arr[:, :, 2] * (1 - blend), 0, 255).astype(np.uint8)
         arr[:, :, 1] = np.clip(heat_g * blend + arr[:, :, 1] * (1 - blend), 0, 255).astype(np.uint8)
         arr[:, :, 0] = np.clip(heat_b * blend + arr[:, :, 0] * (1 - blend), 0, 255).astype(np.uint8)
@@ -933,69 +1423,457 @@ class AlphaFixerTab(QWidget):
         out = _QI(arr.tobytes(), w, h, w * 4, _QI.Format.Format_ARGB32)
         out = out.copy()  # detach from numpy buffer
 
-        # --- Draw tiny alpha-value text labels on a sparse grid -------------
+        # --- Draw alpha-value text labels at region centroids ----------------
         # Only add labels when the image is large enough to be legible.
         _MIN_LABEL_DIM = 32
         if w >= _MIN_LABEL_DIM and h >= _MIN_LABEL_DIM:
-            # Grid spacing: aim for roughly 8 × 8 labels maximum, adaptive to
-            # image size.  Minimum step of 20 px to avoid label clutter.
-            step = max(20, min(w, h) // 8)
+            total_px = w * h
+            min_fraction = 0.0025  # skip values covering < 0.25% of pixels
+
+            # Pre-filter to only significant values to avoid O(256 * H*W) work
+            # on gradient images.  Count pixels per value in one pass.
+            val_counts = {int(v): int(c)
+                         for v, c in zip(*np.unique(alpha_raw, return_counts=True))
+                         if c >= max(1, int(total_px * min_fraction))}
+            # Cap the number of values and badges so the overlay stays legible.
+            top_vals = sorted(val_counts, key=lambda v: (-val_counts[v], v))[:12]
+
+            # Font size: scale with image size up to a legible cap
+            px_size = max(8, min(18, min(w, h) // 12))
             font = QFont()
-            font.setPixelSize(max(7, step // 4))
+            font.setPixelSize(px_size)
             font.setBold(True)
             painter = QPainter(out)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setFont(font)
             fm = painter.fontMetrics()
-            half_step = step // 2
-            for gy in range(half_step, h, step):
-                for gx in range(half_step, w, step):
-                    a_val = int(alpha_raw[gy, gx])
-                    text = str(a_val)
-                    tw = fm.horizontalAdvance(text)
-                    th = fm.ascent()
-                    tx = gx - tw // 2
-                    ty = gy + th // 2
-                    # Black shadow/outline for contrast
-                    painter.setPen(QPen(QColor(0, 0, 0, 200)))
-                    for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                        painter.drawText(tx + ox, ty + oy, text)
-                    # White foreground text
-                    painter.setPen(QPen(QColor(255, 255, 255, 230)))
-                    painter.drawText(tx, ty, text)
+            occupied: list[tuple[float, float, float, float]] = []
+
+            def _draw_badge(cx: int, cy: int, text: str, fill: QColor, *, alpha_text: int) -> bool:
+                tw = fm.horizontalAdvance(text)
+                th = fm.height()
+                pad_x = max(4, px_size // 3)
+                pad_y = max(2, px_size // 5)
+                left = float(max(2, min(w - (tw + pad_x * 2) - 2, cx - (tw + pad_x * 2) / 2)))
+                top = float(max(2, min(h - (th + pad_y * 2) - 2, cy - (th + pad_y * 2) / 2)))
+                right = left + tw + pad_x * 2
+                bottom = top + th + pad_y * 2
+                for ox1, oy1, ox2, oy2 in occupied:
+                    if not (right < ox1 or left > ox2 or bottom < oy1 or top > oy2):
+                        return False
+                occupied.append((left, top, right, bottom))
+                text_color = QColor(20, 24, 30) if alpha_text >= 168 else QColor(255, 255, 255)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(fill))
+                painter.drawRoundedRect(QRectF(left, top, right - left, bottom - top), 4.0, 4.0)
+                painter.setPen(QPen(QColor(0, 0, 0, 150), 1))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRoundedRect(QRectF(left, top, right - left, bottom - top), 4.0, 4.0)
+                painter.setPen(QPen(text_color))
+                painter.drawText(int(left + pad_x), int(top + pad_y + fm.ascent()), text)
+                return True
+
+            # Compact legend so the colour meaning stays visible after the
+            # numeric overlay was reduced.
+            legend = QRectF(6.0, 6.0, min(178.0, w - 12.0), 34.0)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(15, 18, 25, 150))
+            painter.drawRoundedRect(legend, 6.0, 6.0)
+            legend_items = (
+                ("α0", QColor(255, 74, 74, 225)),
+                ("α128", QColor(255, 211, 77, 225)),
+                ("α255", QColor(84, 224, 120, 225)),
+            )
+            lx = int(legend.left()) + 10
+            ly = int(legend.top()) + 10
+            swatch_size = 10
+            small_font = QFont(font)
+            small_font.setPixelSize(max(8, px_size - 2))
+            painter.setFont(small_font)
+            small_metrics = painter.fontMetrics()
+            for text, color in legend_items:
+                painter.setBrush(color)
+                painter.drawRoundedRect(QRectF(float(lx), float(ly + 2), swatch_size, swatch_size), 2.0, 2.0)
+                painter.setPen(QPen(QColor(245, 247, 250)))
+                painter.drawText(lx + swatch_size + 5, ly + small_metrics.ascent() + 1, text)
+                lx += swatch_size + 5 + small_metrics.horizontalAdvance(text) + 10
+            painter.setFont(font)
+
+            for a_val in top_vals:
+                mask = alpha_raw == a_val
+                px_count = val_counts[a_val]
+                text = str(int(a_val))
+                ys, xs = np.where(mask)
+                if xs.size == 0:
+                    continue
+                candidate_points = [(int(xs.mean()), int(ys.mean()))]
+                target_badges = 2 if px_count > total_px * 0.18 else 1
+                sample_count = min(xs.size, max(6, target_badges * 4))
+                if sample_count > 1:
+                    for idx in np.linspace(0, xs.size - 1, num=sample_count, dtype=int):
+                        candidate_points.append((int(xs[idx]), int(ys[idx])))
+                fill = QColor(
+                    255 if a_val < 128 else max(84, int((255 - a_val) * 2)),
+                    255 if a_val >= 128 else min(255, int(a_val * 2)),
+                    40,
+                    190,
+                )
+                shown = 0
+                for cx, cy in candidate_points:
+                    if 0 <= cy < h and 0 <= cx < w and mask[cy, cx] and _draw_badge(cx, cy, text, fill, alpha_text=a_val):
+                        shown += 1
+                        if shown >= target_badges:
+                           break
             painter.end()
 
         return out
+
+    def _refresh_preview_helper_status(self) -> None:
+        if not hasattr(self, "_preview_helper_lbl"):
+            return
+        if not self._compare.has_images():
+            self._preview_helper_lbl.setText(
+                "Preview helpers ready: alpha heat-map and atlas overlays will update when a preview loads."
+            )
+            self.queue_status_changed.emit(self.get_queue_status_text())
+            return
+        parts: list[str] = []
+        if self._alpha_vis_check.isChecked():
+            parts.append("alpha heat-map on")
+        if self._atlas_detect_check.isChecked():
+            if self._atlas_cells:
+                parts.append(
+                    f"atlas boxes on ({len(self._atlas_cells)} cell{'s' if len(self._atlas_cells) != 1 else ''})"
+                )
+            else:
+                parts.append("atlas scan on (no separated cells found)")
+        if not parts:
+            self._preview_helper_lbl.setText(
+                "Preview helpers off: showing the raw before/after preview."
+            )
+            self.queue_status_changed.emit(self.get_queue_status_text())
+            return
+        self._preview_helper_lbl.setText("Preview helpers: " + " • ".join(parts) + ".")
+        self.queue_status_changed.emit(self.get_queue_status_text())
 
     @pyqtSlot(bool)
     def _on_alpha_vis_toggled(self, _checked: bool) -> None:
         """Re-apply (or remove) the alpha visualization when the toggle changes."""
         if self._compare.has_images():
             self._apply_alpha_vis_to_compare()
+        self._refresh_preview_helper_status()
+
+    def _on_compare_popout(self) -> None:
+        """Called when the ⤢ pop-out button is clicked on the compare widget.
+
+        Hides the embedded compare area to free up space, adds a 'Highlight
+        Alpha Values' checkbox to the floating dialog, and restores everything
+        when the floating dialog is closed.
+        """
+        dlg = self._compare._popout_dialog
+        if dlg is None:
+            return
+
+        # Hide the embedded compare area to give room to the rest of the UI.
+        self._compare.setVisible(False)
+        self._compare_lbl.setVisible(False)
+        self._alpha_vis_check.setVisible(False)
+        self._atlas_detect_check.setVisible(False)
+        self._preview_hint_lbl.setVisible(False)
+        self._preview_helper_lbl.setVisible(False)
+        self._before_stats_lbl.setVisible(False)
+        self._after_stats_lbl.setVisible(False)
+        self._btn_dock_back.setVisible(True)
+
+        # Collapse the compare panel in the splitter so the controls panel
+        # expands to fill the reclaimed space (item 27).
+        if hasattr(self, "_left_vsplit"):
+            current = self._left_vsplit.sizes()
+            if current and len(current) == 2:
+                self._left_vsplit_normal_sizes = current[:]
+                total = current[0] + current[1]
+                # Give controls panel all space except enough for the dock button
+                dock_h = max(self._btn_dock_back.minimumSizeHint().height(), 38)
+                self._left_vsplit.setSizes([total - dock_h, dock_h])
+
+        # Restore everything when the floating dialog is closed.
+        dlg.finished.connect(self._on_compare_docked_back)
+
+        from PyQt6.QtWidgets import QCheckBox, QHBoxLayout, QPushButton as _QPB, QWidget as _QW
+        # Top row: preview helper checkboxes + Dock Back button
+        row_w = _QW(dlg)
+        row = QHBoxLayout(row_w)
+        row.setContentsMargins(4, 4, 4, 4)
+        chk = QCheckBox("🎨  Highlight Alpha Values", row_w)
+        chk.setChecked(self._alpha_vis_check.isChecked())
+        chk.setToolTip(self._alpha_vis_check.toolTip())
+        row.addWidget(chk)
+        atlas_chk = QCheckBox("🗺  Detect Atlas", row_w)
+        atlas_chk.setChecked(self._atlas_detect_check.isChecked())
+        atlas_chk.setToolTip(self._atlas_detect_check.toolTip())
+        row.addWidget(atlas_chk)
+        row.addStretch(1)
+        # Redock button inside the dialog so users can re-dock from within it.
+        btn_dock = _QPB("⇙  Redock", row_w)
+        btn_dock.setObjectName("popoutBtn")
+        btn_dock.setProperty("previewOverlay", True)
+        btn_dock.setAccessibleName("Redock preview")
+        btn_dock.setToolTip(
+            "Close this floating window and redock the preview back into the main panel."
+        )
+        btn_dock.clicked.connect(self._on_dock_back_clicked)
+        row.addWidget(btn_dock)
+        # The dialog layout is a QVBoxLayout; insert the top row before
+        # the compare widget (index 0) so it appears at the top.
+        dlg.layout().insertWidget(0, row_w)
+
+        # Hide the pop-out button inside the dialog's compare widget to prevent
+        # infinite pop-outs (clicking it would create another dialog).
+        pop_compare = None
+        for child in dlg.findChildren(type(self._compare)):
+            pop_compare = child
+            break
+        if pop_compare is not None:
+            pop_compare.hide_popout_button()
+
+        def _toggle(checked: bool) -> None:
+            # Keep the main checkbox in sync.
+            self._alpha_vis_check.setChecked(checked)
+            if pop_compare is not None and pop_compare.has_images():
+                self._apply_alpha_vis_to_widget(pop_compare)
+
+        def _toggle_atlas(checked: bool) -> None:
+            self._atlas_detect_check.setChecked(checked)
+            if pop_compare is not None and pop_compare.has_images():
+                self._apply_alpha_vis_to_widget(pop_compare)
+
+        chk.toggled.connect(_toggle)
+        atlas_chk.toggled.connect(_toggle_atlas)
+        # Also keep pop-out in sync when main checkbox changes.
+        def _sync_alpha(checked: bool) -> None:
+            chk.setChecked(checked)
+            if pop_compare is not None and pop_compare.has_images():
+                self._apply_alpha_vis_to_widget(pop_compare)
+
+        def _sync_atlas(checked: bool) -> None:
+            atlas_chk.setChecked(checked)
+            if pop_compare is not None and pop_compare.has_images():
+                self._apply_alpha_vis_to_widget(pop_compare)
+
+        self._alpha_vis_check.toggled.connect(_sync_alpha)
+        self._atlas_detect_check.toggled.connect(_sync_atlas)
+
+        def _disconnect_helpers(_result) -> None:
+            self._alpha_vis_check.toggled.disconnect(_sync_alpha)
+            self._atlas_detect_check.toggled.disconnect(_sync_atlas)
+
+        dlg.finished.connect(_disconnect_helpers)
+
+    def _on_compare_docked_back(self) -> None:
+        """Restore the embedded compare area after the floating dialog is closed."""
+        self._compare.setVisible(True)
+        self._compare_lbl.setVisible(True)
+        self._alpha_vis_check.setVisible(True)
+        self._atlas_detect_check.setVisible(True)
+        self._preview_hint_lbl.setVisible(True)
+        self._preview_helper_lbl.setVisible(True)
+        self._before_stats_lbl.setVisible(True)
+        self._after_stats_lbl.setVisible(True)
+        self._btn_dock_back.setVisible(False)
+        # Restore the splitter sizes so the compare panel is fully visible again.
+        if hasattr(self, "_left_vsplit") and hasattr(self, "_left_vsplit_normal_sizes"):
+            self._left_vsplit.setSizes(self._left_vsplit_normal_sizes)
+        self._refresh_preview_helper_status()
+
+    def _on_dock_back_clicked(self) -> None:
+        """Close the floating pop-out dialog and dock the preview back."""
+        dlg = self._compare._popout_dialog
+        if dlg is not None:
+            dlg.close()
+        else:
+            # Dialog already gone; just restore the UI
+            self._on_compare_docked_back()
 
     def _apply_alpha_vis_to_compare(self) -> None:
-        """Apply the alpha heat-map overlay to the current compare images if enabled."""
-        before_raw = self._compare.before_image()
-        after_raw = self._compare.after_image()
+        """Apply the alpha heat-map overlay and/or atlas overlay to the current compare images."""
+        self._apply_alpha_vis_to_widget(self._compare)
+
+    def _apply_alpha_vis_to_widget(self, widget) -> None:
+        before_raw = widget.before_image()
+        after_raw = widget.after_image()
         if before_raw is None or after_raw is None:
             return
         if self._alpha_vis_check.isChecked():
-            self._compare.set_before(self._alpha_vis_overlay(before_raw))
-            self._compare.set_after(self._alpha_vis_overlay(after_raw))
+            before_img = self._alpha_vis_overlay(before_raw)
+            after_img = self._alpha_vis_overlay(after_raw)
         else:
-            self._compare.set_before(before_raw)
-            self._compare.set_after(after_raw)
+            before_img = before_raw
+            after_img = after_raw
+        # Apply atlas overlay on top if detect atlas is checked (item 11)
+        if self._atlas_detect_check.isChecked() and self._atlas_cells:
+            before_img = self._draw_atlas_overlay(before_img)
+            after_img = self._draw_atlas_overlay(after_img)
+        widget.set_before(before_img, store_raw=False, stop_movie=False)
+        widget.set_after(after_img, store_raw=False)
+        self._refresh_preview_helper_status()
+
+    def _draw_atlas_overlay(self, img: "QImage") -> "QImage":
+        """Draw colored bounding boxes for detected atlas cells onto *img* (item 11)."""
+        from PyQt6.QtCore import QRectF
+        from PyQt6.QtGui import QBrush, QPainter, QPen, QColor, QFont
+        result = img.copy()
+        painter = QPainter(result)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        # Cyan/teal boxes with a drop shadow for visibility
+        shadow_pen = QPen(QColor(0, 0, 0, 100), 3)
+        box_pen = QPen(QColor(0, 220, 255, 230), 2)
+        font = QFont()
+        font.setPixelSize(11)
+        font.setBold(True)
+        painter.setFont(font)
+        metrics = painter.fontMetrics()
+        for idx, (bx, by, bw, bh) in enumerate(self._atlas_cells, start=1):
+            painter.setPen(shadow_pen)
+            painter.drawRect(bx + 1, by + 1, bw, bh)
+            painter.setPen(box_pen)
+            painter.drawRect(bx, by, bw, bh)
+            label = f"#{idx}"
+            label_w = metrics.horizontalAdvance(label) + 10
+            label_h = metrics.height() + 4
+            label_rect = QRectF(float(bx + 3), float(max(3, by + 3)), float(label_w), float(label_h))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(QColor(0, 220, 255, 215)))
+            painter.drawRoundedRect(label_rect, 4.0, 4.0)
+            painter.setPen(QPen(QColor(14, 18, 24)))
+            painter.drawText(
+                int(label_rect.left()) + 5,
+                int(label_rect.top()) + 2 + metrics.ascent(),
+                label,
+            )
+        painter.end()
+        return result
+
+    @pyqtSlot(bool)
+    def _on_atlas_detect_toggled(self, checked: bool) -> None:
+        """Detect atlas cells and update the preview overlay (item 11)."""
+        if not checked:
+            self._atlas_cells = []
+            self._apply_alpha_vis_to_compare()
+            self._refresh_preview_helper_status()
+            return
+        raw = self._compare.before_image()
+        if raw is None:
+            self._refresh_preview_helper_status()
+            return
+        try:
+            import numpy as np
+            from ..core.alpha_processor import detect_atlas_cells
+            self._atlas_cells = []
+            src = raw.convertToFormat(QImage.Format.Format_ARGB32)
+            w, h = src.width(), src.height()
+            if w == 0 or h == 0:
+                return
+            ptr = src.bits()
+            ptr.setsize(h * w * 4)
+            bgra = np.frombuffer(ptr, dtype=np.uint8).reshape((h, w, 4))
+            alpha = bgra[:, :, 3].copy()
+            self._atlas_cells = detect_atlas_cells(alpha, alpha_threshold=12, seam_tolerance=0.98)
+        except Exception:
+            self._atlas_cells = []
+        if not self._atlas_cells:
+            self._status_lbl.setText(
+                "🗺 No atlas cells detected. "
+                "Try sheets with transparent gutters between sprites; tightly packed or overlapping art may not separate cleanly."
+            )
+            self._apply_alpha_vis_to_compare()
+            self._refresh_preview_helper_status()
+            return
+        n = len(self._atlas_cells)
+        self._status_lbl.setText(f"🗺 Atlas detected: {n} sprite cell{'s' if n != 1 else ''} found.")
+        self._apply_alpha_vis_to_compare()
+        self._refresh_preview_helper_status()
+
+    def _on_compare_context_menu(self, pos) -> None:
+        """Right-click on the compare preview: offer to copy detected alpha zones
+        to the Selective Alpha tool via the ``zone_masks_shared`` signal.
+
+        The context menu is only shown when the alpha visualization overlay is
+        active *and* a preview image is available, so users see the zones they
+        are about to copy.
+        """
+        import numpy as np
+        from ..core.selective_alpha_processor import detect_alpha_zones
+
+        raw = self._compare.before_image()
+        if raw is None:
+            return
+
+        # Convert the stored raw QImage to a numpy RGBA array for zone analysis.
+        src = raw.convertToFormat(QImage.Format.Format_ARGB32)
+        w, h = src.width(), src.height()
+        if w == 0 or h == 0:
+            return
+        ptr = src.bits()
+        ptr.setsize(h * w * 4)
+        # Qt ARGB32 LE stores bytes as [B, G, R, A]; alpha is always index 3.
+        bgra = np.frombuffer(ptr, dtype=np.uint8).reshape((h, w, 4)).copy()
+
+        zones = detect_alpha_zones(bgra)
+
+        menu = QMenu(self)
+
+        if not zones:
+            no_act = menu.addAction("No distinct alpha zones detected in this image")
+            no_act.setEnabled(False)
+            menu.addSeparator()
+            menu.addAction(
+                "Hint: enable 'Highlight Alpha Values' to see the zone structure"
+            ).setEnabled(False)
+        else:
+            total_px = w * h
+            copy_all = menu.addAction(
+                f"📋 Copy all {len(zones)} detected zone(s) → Selective Alpha tool"
+            )
+            copy_all.setToolTip(
+                "Sends all detected alpha-value zones to the Selective Alpha tool.\n"
+                "The app switches to the Selective Alpha tab automatically.\n"
+                "Use 'Import Zones to Canvas' or 'Save All Zones → AZ Slot' there."
+            )
+            copy_all.triggered.connect(lambda: self.zone_masks_shared.emit(zones))
+
+            menu.addSeparator()
+            menu.addAction("Copy single zone → Selective Alpha clipboard:").setEnabled(False)
+            for idx, (alpha_val, bool_mask) in enumerate(zones):
+                pct = round(bool_mask.sum() / max(total_px, 1) * 100, 1)
+                act = menu.addAction(
+                    f"   📋 Zone {idx + 1}:  α = {alpha_val}  ({pct}% of pixels)"
+                )
+                act.setToolTip(
+                    f"Send Zone {idx + 1} (α={alpha_val}) directly to the Selective Alpha\n"
+                    "single-zone clipboard. The app switches there automatically.\n"
+                    "Use 'Paste Mask' on any zone to apply it immediately."
+                )
+                # Capture loop variables explicitly to avoid late-binding closure issues.
+                def _make_single_zone_handler(av, bm):
+                    def _handler():
+                        self.zone_masks_shared.emit([(av, bm)])
+                    return _handler
+                act.triggered.connect(_make_single_zone_handler(alpha_val, bool_mask))
+
+        menu.exec(self._compare.mapToGlobal(pos))
 
     @pyqtSlot(QImage, QImage)
     def _on_compare_ready(self, before_qi: QImage, after_qi: QImage):
         # Store the raw (unmodified) images so the vis toggle can toggle on/off
         # without needing to re-run the background worker.
         self._compare.store_raw_images(before_qi, after_qi)
-        if self._alpha_vis_check.isChecked():
-            self._compare.set_before(self._alpha_vis_overlay(before_qi))
-            self._compare.set_after(self._alpha_vis_overlay(after_qi))
-        else:
-            self._compare.set_before(before_qi)
-            self._compare.set_after(after_qi)
+        # Clear stale atlas cells — new image may have different structure (item 11)
+        self._atlas_cells = []
+        # Re-detect atlas if the checkbox is still checked from previous run
+        if self._atlas_detect_check.isChecked():
+            self._on_atlas_detect_toggled(True)
+        self._apply_alpha_vis_to_compare()
+        self._refresh_preview_helper_status()
         # Notify main window so it can play the preview sound (opt-in, off by default)
         self.preview_refreshed.emit()
 
@@ -1023,6 +1901,8 @@ class AlphaFixerTab(QWidget):
         self._compare.clear()
         self._before_stats_lbl.setText("")
         self._after_stats_lbl.setText("")
+        self._atlas_cells = []
+        self._refresh_preview_helper_status()
         self._log_msg(f"⚠ Preview failed: {err.splitlines()[0]}")
 
     # ------------------------------------------------------------------
@@ -1033,6 +1913,13 @@ class AlphaFixerTab(QWidget):
         folder = QFileDialog.getExistingDirectory(self, "Output Folder")
         if folder:
             self._out_dir_edit.setText(folder)
+            self.output_dir_changed.emit(folder)
+
+    def set_output_dir(self, path: str) -> None:
+        """Set the output directory from an external source without emitting output_dir_changed."""
+        self._out_dir_edit.blockSignals(True)
+        self._out_dir_edit.setText(path)
+        self._out_dir_edit.blockSignals(False)
 
     # ------------------------------------------------------------------
     # Processing
@@ -1051,6 +1938,13 @@ class AlphaFixerTab(QWidget):
         if not expanded:
             QMessageBox.information(self, "No Files", "No supported image files found.")
             return
+
+        # Log the action for crash reporting
+        try:
+            from main import log_action
+            log_action(f"Alpha tool: started processing {len(expanded)} file(s)")
+        except Exception:
+            pass
 
         manual = self._build_manual_params()
         if self._apply_rgb_check.isChecked():
@@ -1082,13 +1976,36 @@ class AlphaFixerTab(QWidget):
 
         self._log.clear()
         self._progress.setValue(0)
+        self._stop_requested = False
+        self._batch_outputs.clear()
         self._btn_run.setEnabled(False)
         self._btn_stop.setEnabled(True)
+        self._btn_undo_batch.setVisible(False)
         self._status_lbl.setText("Processing…")
+        self._spinner_idx = 0
+        self._spinner_timer.start()
         self._batch_start_time = time.monotonic()
         self._batch_total = len(expanded)
         # Notify main window so it can play the process-start sound
         self.processing_started.emit()
+
+        # Clean up any previous backup dir
+        if self._last_backup_dir and os.path.isdir(self._last_backup_dir):
+            try:
+                shutil.rmtree(self._last_backup_dir, ignore_errors=True)
+            except Exception:
+                pass
+        self._last_backup_pairs = []
+        self._last_backup_dir = ""
+
+        # Create a temporary backup dir for in-place processing (item 10)
+        backup_dir = None
+        if (suffix == "") and (not out_dir):
+            try:
+                backup_dir = tempfile.mkdtemp(prefix="alpha_undo_")
+                self._last_backup_dir = backup_dir
+            except Exception:
+                backup_dir = None
 
         # Disconnect the previous worker's signals before replacing it to
         # prevent the signal connection table from growing across multiple
@@ -1098,6 +2015,8 @@ class AlphaFixerTab(QWidget):
                 self._worker.progress.disconnect()
                 self._worker.file_done.disconnect()
                 self._worker.finished.disconnect()
+                self._worker.backup_manifest.disconnect()
+                self._worker.output_manifest.disconnect()
             except RuntimeError:
                 pass  # already disconnected
 
@@ -1108,20 +2027,72 @@ class AlphaFixerTab(QWidget):
             input_root=input_root,
             overwrite=(suffix == ""),
             suffix=suffix,
+            backup_dir=backup_dir,
         )
         self._worker.progress.connect(self._on_progress)
         self._worker.file_done.connect(self._on_file_done)
         self._worker.finished.connect(self._on_finished)
+        self._worker.backup_manifest.connect(self._on_backup_manifest)
+        self._worker.output_manifest.connect(self._on_output_manifest)
         self._worker.start()
 
     def _stop(self):
-        if self._worker:
+        if self._worker and self._btn_stop.isEnabled():
+            self._stop_requested = True
             self._worker.stop()
+            self._btn_stop.setEnabled(False)
             self._status_lbl.setText("Stopping…")
 
     # ------------------------------------------------------------------
     # Worker slots
     # ------------------------------------------------------------------
+
+    @pyqtSlot(list)
+    def _on_backup_manifest(self, pairs: list) -> None:
+        """Receive the list of (original, backup) pairs from the worker (item 10)."""
+        self._last_backup_pairs = list(pairs)
+
+    def _on_undo_batch(self) -> None:
+        """Restore original files from the last in-place batch backup (item 10)."""
+        if not self._last_backup_pairs:
+            QMessageBox.information(self, "Nothing to Undo",
+                                    "No backup available for the last batch.")
+            return
+        count = len(self._last_backup_pairs)
+        reply = QMessageBox.question(
+            self, "Undo Last Batch",
+            f"Restore {count} file(s) from the last backup?\n"
+            "The processed files will be replaced with their originals.\n"
+            "This cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        restored = 0
+        errors = []
+        for orig, bk in self._last_backup_pairs:
+            try:
+                shutil.copy2(bk, orig)
+                restored += 1
+            except Exception as exc:
+                errors.append(f"{Path(orig).name}: {exc}")
+        # Clean up backup dir
+        if self._last_backup_dir and os.path.isdir(self._last_backup_dir):
+            try:
+                shutil.rmtree(self._last_backup_dir, ignore_errors=True)
+            except Exception:
+                pass
+        self._last_backup_pairs = []
+        self._last_backup_dir = ""
+        self._btn_undo_batch.setVisible(False)
+        # Report result
+        msg = f"Restored {restored}/{count} file(s)."
+        if errors:
+            msg += "\n\nErrors:\n" + "\n".join(errors[:10])
+        QMessageBox.information(self, "Undo Complete", msg)
+        # Refresh the compare preview
+        if self._preview_path:
+            self._update_compare()
 
     @pyqtSlot(int, int, str)
     def _on_progress(self, current: int, total: int, path: str):
@@ -1130,9 +2101,17 @@ class AlphaFixerTab(QWidget):
         self._progress.setValue(pct)
         elapsed = time.monotonic() - self._batch_start_time
         eta_str = format_eta(current, total, elapsed)
+        file_name = Path(path).name
+        action = "Stopping…" if self._stop_requested else "Processing"
         self._status_lbl.setText(
-            f"Processing {current + 1}/{total}: {Path(path).name}{eta_str}"
+            f"{action} {current + 1}/{total}: {file_name}{eta_str}"
         )
+        # Update window title so the progress is visible in the taskbar
+        win = self.window()
+        if win is not None:
+            win.setWindowTitle(
+                f"[{pct}%] {action} {current + 1}/{total}: {file_name}"
+            )
 
     @pyqtSlot(str, bool, str)
     def _on_file_done(self, src: str, ok: bool, msg: str):
@@ -1146,27 +2125,64 @@ class AlphaFixerTab(QWidget):
         else:
             self._log_msg(f"{icon} {name}" + (f"  →  {msg.splitlines()[-1] if msg else ''}"))
 
+    @pyqtSlot(dict)
+    def _on_output_manifest(self, outputs: dict) -> None:
+        self._batch_outputs = outputs
+
     @pyqtSlot(int, int)
     def _on_finished(self, success: int, errors: int):
-        self._progress.setValue(100)
+        from ._ui_utils import batch_completion_summary
+        self._spinner_timer.stop()
+        self._btn_run.setText("▶  Process  [F5]")
+        progress, status = batch_completion_summary(
+            success, errors, self._batch_total, self._stop_requested,
+        )
+        self._progress.setValue(progress)
         self._btn_run.setEnabled(True)
         self._btn_stop.setEnabled(False)
-        self._status_lbl.setText(f"Done. ✔ {success} succeeded, ✘ {errors} failed.")
-        self._log_msg(f"─── Finished: {success} ok, {errors} error(s) ───")
+        self._status_lbl.setText(status)
+        self._log_msg(f"─── {status} ───")
+        # Show "Undo Last Batch" button when a backup was created (item 10)
+        if self._last_backup_pairs and success > 0:
+            self._btn_undo_batch.setVisible(True)
+            self._btn_undo_batch.setText(
+                f"↩  Undo Last Batch  ({len(self._last_backup_pairs)} files)"
+            )
+        # Restore the window title after processing
+        try:
+            from ..version import __version__, APP_NAME
+        except Exception:
+            try:
+                from src.version import __version__, APP_NAME  # type: ignore[no-redef]
+            except Exception:
+                __version__ = ""
+                APP_NAME = "FORMATOMANCER: Alpha & Media Alchemy"
+        win = self.window()
+        if win is not None:
+            ver_str = f"  v{__version__}" if __version__ else ""
+            win.setWindowTitle(
+                f"🐼 {APP_NAME}{ver_str}"
+            )
         # Refresh compare for currently selected file to show the processed result
         if self._preview_path and success > 0:
             self._update_compare()
 
         # Record in history
+        _last_files = getattr(self, "_last_run_files", [])
         entry = {
             "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
             "preset": getattr(self, "_last_run_preset", "manual"),
-            "file_count": len(getattr(self, "_last_run_files", [])),
+            "file_count": len(_last_files),
             "success": success,
             "errors": errors,
-            "files": [Path(f).name for f in getattr(self, "_last_run_files", [])[:10]],
+            "stopped": self._stop_requested or success + errors < self._batch_total,
+            "not_processed": max(0, self._batch_total - success - errors),
+            "files": [Path(f).name for f in _last_files[:10]],
+            # Store first file path for thumbnail display (item 9)
+            "first_file": str(_last_files[0]) if _last_files else "",
         }
-        self._settings.add_alpha_history(entry)
+        if self._settings.get("history_track_alpha", True):
+            self._settings.add_alpha_history(entry)
         # Notify main window so processing-based theme unlocks can fire
         if success > 0:
             self.processing_done.emit(success)
@@ -1174,10 +2190,86 @@ class AlphaFixerTab(QWidget):
             if not self._settings.get("alpha_fix_done_once", False):
                 self._settings.set("alpha_fix_done_once", True)
                 self.first_alpha_fix.emit()
+            # Offer to delete the original source files when output is separate.
+            if not errors and success == self._batch_total:
+                from ._ui_utils import verified_originals
+                originals = verified_originals(self._batch_outputs)
+                if originals:
+                    self._offer_delete_originals(originals, len(originals))
         if errors > 0:
             self.processing_error.emit(errors)
 
+    @pyqtSlot(str, str)
+    def _on_thumbnail_failed(self, path: str, reason: str) -> None:
+        name = os.path.basename(path) or path
+        short_reason = reason.splitlines()[0].strip() if reason else "thumbnail generation failed"
+        self._log_msg(f"⚠ Thumbnail skipped for {name} — {short_reason}")
+
     def _log_msg(self, msg: str):
-        self._log.append(msg)
+        """Append a message to the log with colour coding (item 36/37)."""
+        stripped = msg.strip()
+        if stripped.startswith(("✔", "✅")):
+            color = "#4caf50"
+        elif stripped.startswith(("✘", "❌", "⚠")):
+            color = "#f44336" if stripped.startswith(("✘", "❌")) else "#ff9800"
+        elif stripped.startswith("───"):
+            color = "#888"
+        elif stripped.startswith(("📁", "Output")):
+            color = "#64b5f6"
+        else:
+            color = ""
+        if color:
+            import html as _html
+            escaped = _html.escape(msg)
+            self._log.append(f'<span style="color:{color};">{escaped}</span>')
+        else:
+            self._log.append(msg)
         sb = self._log.verticalScrollBar()
         sb.setValue(sb.maximum())
+
+    def _tick_spinner(self) -> None:
+        """Advance the spinner animation on the run button by one frame."""
+        frame = self._spinner_frames[self._spinner_idx % len(self._spinner_frames)]
+        self._btn_run.setText(f"{frame}  Processing…")
+        self._spinner_idx += 1
+
+    def _offer_delete_originals(self, source_files: list, success_count: int) -> None:
+        """Ask the user whether to delete the original source files.
+
+        Only called after a batch that produced separate output files (i.e. a
+        filename suffix or a different output directory was configured).
+        """
+        n = len(source_files)
+        if n == 0:
+            return
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Delete Original Files?")
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setText(
+            f"Processing finished with {success_count} file(s) completed successfully.\n\n"
+            "Would you like to delete the original source file(s)?\n\n"
+            "⚠  This cannot be undone."
+        )
+        detail_lines = [str(Path(p).resolve()) for p in source_files[:20]]
+        if n > 20:
+            detail_lines.append(f"… and {n - 20} more")
+        msg.setDetailedText("Files that will be deleted:\n" + "\n".join(detail_lines))
+        btn_delete = msg.addButton("🗑  Delete Originals", QMessageBox.ButtonRole.DestructiveRole)
+        btn_keep = msg.addButton("Keep Originals", QMessageBox.ButtonRole.RejectRole)
+        msg.setDefaultButton(btn_keep)
+        msg.setEscapeButton(btn_keep)
+        msg.exec()
+        if msg.clickedButton() is btn_delete:
+            deleted = 0
+            failed = 0
+            for path in source_files:
+                try:
+                    os.remove(path)
+                    deleted += 1
+                except OSError:
+                    failed += 1
+            self._log_msg(
+                f"─── Deleted {deleted} original file(s)"
+                + (f", {failed} could not be deleted" if failed else "")
+                + " ───"
+            )

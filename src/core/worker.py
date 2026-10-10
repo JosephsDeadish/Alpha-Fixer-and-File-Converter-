@@ -8,9 +8,13 @@ per-file success log messages and emit progress updates at most every
 _PROGRESS_MIN_INTERVAL seconds to prevent flooding the UI event queue.
 """
 import os
+import shutil
 import time
 import traceback
 import logging
+import gc
+import concurrent.futures
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -21,6 +25,9 @@ from PyQt6.QtCore import QThread, pyqtSignal
 _LARGE_BATCH_THRESHOLD = 1_000
 # Minimum seconds between consecutive progress signal emissions in large-batch mode.
 _PROGRESS_MIN_INTERVAL = 0.1   # 100 ms
+_LARGE_FILE_BYTES = 256 * 1024 * 1024
+_HEAVY_BATCH_BYTES = 1024 * 1024 * 1024
+_GC_CLEANUP_INTERVAL = 32
 
 from .alpha_processor import (
     load_image,
@@ -29,10 +36,17 @@ from .alpha_processor import (
     apply_manual_alpha,
     apply_rgba_adjust,
 )
-from .file_converter import convert_file, build_output_path
+from .file_converter import convert_file, build_output_path, output_format_discards_alpha
 from .presets import AlphaPreset
+from src.ui._ui_utils import staged_output_path
 
 logger = logging.getLogger(__name__)
+
+_ALPHA_PROMOTE_FORMATS = {
+    ".jpg", ".jpeg", ".jfif", ".jpe", ".bmp",
+    ".pbm", ".pgm", ".pnm", ".ppm", ".pcx",
+}
+_CONVERTER_ALPHA_FALLBACK_FORMAT = ("PNG", ".png")
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +59,9 @@ class AlphaWorker(QThread):
     progress = pyqtSignal(int, int, str)          # current, total, current_file
     file_done = pyqtSignal(str, bool, str)         # path, success, message
     finished = pyqtSignal(int, int)                # success_count, error_count
+    # Emitted when backup is enabled: list of (original_path, backup_path) pairs
+    backup_manifest = pyqtSignal(list)
+    output_manifest = pyqtSignal(dict)
     error = pyqtSignal(str)
 
     def __init__(
@@ -56,6 +73,7 @@ class AlphaWorker(QThread):
         input_root: Optional[str] = None,
         overwrite: bool = False,
         suffix: str = "",
+        backup_dir: Optional[str] = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -66,17 +84,44 @@ class AlphaWorker(QThread):
         self._input_root = input_root
         self._overwrite = overwrite
         self._suffix = suffix
+        self._backup_dir = backup_dir
+        self._backup_session_dir: Optional[str] = None
         self._abort = False
 
     def stop(self):
         self._abort = True
 
+    def _resolve_backup_path(self, src: str, idx: int) -> str:
+        base_dir = self._backup_session_dir or self._backup_dir or ""
+        relative = None
+        if self._input_root:
+            try:
+                candidate = os.path.relpath(src, self._input_root)
+                if candidate not in (".", "") and not candidate.startswith(".."):
+                    relative = candidate
+            except ValueError:
+                relative = None
+        if not relative:
+            relative = f"{idx}_{Path(src).name}"
+        backup_path = Path(base_dir, relative)
+        if backup_path.exists():
+            backup_path = backup_path.with_name(f"{backup_path.stem}_{idx}{backup_path.suffix}")
+        return str(backup_path)
+
     def run(self):
         total = len(self._files)
         success = 0
         errors = 0
+        outputs: dict[str, str] = {}
+        destinations: set[str] = set()
+        sources = {os.path.normcase(os.path.realpath(src)) for src in self._files}
         large_batch = total >= _LARGE_BATCH_THRESHOLD
         last_progress_time = 0.0
+        # Track (original_path, backup_path) pairs for undo support
+        backup_pairs: list[tuple[str, str]] = []
+        if self._backup_dir:
+            session_stamp = f"session_{time.time_ns()}_{os.getpid()}"
+            self._backup_session_dir = os.path.join(self._backup_dir, session_stamp)
         for idx, src in enumerate(self._files):
             if self._abort:
                 break
@@ -89,7 +134,36 @@ class AlphaWorker(QThread):
                 except RuntimeError:
                     return  # receiver destroyed; abort processing
                 last_progress_time = now
+            # Create backup before overwriting if backup_dir is set and this
+            # file will be overwritten in-place (overwrite mode, no output_dir,
+            # no suffix that would create a new name).
+            if (self._backup_dir and self._overwrite
+                    and not self._output_dir and not self._suffix
+                    and os.path.normcase(os.path.realpath(src)) not in destinations):
+                try:
+                    bk_path = self._resolve_backup_path(src, idx)
+                    os.makedirs(os.path.dirname(bk_path) or self._backup_session_dir or self._backup_dir, exist_ok=True)
+                    shutil.copy2(src, bk_path)
+                    backup_pairs.append((src, bk_path))
+                except Exception as exc:
+                    errors += 1
+                    msg = f"Backup failed — {exc}"
+                    logger.error("Alpha worker backup failure on %s: %s", src, msg)
+                    try:
+                        self.file_done.emit(src, False, msg)
+                    except RuntimeError:
+                        return
+                    continue
             try:
+                save_ext = self._effective_output_ext(src)
+                dest = self._resolve_output(src, save_ext)
+                dest_key = os.path.normcase(os.path.realpath(dest))
+                dest_name = os.path.normcase(os.path.abspath(dest))
+                src_key = os.path.normcase(os.path.realpath(src))
+                if (dest_name in destinations or dest_key in destinations
+                        or (dest_key in sources and dest_key != src_key)):
+                    raise ValueError(f"Destination collision: {dest}")
+                destinations.update((dest_name, dest_key))
                 img = load_image(src)
                 try:
                     if self._preset is not None:
@@ -119,18 +193,29 @@ class AlphaWorker(QThread):
                         )
                         img.close()
                         img = _tmp
-                    dest = self._resolve_output(src)
-                    os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
                     ext = Path(src).suffix.lower()
-                    save_image(img, dest, ext)
+                    os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+                    with staged_output_path(dest, preserve_existing_mode=True) as staged:
+                        save_image(img, staged, save_ext)
                     success += 1
+                    outputs[src] = dest
                     # Warn when saving to a format that does not support alpha so
                     # the user knows their alpha changes were silently discarded.
                     warn = ""
-                    if ext in (".jpg", ".jpeg", ".bmp"):
+                    if save_ext != ext:
+                        warn = (
+                            f"{ext[1:].upper()} does not preserve alpha — "
+                            f"saved as {save_ext[1:].upper()} to keep transparency."
+                        )
+                    elif ext in (".jpg", ".jpeg", ".jfif", ".jpe", ".bmp"):
                         warn = (
                             f"{ext[1:].upper()} does not support an alpha channel — "
                             "alpha changes were discarded. Save as PNG to preserve alpha."
+                        )
+                    elif ext in _ALPHA_PROMOTE_FORMATS:
+                        warn = (
+                            f"{ext[1:].upper()} does not preserve alpha reliably — "
+                            "save as PNG to preserve transparency."
                         )
                     # In large-batch mode suppress per-file success messages to keep
                     # the UI log from accumulating 50 000 lines, but always surface
@@ -158,14 +243,29 @@ class AlphaWorker(QThread):
                     self.file_done.emit(src, False, msg)  # always emit errors
                 except RuntimeError:
                     return
+        # Emit backup manifest so the UI can offer an undo button.
+        if backup_pairs:
+            try:
+                self.backup_manifest.emit(backup_pairs)
+            except RuntimeError:
+                pass
         try:
+            self.output_manifest.emit(outputs)
             self.finished.emit(success, errors)
         except RuntimeError:
             pass  # receiver destroyed during shutdown; nothing to do
 
-    def _resolve_output(self, src: str) -> str:
+    def _effective_output_ext(self, src: str) -> str:
+        ext = Path(src).suffix.lower()
+        in_place_overwrite = self._overwrite and not self._output_dir and not self._suffix
+        if ext in _ALPHA_PROMOTE_FORMATS and not in_place_overwrite:
+            return ".png"
+        return ext
+
+    def _resolve_output(self, src: str, out_ext: Optional[str] = None) -> str:
         p = Path(src)
-        name = p.stem + (self._suffix or "") + p.suffix
+        ext = out_ext or p.suffix
+        name = p.stem + (self._suffix or "") + ext
         # Always honour output_dir when the user has specified one, regardless
         # of whether overwrite mode is active (overwrite = no filename suffix,
         # not "write back to the source directory").
@@ -204,6 +304,7 @@ class ConverterWorker(QThread):
     file_done = pyqtSignal(str, bool, str)
     finished = pyqtSignal(int, int)
     error = pyqtSignal(str)
+    output_manifest = pyqtSignal(dict)
 
     def __init__(
         self,
@@ -215,7 +316,9 @@ class ConverterWorker(QThread):
         quality: int = 90,
         resize: Optional[tuple[int, int]] = None,
         keep_metadata: bool = False,
+        dds_variant: str = "auto",
         suffix: str = "",
+        source_aliases: Optional[dict[str, str]] = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -227,67 +330,220 @@ class ConverterWorker(QThread):
         self._quality = quality
         self._resize = resize
         self._keep_metadata = keep_metadata
+        self._dds_variant = dds_variant
         self._suffix = suffix
+        self._source_aliases = dict(source_aliases or {})
         self._abort = False
 
     def stop(self):
         self._abort = True
 
+    @staticmethod
+    def _source_has_meaningful_alpha(path: str) -> bool:
+        img = load_image(path)
+        alpha_band = None
+        try:
+            if "A" not in img.getbands():
+                return False
+            alpha_band = img.getchannel("A")
+            extrema = alpha_band.getextrema()
+            if not extrema:
+                return False
+            return int(extrema[0]) < 255
+        finally:
+            if alpha_band is not None:
+                alpha_band.close()
+            img.close()
+
+    def _resolve_effective_target(self, src: str) -> tuple[str, str, str]:
+        if not output_format_discards_alpha(self._target_format):
+            return self._target_format, self._target_ext, ""
+        try:
+            has_alpha = self._source_has_meaningful_alpha(src)
+        except MemoryError:
+            raise
+        except Exception as exc:
+            logger.debug("Alpha fallback probe failed for %s: %s", src, exc)
+            return self._target_format, self._target_ext, ""
+        if not has_alpha:
+            return self._target_format, self._target_ext, ""
+        fmt, ext = _CONVERTER_ALPHA_FALLBACK_FORMAT
+        note = f"{self._target_format} cannot preserve transparency — auto-saved as {fmt}."
+        return fmt, ext, note
+
+    @staticmethod
+    def _recommend_worker_count(
+        total_files: int,
+        file_sizes: list[int],
+        cpu_count: Optional[int] = None,
+    ) -> int:
+        base_workers = min(8, max(1, (cpu_count or os.cpu_count() or 1)))
+        if not file_sizes:
+            return base_workers
+        largest = max(file_sizes)
+        total_bytes = sum(file_sizes)
+        if largest >= _LARGE_FILE_BYTES:
+            return 1
+        if total_bytes >= _HEAVY_BATCH_BYTES and total_files > 1:
+            return min(base_workers, 2)
+        return base_workers
+
     def run(self):
         total = len(self._files)
         success = 0
         errors = 0
+        outputs: dict[str, str] = {}
+        destinations: set[str] = set()
+        destination_lock = threading.Lock()
+        physical_sources = {os.path.normcase(os.path.realpath(src)) for src in self._files}
+        logical_sources = {
+            os.path.normcase(os.path.realpath(src))
+            for src in self._source_aliases.values()
+        }
         large_batch = total >= _LARGE_BATCH_THRESHOLD
         last_progress_time = 0.0
-        for idx, src in enumerate(self._files):
-            if self._abort:
-                break
-            now = time.monotonic()
-            if not large_batch or idx == total - 1 or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL:
-                try:
-                    self.progress.emit(idx, total, src)
-                except RuntimeError:
-                    return  # receiver destroyed; abort processing
-                last_progress_time = now
+
+        # For large batches use a thread pool so multiple files are processed
+        # concurrently (I/O-bound — benefits from parallelism even on the GIL).
+        # Item 26: parallel conversion significantly reduces wall-clock time.
+        # Number of parallel workers: CPU count, capped at 8 to avoid too many
+        # simultaneous open files (each PIL operation holds file handles briefly).
+        file_sizes: list[int] = []
+        for src in self._files:
             try:
+                file_sizes.append(max(0, os.path.getsize(src)))
+            except OSError:
+                file_sizes.append(0)
+        n_workers = self._recommend_worker_count(total, file_sizes)
+
+        def _convert_one(idx: int, src: str) -> tuple[int, str, bool, str]:
+            """Convert one file and return (index, src, ok, dest_or_error)."""
+            try:
+                logical_src = self._source_aliases.get(src, src)
+                actual_target_format, actual_target_ext, note = self._resolve_effective_target(src)
                 dest = build_output_path(
-                    src,
-                    self._target_ext,
+                    logical_src,
+                    actual_target_ext,
                     output_dir=self._output_dir,
                     input_root=self._input_root,
                     suffix=self._suffix,
                 )
-                convert_file(
-                    src,
-                    dest,
-                    self._target_format,
-                    quality=self._quality,
-                    resize=self._resize,
-                    keep_metadata=self._keep_metadata,
-                )
-                success += 1
-                if not large_batch:
-                    try:
-                        self.file_done.emit(src, True, dest)
-                    except RuntimeError:
-                        return  # receiver destroyed; abort
+                dest_key = os.path.normcase(os.path.realpath(dest))
+                dest_name = os.path.normcase(os.path.abspath(dest))
+                src_key = os.path.normcase(os.path.realpath(src))
+                logical_key = os.path.normcase(os.path.realpath(logical_src))
+                with destination_lock:
+                    if dest_key in physical_sources and dest_key != src_key:
+                        raise ValueError(f"Destination collision: {dest}")
+                    if dest_name in destinations or dest_key in destinations or (
+                            dest_key in logical_sources and dest_key not in (src_key, logical_key)):
+                        raise ValueError(f"Destination collision: {dest}")
+                    destinations.update((dest_name, dest_key))
+                os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+                with staged_output_path(dest, preserve_existing_mode=True) as staged:
+                    convert_file(
+                        src,
+                        staged,
+                        actual_target_format,
+                        quality=self._quality,
+                        resize=self._resize,
+                        keep_metadata=self._keep_metadata,
+                        dds_variant=self._dds_variant,
+                    )
+                return idx, src, True, f"{dest}\n{note}" if note else dest
             except MemoryError as exc:
-                errors += 1
-                msg = f"Out of memory — {exc}"
-                logger.error("Converter worker MemoryError on %s: %s", src, msg)
-                try:
-                    self.file_done.emit(src, False, msg)
-                except RuntimeError:
-                    return
+                return idx, src, False, f"Out of memory — {exc}"
             except Exception:
-                errors += 1
-                msg = traceback.format_exc()
-                logger.error("Converter worker error on %s:\n%s", src, msg)
-                try:
-                    self.file_done.emit(src, False, msg)
-                except RuntimeError:
-                    return
+                return idx, src, False, traceback.format_exc()
+
+        gc.collect()
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=n_workers)
+        skip_wait_shutdown = False
         try:
+            pending: "set[concurrent.futures.Future]" = set()
+            future_indices: dict[concurrent.futures.Future, int] = {}
+            next_idx = 0
+            buffered: dict[int, tuple[int, str, bool, str]] = {}
+            cancelled_indices: set[int] = set()
+            emit_idx = 0
+
+            while next_idx < total and next_idx - emit_idx < n_workers and not self._abort:
+                fut = pool.submit(_convert_one, next_idx, self._files[next_idx])
+                pending.add(fut)
+                future_indices[fut] = next_idx
+                next_idx += 1
+
+            while pending:
+                if self._abort:
+                    cancelled = set()
+                    for fut in pending:
+                        if fut.cancel():
+                            cancelled.add(fut)
+                            cancelled_indices.add(future_indices.pop(fut))
+                    # Cancelled futures need not be notified by the executor before
+                    # wait() returns; exclude them and drain only in-flight work.
+                    pending.difference_update(cancelled)
+                if pending:
+                    done, pending = concurrent.futures.wait(
+                        pending,
+                        return_when=concurrent.futures.FIRST_COMPLETED,
+                    )
+                else:
+                    done = set()
+                for fut in done:
+                    order_idx = future_indices.pop(fut)
+                    if fut.cancelled():
+                        cancelled_indices.add(order_idx)
+                        continue
+                    result = fut.result()
+                    buffered[result[0]] = result
+                while emit_idx in buffered or emit_idx in cancelled_indices:
+                    if emit_idx in cancelled_indices:
+                        cancelled_indices.remove(emit_idx)
+                    else:
+                        order_idx, src_path, ok, dest_or_err = buffered.pop(emit_idx)
+                        now = time.monotonic()
+                        if (not large_batch
+                                or order_idx == total - 1
+                                or (now - last_progress_time) >= _PROGRESS_MIN_INTERVAL):
+                            try:
+                                self.progress.emit(order_idx, total, src_path)
+                            except RuntimeError:
+                                skip_wait_shutdown = True
+                                return
+                            last_progress_time = now
+                        if ok:
+                            success += 1
+                            outputs[src_path] = dest_or_err.splitlines()[0]
+                            if not large_batch:
+                                try:
+                                    self.file_done.emit(src_path, True, dest_or_err)
+                                except RuntimeError:
+                                    skip_wait_shutdown = True
+                                    return
+                        else:
+                            errors += 1
+                            logger.error("Converter worker error on %s:\n%s", src_path, dest_or_err)
+                            try:
+                                self.file_done.emit(src_path, False, dest_or_err)
+                            except RuntimeError:
+                                skip_wait_shutdown = True
+                                return
+                    emit_idx += 1
+                    if emit_idx % _GC_CLEANUP_INTERVAL == 0 and (large_batch or n_workers <= 2):
+                        gc.collect()
+                # Include completed-but-not-emitted results in the admission window.
+                # A slow early input must not buffer the rest of a large queue.
+                while next_idx < total and next_idx - emit_idx < n_workers and not self._abort:
+                    fut = pool.submit(_convert_one, next_idx, self._files[next_idx])
+                    pending.add(fut)
+                    future_indices[fut] = next_idx
+                    next_idx += 1
+        finally:
+            pool.shutdown(wait=not skip_wait_shutdown, cancel_futures=(self._abort or skip_wait_shutdown))
+
+        try:
+            self.output_manifest.emit(outputs)
             self.finished.emit(success, errors)
         except RuntimeError:
             pass  # receiver destroyed during shutdown; nothing to do

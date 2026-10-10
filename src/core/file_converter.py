@@ -1,59 +1,198 @@
 """
 File converter – converts between image formats.
 
-Supported formats: PNG, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, DDS,
-                   PPM, PCX, AVIF, QOI, SVG, JPEG2000.
+Supported output formats: PNG, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, DDS,
+                          PBM, PGM, PNM, PPM, PCX, AVIF, QOI, SVG,
+                          JPEG2000, XNB, TIM.
 
-SVG input (raster rendering) requires one of:
+SVG input uses bundled QtSvg, with source-run alternatives:
   - cairosvg  (pip install cairosvg)   – needs libcairo system library
   - svglib    (pip install svglib)      – pure Python, may need reportlab
-If neither is installed the app will raise an ImportError with install
-instructions when an SVG file is opened.
+QtSvg's supported SVG subset is rasterized to RGBA.
 
 SVG output — two modes depending on installed libraries:
-  • vtracer available (pip install vtracer):
+  • vtracer available (included in release bundles):
       Traces the raster into true vector paths (colour polygons/beziers).
       The result is a genuine scalable vector document suitable for logos,
       icons, pixel art, and game sprites.  Large or photographic images
       may produce complex SVGs.
   • vtracer not installed (fallback):
       Embeds the raster as a base64-encoded PNG inside an <svg> element.
-      Pixel-perfect at any zoom level but not a true vector document.
+      Pixel-perfect at original resolution but not a true vector document.
 """
 import base64
 import io
 import os
 import logging
+import math
 import tempfile
 from pathlib import Path
 from typing import Optional
 
 from PIL import Image
 
-from .alpha_processor import _save_dds, _load_dds
+from .alpha_processor import _save_dds, _load_dds, _has_wand
 
 logger = logging.getLogger(__name__)
 
 SUPPORTED_OUTPUT_FORMATS = {
     "AVIF": ".avif",
     "BMP": ".bmp",
+    "PBM": ".pbm",
     "DDS": ".dds",
     "GIF": ".gif",
+    "PGM": ".pgm",
     "ICO": ".ico",
     "JPEG": ".jpg",
     "JPEG2000": ".jp2",
     "PCX": ".pcx",
+    "PNM": ".pnm",
     "PNG": ".png",
     "PPM": ".ppm",
     "QOI": ".qoi",
     "SVG": ".svg",
     "TGA": ".tga",
+    "TIM": ".tim",
     "TIFF": ".tiff",
     "WEBP": ".webp",
+    "XNB": ".xnb",
 }
 
 # Display list for UI combos (name → extension), alphabetical
 OUTPUT_FORMAT_LIST = sorted(SUPPORTED_OUTPUT_FORMATS.items())
+
+DDS_VARIANT_OPTIONS: list[tuple[str, str]] = [
+    ("Auto (RGB/RGBA by alpha)", "auto"),
+    ("RGB 24-bit (discard alpha)", "rgb"),
+    ("RGBA 32-bit (preserve alpha)", "rgba"),
+    ("BC1 / DXT1 compressed", "dxt1"),
+    ("BC2 / DXT3 compressed", "dxt3"),
+    ("BC3 / DXT5 compressed", "dxt5"),
+]
+
+_OPTIONAL_PIL_OUTPUT_FORMATS = ("AVIF", "JPEG2000", "QOI", "WEBP")
+
+
+def dds_compression_available() -> bool:
+    """Return True when compressed DDS save variants are available."""
+    return _has_wand()
+
+
+def optional_pillow_output_limits() -> list[tuple[str, str]]:
+    """Return optional output formats that are unavailable in this build."""
+    limits: list[tuple[str, str]] = []
+    for target_format in _OPTIONAL_PIL_OUTPUT_FORMATS:
+        reason = output_format_unavailable_reason(target_format)
+        if reason:
+            limits.append((target_format, reason))
+    return limits
+
+
+_CUSTOM_OUTPUT_FORMATS = {"DDS", "SVG", "TIM", "XNB"}
+_ALPHA_UNSUPPORTED_OUTPUT_FORMATS = {"BMP", "JPEG", "PBM", "PGM", "PNM", "PPM", "PCX"}
+_FORMAT_UNAVAILABLE_HINTS = {
+    "AVIF": "AVIF export needs Pillow built with libavif support.",
+    "JPEG2000": "JPEG2000 export needs Pillow built with OpenJPEG support.",
+    "QOI": "QOI export needs a Pillow build with QOI support.",
+    "WEBP": "WEBP export needs Pillow built with WebP support.",
+}
+
+
+def output_format_unavailable_reason(target_format: str) -> str:
+    """Return a human-readable reason when *target_format* cannot be written."""
+    if target_format in _CUSTOM_OUTPUT_FORMATS:
+        return ""
+    ext = SUPPORTED_OUTPUT_FORMATS.get(target_format)
+    if not ext:
+        return f"{target_format} export is not supported."
+    try:
+        Image.init()
+        pil_format = Image.registered_extensions().get(ext.lower())
+        if pil_format and pil_format in Image.SAVE:
+            return ""
+    except Exception:
+        pass
+    return _FORMAT_UNAVAILABLE_HINTS.get(
+        target_format,
+        f"{target_format} export is unavailable in this Pillow build.",
+    )
+
+
+def output_format_available(target_format: str) -> bool:
+    """Return True when *target_format* can be written in this environment."""
+    return not output_format_unavailable_reason(target_format)
+
+
+def output_format_discards_alpha(target_format: str) -> bool:
+    """Return True when *target_format* cannot preserve full alpha."""
+    return target_format in _ALPHA_UNSUPPORTED_OUTPUT_FORMATS
+
+
+def output_codec_selftest_checks() -> tuple[str, ...]:
+    """Required encode/decode checks for the currently advertised outputs."""
+    checks = []
+    for fmt in SUPPORTED_OUTPUT_FORMATS:
+        if fmt == "DDS":
+            checks.append("png_to_dds_rgba")
+        elif fmt == "SVG":
+            checks.extend(("svg_rasterization", "svg_vectorization"))
+        else:
+            checks.append(f"png_to_{fmt.lower()}")
+    return tuple(checks)
+
+
+def output_codec_selfcheck(directory: str) -> dict[str, dict[str, object]]:
+    """Exercise production codecs with small offline-generated RGB/RGBA images.
+
+    DDS variants and SVG rendering/tracing have their own runtime checks.
+    Registry availability alone is not evidence of a working encoder/decoder.
+    """
+    root = Path(directory)
+    root.mkdir(parents=True, exist_ok=True)
+    opaque = root / "codec_rgb.png"
+    transparent = root / "codec_rgba.png"
+    with Image.new("RGB", (32, 32), (40, 120, 200)) as image:
+        image.save(opaque)
+    with Image.new("RGBA", (32, 32), (40, 120, 200, 255)) as image:
+        image.paste((40, 120, 200, 0), (0, 0, 8, 32))
+        image.paste((40, 120, 200, 128), (8, 0, 16, 32))
+        image.save(transparent)
+    results = {}
+    Image.init()
+    for fmt, ext in SUPPORTED_OUTPUT_FORMATS.items():
+        if fmt in {"DDS", "SVG"}:
+            continue
+        name = f"png_to_{fmt.lower()}"
+        destination = root / f"codec_output{ext}"
+        try:
+            source = opaque if output_format_discards_alpha(fmt) else transparent
+            actual_path = convert_file(str(source), str(destination), fmt)
+            if Path(actual_path).resolve() != destination.resolve():
+                raise ValueError(f"{fmt} export redirected to {actual_path}")
+            if fmt in {"TIM", "XNB"}:
+                signature = destination.read_bytes()[:4]
+                expected = b"\x10\x00\x00\x00" if fmt == "TIM" else b"XNB"
+                if not signature.startswith(expected):
+                    raise ValueError(f"{fmt} output signature mismatch")
+            else:
+                with Image.open(destination) as encoded:
+                    expected = Image.registered_extensions().get(ext)
+                    if encoded.format != expected or not expected:
+                        raise ValueError(f"{fmt} decoded as {encoded.format}, expected {expected}")
+            with _open_image(str(destination)) as decoded:
+                if decoded.size != (32, 32):
+                    raise ValueError(f"{fmt} dimensions changed: {decoded.size}")
+                if not output_format_discards_alpha(fmt):
+                    with decoded.convert("RGBA") as rgba:
+                        alpha = [rgba.getpixel((x, 16))[3] for x in (4, 12, 24)]
+                    if alpha[0] != 0 or alpha[2] != 255:
+                        raise ValueError(f"{fmt} lost transparent/opaque pixels: {alpha}")
+                    if fmt not in {"GIF", "TIM"} and abs(alpha[1] - 128) > 2:
+                        raise ValueError(f"{fmt} lost partial alpha: {alpha}")
+            results[name] = {"ok": True, "detail": f"{fmt} encode/decode; size=32x32; alpha={source == transparent}"}
+        except Exception as exc:
+            results[name] = {"ok": False, "detail": f"{fmt}: {exc}"}
+    return results
 
 # Human-readable descriptions for each output format, shown as combo tooltips
 FORMAT_DESCRIPTIONS = {
@@ -65,17 +204,29 @@ FORMAT_DESCRIPTIONS = {
     "BMP": (
         "Windows Bitmap — uncompressed raster format.\n"
         "Large file size but lossless and universally supported.\n"
-        "No alpha channel support. Best for simple compatibility."
+        "No alpha channel support. Transparent sources are auto-saved as PNG to preserve alpha."
     ),
     "DDS": (
         "DirectDraw Surface — GPU-native texture format.\n"
         "Used by DirectX games and engines (Unreal, Unity, etc.).\n"
-        "Supports DXT/BC compressed formats. Required for many game modding workflows."
+        "Supports GPU texture workflows and includes an output variant selector in the converter.\n"
+        "Choose automatic RGB/RGBA handling, force 24-bit RGB / 32-bit RGBA raw output,\n"
+        "or use BC1/DXT1, BC2/DXT3, or BC3/DXT5 compressed output when ImageMagick/wand is available."
+    ),
+    "PBM": (
+        "Portable Bitmap — simple 1-bit black-and-white image format.\n"
+        "Best for masks, monochrome art, and legacy toolchains.\n"
+        "No greyscale or alpha; transparent sources are auto-saved as PNG."
     ),
     "GIF": (
         "Graphics Interchange Format — 256-colour indexed format with animation.\n"
         "Limited palette makes it unsuitable for photos or detailed textures.\n"
         "Supports 1-bit transparency only. Best for simple icons or animations."
+    ),
+    "PGM": (
+        "Portable Graymap — simple greyscale image format.\n"
+        "Useful for masks, heightmaps, scientific tools, and older pipelines.\n"
+        "Stores luminance only; transparent sources are auto-saved as PNG."
     ),
     "ICO": (
         "Windows Icon format — multi-size icon bundle.\n"
@@ -84,7 +235,7 @@ FORMAT_DESCRIPTIONS = {
     ),
     "JPEG": (
         "Joint Photographic Experts Group — lossy compression for photos.\n"
-        "No alpha channel support; transparent pixels are composited onto white.\n"
+        "No alpha channel support; transparent sources are auto-saved as PNG.\n"
         "Quality 85–95 gives a good size/quality balance for photos."
     ),
     "JPEG2000": (
@@ -95,7 +246,14 @@ FORMAT_DESCRIPTIONS = {
     "PCX": (
         "PC Paintbrush format — old lossless format from the DOS era.\n"
         "Limited support in modern software. Use PNG or BMP instead where possible.\n"
-        "Still encountered in some legacy game assets and old CAD workflows."
+        "Still encountered in some legacy game assets and old CAD workflows.\n"
+        "Transparent sources are auto-saved as PNG."
+    ),
+    "PNM": (
+        "Portable AnyMap — Netpbm family container (PBM/PGM/PPM).\n"
+        "Simple interchange format for command-line tools and legacy pipelines.\n"
+        "This app saves color PNM output as a standard RGB pixmap.\n"
+        "Transparent sources are auto-saved as PNG."
     ),
     "PNG": (
         "Portable Network Graphics — lossless compression with full alpha channel.\n"
@@ -105,7 +263,7 @@ FORMAT_DESCRIPTIONS = {
     "PPM": (
         "Portable Pixmap — simple, uncompressed text or binary RGB format.\n"
         "Very large files with no compression. Supported by most graphics tools.\n"
-        "No alpha channel. Mostly used in scientific and batch-pipeline workflows."
+        "No alpha channel. Transparent sources are auto-saved as PNG."
     ),
     "QOI": (
         "Quite OK Image Format — fast lossless compression with alpha support.\n"
@@ -120,13 +278,18 @@ FORMAT_DESCRIPTIONS = {
     "SVG": (
         "Scalable Vector Graphics — XML-based vector/lossless format.\n"
         "SVG input: renders the vector art to a full-colour RGBA raster.\n"
-        "  Requires cairosvg (pip install cairosvg) or svglib.\n"
+        "  Uses QtSvg bundled with the application (SVG feature support follows QtSvg).\n"
         "SVG output — two modes:\n"
-        "  • vtracer installed: traces raster into true vector paths\n"
-        "      (pip install vtracer). Best for logos, icons, pixel art.\n"
+        "  • bundled vtracer: traces raster into true vector paths\n"
+        "      Best for logos, icons, pixel art; tracing is approximate.\n"
         "  • fallback: embeds raster as base64 PNG — pixel-perfect but\n"
         "      not true vector. No extra libraries required.\n"
         "Useful for icons, logos, UI assets, and scalable game graphics."
+    ),
+    "TIM": (
+        "PlayStation 1 TIM texture — classic console image/texture format.\n"
+        "This app writes 16-bit direct-colour TIM files for export and modding.\n"
+        "Transparency is mapped to TIM's limited transparent/semi-transparent states."
     ),
     "TIFF": (
         "Tagged Image File Format — flexible lossless/compressed format.\n"
@@ -138,11 +301,12 @@ FORMAT_DESCRIPTIONS = {
         "Supports alpha channel. Smaller than PNG at similar quality.\n"
         "Best for web assets, UI images, and web-delivered game textures."
     ),
+    "XNB": (
+        "XNA / MonoGame binary content format — Texture2D asset.\n"
+        "Used by XNA Game Studio and MonoGame for Windows/Xbox/Phone.\n"
+        "Reads most XNB texture sub-formats; writes as Color (RGBA8888)."
+    ),
 }
-
-# Formats whose save() accepts a quality parameter
-_QUALITY_FORMATS = {".jpg", ".jpeg", ".webp", ".avif", ".jp2"}
-
 
 def _has_cairosvg() -> bool:
     """Return True when cairosvg is importable."""
@@ -163,6 +327,57 @@ def _has_svglib() -> bool:
         return False
 
 
+def _has_qt_svg() -> bool:
+    """QtSvg ships with the application and needs no external SVG renderer."""
+    try:
+        from PyQt6.QtSvg import QSvgRenderer
+        from PyQt6.QtGui import QImage, QPainter
+        return True
+    except (ImportError, OSError):
+        return False
+
+
+def svg_input_available() -> bool:
+    return _has_qt_svg() or _has_cairosvg() or _has_svglib()
+
+
+_svg_app = None
+
+
+def _load_svg_via_qt(path: str) -> Image.Image:
+    from PyQt6.QtCore import QRectF
+    from PyQt6.QtGui import QImage, QPainter
+    from PyQt6.QtSvg import QSvgRenderer
+    from PyQt6.QtWidgets import QApplication
+
+    global _svg_app
+    if QApplication.instance() is None:
+        # Retain the application for command-line conversions and text rendering.
+        _svg_app = QApplication(["AlphaFixer SVG", "-platform", "offscreen"])
+    renderer = QSvgRenderer(path)
+    if not renderer.isValid():
+        raise ValueError(f"Invalid or unsupported SVG file: {path}")
+    size = renderer.defaultSize()
+    width, height = size.width(), size.height()
+    if width <= 0 or height <= 0:
+        raise ValueError("SVG must have positive dimensions or a valid viewBox.")
+    if Image.MAX_IMAGE_PIXELS and width * height > Image.MAX_IMAGE_PIXELS:
+        raise Image.DecompressionBombError("SVG dimensions exceed the safe pixel limit.")
+    surface = QImage(width, height, QImage.Format.Format_RGBA8888)
+    if surface.isNull():
+        raise MemoryError("Cannot allocate SVG rendering surface.")
+    surface.fill(0)
+    painter = QPainter(surface)
+    try:
+        renderer.render(painter, QRectF(0, 0, width, height))
+    finally:
+        painter.end()
+    pixels = surface.constBits()
+    pixels.setsize(surface.sizeInBytes())
+    return Image.frombytes("RGBA", (width, height), bytes(pixels), "raw", "RGBA",
+                           surface.bytesPerLine())
+
+
 def _has_vtracer() -> bool:
     """Return True when vtracer is importable (used for raster→SVG vectorization)."""
     try:
@@ -177,20 +392,21 @@ def _load_svg(path: str) -> Image.Image:
     Render an SVG file to an RGBA PIL Image.
 
     Tries (in order):
-    1. cairosvg       — pip install cairosvg
-    2. svglib         — pip install svglib
-    3. Raises ImportError with installation instructions.
+    1. QtSvg         — bundled with PyQt6
+    2. cairosvg / svglib — optional source-run alternatives
+    3. Raises ImportError if no renderer is available.
     """
+    if _has_qt_svg():
+        return _load_svg_via_qt(path)
     if _has_cairosvg():
         import cairosvg
         png_bytes = cairosvg.svg2png(url=path)
         img = Image.open(io.BytesIO(png_bytes))
         try:
             img.load()
-        except Exception:
+            return img.convert("RGBA")
+        finally:
             img.close()
-            raise
-        return img.convert("RGBA")
 
     if _has_svglib():
         from svglib.svglib import svg2rlg
@@ -202,13 +418,12 @@ def _load_svg(path: str) -> Image.Image:
         img = Image.open(io.BytesIO(png_bytes))
         try:
             img.load()
-        except Exception:
+            return img.convert("RGBA")
+        finally:
             img.close()
-            raise
-        return img.convert("RGBA")
 
     raise ImportError(
-        "SVG input requires cairosvg or svglib.\n"
+        "SVG input requires bundled QtSvg, cairosvg or svglib.\n"
         "Install one of them:\n"
         "    pip install cairosvg\n"
         "    pip install svglib\n"
@@ -283,12 +498,18 @@ def _save_svg(img: Image.Image, path: str) -> None:
 
 
 def _open_image(path: str) -> Image.Image:
-    """Open an image preserving its native mode (DDS/SVG handled specially)."""
+    """Open an image preserving its native mode (DDS/SVG/XNB/TIM handled specially)."""
     ext = Path(path).suffix.lower()
     if ext == ".dds":
         return _load_dds(path)
     if ext == ".svg":
         return _load_svg(path)
+    if ext == ".xnb":
+        from .xnb_handler import load_xnb
+        return load_xnb(path)
+    if ext == ".tim":
+        from .tim_handler import load_tim
+        return load_tim(path)
     img = Image.open(path)
     try:
         img.load()  # force decode so the file handle can be closed
@@ -297,6 +518,41 @@ def _open_image(path: str) -> Image.Image:
         img.close()
         raise MemoryError(
             f"Not enough memory to open {w}×{h} image "
+            f"({w * h / 1_000_000:.1f} megapixels). Try a smaller file."
+        )
+    except Exception:
+        img.close()
+        raise
+    return img
+
+
+def _open_image_for_preview(path: str, max_size: int) -> Image.Image:
+    """Open *path* for preview/thumbnail use, preferring lower-memory decoding."""
+    ext = Path(path).suffix.lower()
+    if ext in {".dds", ".svg", ".xnb", ".tim"}:
+        return _open_image(path)
+
+    img = Image.open(path)
+    try:
+        target = max(1, int(max_size))
+        longest = max(img.size) if img.size else 0
+        if longest > target * 2:
+            try:
+                img.draft(None, (target * 2, target * 2))
+            except Exception:
+                pass
+            current_longest = max(img.size) if img.size else longest
+            reduce_factor = max(1, int(math.floor(current_longest / max(target * 2, 1))))
+            if reduce_factor > 1:
+                reduced = img.reduce(reduce_factor)
+                img.close()
+                img = reduced
+        img.load()
+    except MemoryError:
+        w, h = img.size
+        img.close()
+        raise MemoryError(
+            f"Not enough memory to preview {w}×{h} image "
             f"({w * h / 1_000_000:.1f} megapixels). Try a smaller file."
         )
     except Exception:
@@ -358,6 +614,7 @@ def convert_file(
     quality: int = 90,
     resize: Optional[tuple[int, int]] = None,
     keep_metadata: bool = False,
+    dds_variant: str = "auto",
 ) -> str:
     """
     Convert a single image file.
@@ -420,7 +677,7 @@ def convert_file(
                 return {}
             kw: dict = {}
             try:
-                if fmt_ext in (".jpg", ".jpeg"):
+                if fmt_ext in (".jpg", ".jpeg", ".jfif", ".jpe"):
                     for k in ("exif", "icc_profile", "dpi"):
                         if k in src_img.info:
                             kw[k] = src_img.info[k]
@@ -452,10 +709,22 @@ def convert_file(
             if ext == ".dds":
                 rgba = _ensure_rgba(img)
                 try:
-                    _save_dds(rgba, output_path)
+                    _save_dds(rgba, output_path, variant=dds_variant)
                 finally:
                     if rgba is not img:
                         rgba.close()
+                return output_path
+
+            # --- XNB (XNA/MonoGame Texture2D) ---
+            if ext == ".xnb":
+                from .xnb_handler import save_xnb
+                save_xnb(img, output_path)
+                return output_path
+
+            # --- TIM (PlayStation 1 texture; 16-bit direct colour) ---
+            if ext == ".tim":
+                from .tim_handler import save_tim
+                save_tim(img, output_path)
                 return output_path
 
             # --- SVG (raster embedded in SVG wrapper) ---
@@ -464,7 +733,7 @@ def convert_file(
                 return output_path
 
             # --- JPEG (no alpha, RGB or L only) ---
-            if ext in (".jpg", ".jpeg"):
+            if ext in (".jpg", ".jpeg", ".jfif", ".jpe"):
                 flat = _flatten_alpha(img)
                 try:
                     flat.save(output_path, quality=quality, **_meta_kwargs(ext))
@@ -483,19 +752,27 @@ def convert_file(
                         flat.close()
                 return output_path
 
-            # --- PPM (RGB only, no alpha) ---
-            if ext == ".ppm":
+            # --- Netpbm family (PBM/PGM/PNM/PPM; no alpha) ---
+            if ext in (".pbm", ".pgm", ".pnm", ".ppm"):
                 flat = _flatten_alpha(img)
-                rgb = None
+                save_img = None
+                grey = None
                 try:
-                    if flat.mode not in ("RGB", "L"):
-                        rgb = flat.convert("RGB")
-                        rgb.save(output_path)
+                    if ext == ".pbm":
+                        grey = flat if flat.mode == "L" else flat.convert("L")
+                        save_img = grey.point(lambda v: 255 if v >= 128 else 0, mode="1")
+                    elif ext == ".pgm":
+                        save_img = flat if flat.mode == "L" else flat.convert("L")
+                    elif flat.mode not in ("RGB", "L"):
+                        save_img = flat.convert("RGB")
                     else:
-                        flat.save(output_path)
+                        save_img = flat
+                    save_img.save(output_path)
                 finally:
-                    if rgb is not None:
-                        rgb.close()
+                    if grey is not None and grey is not flat:
+                        grey.close()
+                    if save_img is not None and save_img is not flat:
+                        save_img.close()
                     if flat is not img:
                         flat.close()
                 return output_path
@@ -513,10 +790,15 @@ def convert_file(
             # --- GIF (palette mode; optionally 1-colour transparency) ---
             if ext == ".gif":
                 if img.mode == "RGBA":
-                    # Quantise to palette preserving transparency
                     gif_img = img.quantize(colors=255, method=Image.Quantize.FASTOCTREE, dither=0)
                     try:
-                        gif_img.save(output_path)
+                        with img.getchannel("A") as alpha:
+                            with alpha.point(lambda value: 255 if value == 0 else 0) as mask:
+                                gif_img.paste(255, mask=mask)
+                            if alpha.getextrema()[0] == 0:
+                                gif_img.save(output_path, transparency=255)
+                            else:
+                                gif_img.save(output_path)
                     finally:
                         gif_img.close()
                 elif img.mode not in ("P", "L", "1"):
@@ -589,6 +871,23 @@ def convert_file(
         if img is not src_img:
             img.close()
         src_img.close()
+
+
+def get_gif_frame_count(path: str) -> int:
+    """
+    Return the number of frames in a GIF file.
+
+    Returns 1 for non-animated GIFs or any non-GIF file.
+    Returns 1 on any error (safe fallback so callers need no try/except).
+    """
+    try:
+        ext = Path(path).suffix.lower()
+        if ext != ".gif":
+            return 1
+        with Image.open(path) as img:
+            return getattr(img, "n_frames", 1)
+    except Exception:
+        return 1
 
 
 def build_output_path(

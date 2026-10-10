@@ -1,12 +1,15 @@
 """
 Alpha channel processor.
 
-Supports: PNG, JPEG, BMP, TIFF, GIF, WEBP, TGA, ICO, DDS (via Wand/ImageMagick),
-          PPM, PCX, AVIF, QOI.
+Readable formats: PNG, JPEG, BMP, TIFF, GIF, WEBP, TGA, ICO, DDS, PBM, PGM,
+                  PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000, XNB, TIM.
+Writable formats: PNG, JPEG, BMP, TIFF, GIF, WEBP, TGA, ICO, DDS, PBM, PGM,
+                  PNM, PPM, PCX, AVIF, QOI, SVG, JPEG2000, XNB, TIM.
 """
 import os
 import io
 import logging
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -21,23 +24,60 @@ logger = logging.getLogger(__name__)
 ALPHA_FORMATS = {".png", ".webp", ".tga", ".tiff", ".tif", ".dds", ".gif", ".ico"}
 
 # Formats that need conversion to RGBA before processing
-CONVERT_TO_RGBA = {".jpg", ".jpeg", ".bmp"}
+CONVERT_TO_RGBA = {".jpg", ".jpeg", ".jfif", ".jpe", ".bmp", ".pbm", ".pgm", ".pnm", ".ppm"}
 
 SUPPORTED_READ = {
     ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif",
     ".gif", ".webp", ".tga", ".ico", ".dds",
-    ".ppm", ".pcx", ".avif", ".qoi", ".svg", ".jp2",
+    ".pbm", ".pgm", ".pnm", ".ppm", ".pcx", ".avif", ".qoi", ".svg", ".jp2", ".j2k", ".j2c",
+    ".jfif", ".jpe",
+    ".xnb", ".tim",
 }
 
-SUPPORTED_WRITE = SUPPORTED_READ
+SUPPORTED_WRITE = set(SUPPORTED_READ)
 
 
+@lru_cache(maxsize=1)
 def _has_wand() -> bool:
     try:
-        import wand.image  # noqa: F401
+        from wand.image import Image as WandImage
+        with WandImage(width=1, height=1) as probe:
+            probe.format = "png"
+            probe.make_blob()
         return True
     except ImportError:
         return False
+    except Exception as exc:
+        logger.warning("ImageMagick/wand runtime unavailable: %s", exc)
+        return False
+
+
+def _load_dds_via_wand(path: str) -> Image.Image:
+    from wand.image import Image as WandImage
+
+    with WandImage(filename=path) as wimg:
+        wimg.format = "png"
+        blob = wimg.make_blob()
+    _tmp = Image.open(io.BytesIO(blob))
+    try:
+        return _tmp.convert("RGBA")
+    finally:
+        _tmp.close()
+
+
+def _try_load_dds_via_wand(path: str, *, context: str = "") -> Optional[Image.Image]:
+    if not _has_wand():
+        return None
+    try:
+        return _load_dds_via_wand(path)
+    except MemoryError:
+        raise
+    except Exception as exc:
+        if context:
+            logger.warning("Wand failed to load DDS %s after %s: %s", path, context, exc)
+        else:
+            logger.warning("Wand failed to load DDS %s: %s", path, exc)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -46,69 +86,439 @@ def _has_wand() -> bool:
 
 def _load_dds(path: str) -> Image.Image:
     """Load a DDS file, returning an RGBA PIL Image."""
-    if _has_wand():
+    try:
+        _tmp = Image.open(path)
         try:
-            from wand.image import Image as WandImage
-            with WandImage(filename=path) as wimg:
-                wimg.format = "png"
-                blob = wimg.make_blob()
-            _tmp = Image.open(io.BytesIO(blob))
-            try:
-                return _tmp.convert("RGBA")
-            finally:
-                _tmp.close()
-        except MemoryError:
-            raise
-        except Exception as exc:
-            logger.warning("Wand failed to load DDS %s: %s", path, exc)
+            _tmp.load()
+            return _tmp.convert("RGBA")
+        finally:
+            _tmp.close()
+    except MemoryError:
+        raise
+    except Exception as exc:
+        logger.warning("Pillow failed to load DDS %s: %s", path, exc)
+    wand_img = _try_load_dds_via_wand(path)
+    if wand_img is not None:
+        return wand_img
     # Fallback: minimal DDS reader using raw BGRA or RGBA data
     return _load_dds_raw(path)
 
 
 def _load_dds_raw(path: str) -> Image.Image:
-    """Very basic DDS reader for uncompressed RGBA/BGRA surfaces."""
+    """DDS reader supporting uncompressed (BGRA/BGR) and compressed DXT1/3/5,
+    BC4/BC5/ATI1/ATI2 surfaces, with optional Wand fallback for BC6H/BC7 and
+    unsupported complex DX10 surfaces."""
     with open(path, "rb") as f:
         data = f.read()
     if len(data) < 128 or data[:4] != b"DDS ":
         raise ValueError("Not a valid DDS file")
     height = int.from_bytes(data[12:16], "little")
     width = int.from_bytes(data[16:20], "little")
-    # Pixel format structure at offset 76:
-    #   dwSize(76-80), dwFlags(80-84), dwFourCC(84-88), dwRGBBitCount(88-92)
-    pf_flags = int.from_bytes(data[80:84], "little")  # pixel format flags
-    pf_fourcc = data[84:88]                            # FourCC compression tag
-    bits = int.from_bytes(data[88:92], "little")       # bits per pixel
-    # DDPF_FOURCC (0x4): dwFourCC contains a valid compression code (DXT1 etc.)
-    # A non-zero FourCC also signals a compressed format.  Either way the raw
-    # pixel data is NOT a simple BGRA raster and must not be read as such.
-    _DDPF_FOURCC = 0x4
-    if pf_flags & _DDPF_FOURCC or pf_fourcc != b"\x00\x00\x00\x00":
+    depth = int.from_bytes(data[24:28], "little")
+    mipmap_count = int.from_bytes(data[28:32], "little")
+    # Pixel format structure at offset 76
+    pf_flags = int.from_bytes(data[80:84], "little")
+    pf_fourcc = data[84:88]
+    bits = int.from_bytes(data[88:92], "little")
+    r_mask = int.from_bytes(data[92:96], "little")
+    g_mask = int.from_bytes(data[96:100], "little")
+    b_mask = int.from_bytes(data[100:104], "little")
+    a_mask = int.from_bytes(data[104:108], "little")
+    caps2 = int.from_bytes(data[112:116], "little")
+
+    # Check for DX10 extended header (FourCC = "DX10")
+    dx10_dxgi_format = 0
+    pixel_data_offset = 128
+    dx10_resource_dimension = 3
+    dx10_misc_flag = 0
+    dx10_array_size = 1
+    if pf_fourcc == b"DX10":
+        if len(data) < 148:
+            raise ValueError("DDS DX10 header truncated")
+        dx10_dxgi_format = int.from_bytes(data[128:132], "little")
+        dx10_resource_dimension = int.from_bytes(data[132:136], "little")
+        dx10_misc_flag = int.from_bytes(data[136:140], "little")
+        dx10_array_size = max(1, int.from_bytes(data[140:144], "little"))
+        pixel_data_offset = 148
+
+    legacy_cubemap = bool(caps2 & 0x00000200)
+    legacy_volume = bool(caps2 & 0x00200000)
+    dx10_cubemap = bool(dx10_misc_flag & 0x4)
+    if dx10_array_size > 1:
+        wand_img = _try_load_dds_via_wand(path, context="unsupported DDS texture array")
+        if wand_img is not None:
+            return wand_img
         raise ValueError(
-            f"Unsupported DDS pixel format: compressed format "
-            f"(FourCC={pf_fourcc!r}). "
-            "Install ImageMagick/wand to read compressed DDS files."
+            f"Unsupported DDS texture array ({dx10_array_size} slices). "
+            "Install ImageMagick/wand to inspect non-2D DDS arrays."
         )
-    pixel_data = data[128:]
+    if legacy_cubemap or dx10_cubemap:
+        wand_img = _try_load_dds_via_wand(path, context="unsupported DDS cubemap")
+        if wand_img is not None:
+            return wand_img
+        raise ValueError(
+            "Unsupported DDS cubemap surface. Install ImageMagick/wand to inspect cubemap DDS textures."
+        )
+    if legacy_volume or dx10_resource_dimension == 4 or depth > 1:
+        wand_img = _try_load_dds_via_wand(path, context="unsupported DDS volume texture")
+        if wand_img is not None:
+            return wand_img
+        raise ValueError(
+            "Unsupported DDS volume texture. Install ImageMagick/wand to inspect 3D DDS textures."
+        )
+    if mipmap_count > 1:
+        logger.warning(
+            "DDS %s contains %d mip levels; loading base level only.",
+            path,
+            mipmap_count,
+        )
+
+    pixel_data = data[pixel_data_offset:]
+
+    _DDPF_FOURCC = 0x4
+
+    # ------------------------------------------------------------------ #
+    # Compressed formats                                                   #
+    # ------------------------------------------------------------------ #
+    fourcc_str = pf_fourcc.rstrip(b"\x00").decode("ascii", errors="replace")
+
+    # Map DX10 DXGI formats to equivalent FourCC names for the decoder
+    _DXGI_TO_FOURCC = {
+        70: "DXT1",   # DXGI_FORMAT_BC1_UNORM
+        71: "DXT1",   # DXGI_FORMAT_BC1_UNORM_SRGB (approximate)
+        72: "DXT3",   # DXGI_FORMAT_BC2_UNORM (DXT2/DXT3)
+        73: "DXT3",
+        74: "DXT5",   # DXGI_FORMAT_BC3_UNORM (DXT4/DXT5)
+        75: "DXT5",
+        80: "BC4",    # DXGI_FORMAT_BC4_UNORM
+        81: "BC4",    # DXGI_FORMAT_BC4_SNORM
+        83: "BC5",    # DXGI_FORMAT_BC5_UNORM
+        84: "BC5",    # DXGI_FORMAT_BC5_SNORM
+        95: "BC6H",   # DXGI_FORMAT_BC6H_UF16
+        96: "BC6H",   # DXGI_FORMAT_BC6H_SF16
+        98: "BC7",    # DXGI_FORMAT_BC7_UNORM
+        99: "BC7",    # DXGI_FORMAT_BC7_UNORM_SRGB
+    }
+    if dx10_dxgi_format and dx10_dxgi_format in _DXGI_TO_FOURCC:
+        fourcc_str = _DXGI_TO_FOURCC[dx10_dxgi_format]
+
+    _DXGI_UNCOMPRESSED_LAYOUTS: dict[int, tuple[int, int, int, int, int, int]] = {
+        28: (0x41, 32, 0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000),  # R8G8B8A8_UNORM
+        29: (0x41, 32, 0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000),  # R8G8B8A8_UNORM_SRGB
+        61: (0x20000, 8, 0x000000FF, 0x00000000, 0x00000000, 0x00000000),  # R8_UNORM
+        85: (0x40, 16, 0x0000F800, 0x000007E0, 0x0000001F, 0x00000000),  # B5G6R5_UNORM
+        86: (0x41, 16, 0x00007C00, 0x000003E0, 0x0000001F, 0x00008000),  # B5G5R5A1_UNORM
+        87: (0x41, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000),  # B8G8R8A8_UNORM
+        91: (0x40, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0x00000000),  # B8G8R8X8_UNORM
+        115: (0x41, 16, 0x00000F00, 0x000000F0, 0x0000000F, 0x0000F000),  # B4G4R4A4_UNORM
+    }
+    dx10_uncompressed_layout = False
+    if dx10_dxgi_format and dx10_dxgi_format in _DXGI_UNCOMPRESSED_LAYOUTS and bits == 0:
+        pf_flags, bits, r_mask, g_mask, b_mask, a_mask = _DXGI_UNCOMPRESSED_LAYOUTS[dx10_dxgi_format]
+        dx10_uncompressed_layout = True
+
+    # Also map legacy FourCC aliases
+    _FOURCC_ALIASES = {
+        "DXT2": "DXT3",  # DXT2 = premultiplied alpha DXT3 – decode the same way
+        "DXT4": "DXT5",  # DXT4 = premultiplied alpha DXT5
+        "ATI1": "BC4",
+        "BC4U": "BC4",
+        "BC4S": "BC4",
+        "ATI2": "BC5",
+        "BC5U": "BC5",
+        "BC5S": "BC5",
+    }
+    fourcc_str = _FOURCC_ALIASES.get(fourcc_str, fourcc_str)
+
+    if (pf_flags & _DDPF_FOURCC or pf_fourcc != b"\x00\x00\x00\x00") and not dx10_uncompressed_layout:
+        if fourcc_str in ("DXT1", "DXT3", "DXT5", "BC4", "BC5", "BC6H", "BC7"):
+            if fourcc_str in ("BC6H", "BC7"):
+                wand_img = _try_load_dds_via_wand(path, context=f"{fourcc_str} decode fallback")
+                if wand_img is not None:
+                    return wand_img
+            return _decompress_dds_blocks(
+                pixel_data, width, height, fourcc_str
+            )
+        if dx10_dxgi_format:
+            wand_img = _try_load_dds_via_wand(path, context=f"unsupported DXGI format {dx10_dxgi_format}")
+            if wand_img is not None:
+                return wand_img
+            raise ValueError(
+                f"Unsupported DDS compressed format (FourCC={pf_fourcc!r}, "
+                f"unknown/unsupported DXGI={dx10_dxgi_format}). "
+                "Install ImageMagick/wand to read this DDS variant."
+            )
+        wand_img = _try_load_dds_via_wand(path, context=f"unsupported FourCC {pf_fourcc!r}")
+        if wand_img is not None:
+            return wand_img
+        raise ValueError(
+            f"Unsupported DDS compressed format (FourCC={pf_fourcc!r}, "
+            f"DXGI={dx10_dxgi_format}). "
+            "Install ImageMagick/wand to read this DDS variant."
+        )
+
+    # ------------------------------------------------------------------ #
+    # Uncompressed formats                                                 #
+    # ------------------------------------------------------------------ #
     expected = width * height * (bits // 8)
-    if len(pixel_data) < expected or bits not in (32, 24):
+    if len(pixel_data) < expected or bits not in (32, 24, 16, 8):
         raise ValueError(f"Unsupported DDS pixel format (bits={bits})")
+    _DDPF_LUMINANCE = 0x20000
+
+    def _scale_mask(masked_values: np.ndarray, mask: int) -> np.ndarray:
+        if mask == 0:
+            return np.zeros(masked_values.shape, dtype=np.uint8)
+        shift = (mask & -mask).bit_length() - 1
+        max_value = mask >> shift
+        channel = (masked_values & mask) >> shift
+        if max_value <= 0:
+            return np.zeros(masked_values.shape, dtype=np.uint8)
+        return ((channel.astype(np.uint32) * 255 + max_value // 2) // max_value).astype(np.uint8)
+
+    if bits == 8:
+        grey = np.frombuffer(pixel_data[:expected], dtype=np.uint8).reshape(height, width)
+        return Image.fromarray(grey, "L").convert("RGBA")
+
+    if bits == 16:
+        values = np.frombuffer(pixel_data[:expected], dtype="<u2").astype(np.uint32).reshape(height, width)
+    elif bits == 24:
+        raw = np.frombuffer(pixel_data[:expected], dtype=np.uint8).reshape(height, width, 3)
+        values = (
+            raw[:, :, 0].astype(np.uint32)
+            | (raw[:, :, 1].astype(np.uint32) << 8)
+            | (raw[:, :, 2].astype(np.uint32) << 16)
+        )
+    else:
+        values = np.frombuffer(pixel_data[:expected], dtype="<u4").astype(np.uint32).reshape(height, width)
+
+    if any((r_mask, g_mask, b_mask, a_mask)):
+        colour_masks = [mask for mask in (r_mask, g_mask, b_mask) if mask]
+        if pf_flags & _DDPF_LUMINANCE or len(colour_masks) == 1:
+            lum_mask = colour_masks[0] if colour_masks else 0xFF
+            lum = _scale_mask(values, lum_mask)
+            alpha = _scale_mask(values, a_mask) if a_mask else np.full(lum.shape, 255, dtype=np.uint8)
+            rgba = np.stack([lum, lum, lum, alpha], axis=-1)
+            return Image.fromarray(rgba, "RGBA")
+        r = _scale_mask(values, r_mask) if r_mask else np.zeros(values.shape, dtype=np.uint8)
+        g = _scale_mask(values, g_mask) if g_mask else np.zeros(values.shape, dtype=np.uint8)
+        b = _scale_mask(values, b_mask) if b_mask else np.zeros(values.shape, dtype=np.uint8)
+        a = _scale_mask(values, a_mask) if a_mask else np.full(values.shape, 255, dtype=np.uint8)
+        rgba = np.stack([r, g, b, a], axis=-1)
+        return Image.fromarray(rgba, "RGBA")
+
     arr = np.frombuffer(pixel_data[:expected], dtype=np.uint8).reshape(height, width, bits // 8)
     if bits == 32:
-        # Most common: BGRA → RGBA
-        img = Image.fromarray(arr[:, :, [2, 1, 0, 3]], "RGBA")
-    else:
+        return Image.fromarray(arr[:, :, [2, 1, 0, 3]], "RGBA")
+    if bits == 24:
         _rgb = Image.fromarray(arr[:, :, [2, 1, 0]], "RGB")
         try:
-            img = _rgb.convert("RGBA")
+            return _rgb.convert("RGBA")
         finally:
             _rgb.close()
-    return img
+    r5g6b5 = arr.reshape(height, width, 2)
+    val = r5g6b5[:, :, 0].astype(np.uint16) | (r5g6b5[:, :, 1].astype(np.uint16) << 8)
+    r = ((val >> 11) & 0x1F).astype(np.uint8) * 8
+    g = ((val >> 5) & 0x3F).astype(np.uint8) * 4
+    b = (val & 0x1F).astype(np.uint8) * 8
+    rgba = np.stack([r, g, b, np.full_like(r, 255)], axis=-1)
+    return Image.fromarray(rgba, "RGBA")
 
 
-def _save_dds(img: Image.Image, path: str):
-    """Save a PIL Image as DDS (BGRA uncompressed) via Wand, or fall back to raw."""
-    if _has_wand():
+# --------------------------------------------------------------------------- #
+# Pure-Python DXT / BC block decompressor                                      #
+# --------------------------------------------------------------------------- #
+
+def _rgb565_to_rgb(color: int) -> tuple[int, int, int]:
+    r = ((color >> 11) & 0x1F) << 3
+    g = ((color >> 5) & 0x3F) << 2
+    b = (color & 0x1F) << 3
+    return r, g, b
+
+
+def _decode_dxt1_block(block: bytes, offset: int) -> np.ndarray:
+    """Decode one 4×4 DXT1 (BC1) block → RGBA uint8 array shape (4,4,4)."""
+    c0 = int.from_bytes(block[offset:offset + 2], "little")
+    c1 = int.from_bytes(block[offset + 2:offset + 4], "little")
+    r0, g0, b0 = _rgb565_to_rgb(c0)
+    r1, g1, b1 = _rgb565_to_rgb(c1)
+
+    if c0 > c1:
+        palette = [
+            (r0, g0, b0, 255),
+            (r1, g1, b1, 255),
+            ((2 * r0 + r1) // 3, (2 * g0 + g1) // 3, (2 * b0 + b1) // 3, 255),
+            ((r0 + 2 * r1) // 3, (g0 + 2 * g1) // 3, (b0 + 2 * b1) // 3, 255),
+        ]
+    else:
+        palette = [
+            (r0, g0, b0, 255),
+            (r1, g1, b1, 255),
+            ((r0 + r1) // 2, (g0 + g1) // 2, (b0 + b1) // 2, 255),
+            (0, 0, 0, 0),  # transparent black
+        ]
+
+    indices_raw = int.from_bytes(block[offset + 4:offset + 8], "little")
+    pixels = np.zeros((4, 4, 4), dtype=np.uint8)
+    for row in range(4):
+        for col in range(4):
+            idx = (indices_raw >> (2 * (row * 4 + col))) & 3
+            pixels[row, col] = palette[idx]
+    return pixels
+
+
+def _decode_bc4_alpha_block(block: bytes, offset: int) -> np.ndarray:
+    """Decode one BC4/DXT5-alpha block → 4×4 uint8 array."""
+    a0, a1 = block[offset], block[offset + 1]
+    if a0 > a1:
+        lut = [a0, a1,
+               (6 * a0 + 1 * a1) // 7,
+               (5 * a0 + 2 * a1) // 7,
+               (4 * a0 + 3 * a1) // 7,
+               (3 * a0 + 4 * a1) // 7,
+               (2 * a0 + 5 * a1) // 7,
+               (1 * a0 + 6 * a1) // 7]
+    else:
+        lut = [a0, a1,
+               (4 * a0 + 1 * a1) // 5,
+               (3 * a0 + 2 * a1) // 5,
+               (2 * a0 + 3 * a1) // 5,
+               (1 * a0 + 4 * a1) // 5,
+               0, 255]
+
+    # 48-bit index table packed in 6 bytes
+    bits = int.from_bytes(block[offset + 2:offset + 8], "little")
+    values = np.zeros((4, 4), dtype=np.uint8)
+    for row in range(4):
+        for col in range(4):
+            idx = (bits >> (3 * (row * 4 + col))) & 7
+            values[row, col] = lut[idx]
+    return values
+
+
+def _decompress_dds_blocks(
+    data: bytes, width: int, height: int, fmt: str
+) -> "Image.Image":
+    """Decompress a full DXT1/3/5/BC4/BC5/BC6H/BC7 DDS surface."""
+    bw = (width + 3) // 4     # blocks wide
+    bh = (height + 3) // 4    # blocks tall
+
+    if fmt == "BC4":
+        block_size = 8
+    elif fmt in ("DXT1",):
+        block_size = 8
+    else:
+        block_size = 16
+
+    # BC6H and BC7 are complex GPU-compressed HDR/modern texture formats.
+    # Without a dedicated decoder library we fail clearly instead of returning
+    # misleading placeholder pixels that look like a successful decode.
+    if fmt in ("BC6H", "BC7"):
+        raise ValueError(
+            f"DDS format {fmt} requires a BC6H/BC7 decoder library. "
+            "Install ImageMagick/wand for full support."
+        )
+
+    rgba = np.zeros((bh * 4, bw * 4, 4), dtype=np.uint8)
+    offset = 0
+
+    for by in range(bh):
+        for bx in range(bw):
+            if len(data) < offset + block_size:
+                raise ValueError("Truncated DDS block data")
+            if fmt == "DXT1":
+                block_pixels = _decode_dxt1_block(data, offset)
+                rgba[by * 4:by * 4 + 4, bx * 4:bx * 4 + 4] = block_pixels
+                offset += 8
+
+            elif fmt == "DXT3":
+                # 8 bytes explicit 4-bit alpha, then 8 bytes DXT1 colour
+                alpha_raw = int.from_bytes(data[offset:offset + 8], "little")
+                color_pixels = _decode_dxt1_block(data, offset + 8)
+                for row in range(4):
+                    for col in range(4):
+                        a4 = (alpha_raw >> (4 * (row * 4 + col))) & 0xF
+                        color_pixels[row, col, 3] = a4 * 17  # scale 0–15 → 0–255
+                rgba[by * 4:by * 4 + 4, bx * 4:bx * 4 + 4] = color_pixels
+                offset += 16
+
+            elif fmt == "DXT5":
+                # 8 bytes compressed alpha, then 8 bytes DXT1 colour
+                alpha_block = _decode_bc4_alpha_block(data, offset)
+                color_pixels = _decode_dxt1_block(data, offset + 8)
+                color_pixels[:, :, 3] = alpha_block
+                rgba[by * 4:by * 4 + 4, bx * 4:bx * 4 + 4] = color_pixels
+                offset += 16
+
+            elif fmt == "BC4":
+                # Single-channel; store in R, G=0, B=0, A=255
+                ch = _decode_bc4_alpha_block(data, offset)
+                rgba[by * 4:by * 4 + 4, bx * 4:bx * 4 + 4, 0] = ch
+                rgba[by * 4:by * 4 + 4, bx * 4:bx * 4 + 4, 3] = 255
+                offset += 8
+
+            elif fmt == "BC5":
+                # Dual-channel (R+G normal map); store in RG, B=0, A=255
+                r_ch = _decode_bc4_alpha_block(data, offset)
+                g_ch = _decode_bc4_alpha_block(data, offset + 8)
+                rgba[by * 4:by * 4 + 4, bx * 4:bx * 4 + 4, 0] = r_ch
+                rgba[by * 4:by * 4 + 4, bx * 4:bx * 4 + 4, 1] = g_ch
+                rgba[by * 4:by * 4 + 4, bx * 4:bx * 4 + 4, 3] = 255
+                offset += 16
+
+    # Crop to actual dimensions (blocks may be padded to multiples of 4)
+    return Image.fromarray(rgba[:height, :width], "RGBA")
+
+
+def _save_dds(img: Image.Image, path: str, variant: str = "auto"):
+    """Save a PIL Image as DDS via Pillow/Wand, or fall back to raw."""
+    variant = str(variant or "auto").lower()
+    if variant in {"rgb", "rgba"}:
+        _save_dds_raw(img, path, variant=variant)
+        return
+    if variant in {"dxt1", "dxt3", "dxt5"}:
+        if not _has_wand():
+            raise RuntimeError(
+                f"DDS {variant.upper()} output requires ImageMagick/wand. "
+                "Install it or choose Auto, RGB, or RGBA."
+            )
+        buf = None
         img_rgba = None
+        try:
+            from wand.image import Image as WandImage
+            img_rgba = img.convert("RGBA")
+            buf = io.BytesIO()
+            img_rgba.save(buf, format="PNG")
+            buf.seek(0)
+            with WandImage(blob=buf.read(), format="png") as wimg:
+                wimg.options["dds:compression"] = variant
+                wimg.format = "dds"
+                wimg.save(filename=path)
+            return
+        except MemoryError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(
+                f"Could not save DDS using {variant.upper()} compression — {exc}"
+            ) from exc
+        finally:
+            if img_rgba is not None:
+                img_rgba.close()
+            if buf is not None:
+                buf.close()
+    img_rgba = None
+    try:
+        img_rgba = img.convert("RGBA")
+        img_rgba.save(path, format="DDS")
+        return
+    except MemoryError:
+        raise
+    except Exception as exc:
+        logger.warning("Pillow failed to save DDS %s: %s", path, exc)
+    finally:
+        if img_rgba is not None:
+            img_rgba.close()
+
+    if _has_wand():
         buf = None
         try:
             from wand.image import Image as WandImage
@@ -129,20 +539,35 @@ def _save_dds(img: Image.Image, path: str):
                 img_rgba.close()
             if buf is not None:
                 buf.close()
-    _save_dds_raw(img, path)
+    _save_dds_raw(img, path, variant=variant)
 
 
-def _save_dds_raw(img: Image.Image, path: str):
-    """Write a minimal uncompressed BGRA DDS file."""
+def _save_dds_raw(img: Image.Image, path: str, variant: str = "auto"):
+    """Write a minimal uncompressed RGB or BGRA DDS file."""
     img_rgba = img.convert("RGBA")
     try:
         w, h = img_rgba.size
         arr = np.array(img_rgba, dtype=np.uint8)
     finally:
         img_rgba.close()
-    # Convert RGBA → BGRA
-    bgra = arr[:, :, [2, 1, 0, 3]]
-    pixel_data = bgra.tobytes()
+    variant = str(variant or "auto").lower()
+    opaque = bool(np.all(arr[:, :, 3] == 255))
+    write_rgb = variant == "rgb" or (variant == "auto" and opaque)
+    if write_rgb:
+        # Convert RGBA → BGR for broader compatibility with tools that expect
+        # opaque DDS textures without an alpha channel.
+        pixel_data = arr[:, :, [2, 1, 0]].tobytes()
+        pitch = w * 3
+        pf_flags = 0x40
+        bits = 24
+        a_mask = 0x00000000
+    else:
+        # Convert RGBA → BGRA
+        pixel_data = arr[:, :, [2, 1, 0, 3]].tobytes()
+        pitch = w * 4
+        pf_flags = 0x41
+        bits = 32
+        a_mask = 0xFF000000
 
     def dword(n):
         return n.to_bytes(4, "little")
@@ -153,19 +578,108 @@ def _save_dds_raw(img: Image.Image, path: str):
     header[8:12] = dword(0x000A1007)  # DDSD flags: caps|height|width|pixelformat|linearsize
     header[12:16] = dword(h)
     header[16:20] = dword(w)
-    header[20:24] = dword(w * 4)   # dwPitchOrLinearSize
+    header[20:24] = dword(pitch)   # dwPitchOrLinearSize
     header[76:80] = dword(32)      # ddspf.dwSize
-    header[80:84] = dword(0x41)    # ddspf.dwFlags: DDPF_ALPHAPIXELS | DDPF_RGB
-    header[88:92] = dword(32)      # ddspf.dwRGBBitCount
+    header[80:84] = dword(pf_flags)    # ddspf.dwFlags
+    header[88:92] = dword(bits)      # ddspf.dwRGBBitCount
     header[92:96] = dword(0x00FF0000)  # R mask
     header[96:100] = dword(0x0000FF00)  # G mask
     header[100:104] = dword(0x000000FF)  # B mask
-    header[104:108] = dword(0xFF000000)  # A mask
+    header[104:108] = dword(a_mask)  # A mask
     header[108:112] = dword(0x1000)  # dwCaps: DDSCAPS_TEXTURE
 
     with open(path, "wb") as f:
         f.write(bytes(header))
         f.write(pixel_data)
+
+
+# ---------------------------------------------------------------------------
+# Atlas detection (item 11)
+# ---------------------------------------------------------------------------
+
+def detect_atlas_cells(
+    alpha: "np.ndarray",
+    min_size: int = 4,
+    alpha_threshold: int = 8,
+    seam_tolerance: float = 0.985,
+) -> list[tuple[int, int, int, int]]:
+    """Detect sprite atlas cells from an alpha channel array.
+
+    Scans for horizontal and vertical "seam" lines (rows/columns that are
+    entirely transparent) and returns the bounding boxes of the non-empty
+    cells between those seams.
+
+    Parameters
+    ----------
+    alpha:
+        2-D uint8 numpy array (shape ``(height, width)``).
+    min_size:
+        Minimum width and height in pixels for a cell to be included.
+        Tiny cells (e.g. single-pixel gaps) are filtered out.
+    alpha_threshold:
+        Pixels at or below this alpha are treated as transparent for seam
+        detection. This helps with atlas gutters that contain faint
+        anti-aliased or compression-noise leftovers.
+    seam_tolerance:
+        Fraction of pixels in a row/column that must satisfy
+        ``alpha <= alpha_threshold`` to count as a transparent seam.
+
+    Returns
+    -------
+    List of ``(x, y, w, h)`` tuples in image-pixel coordinates.
+    Returns an empty list if no seams are found or the image has no alpha.
+    """
+    h, w = alpha.shape
+    if h == 0 or w == 0:
+        return []
+
+    threshold = max(0, min(255, int(alpha_threshold)))
+    tolerance = max(0.0, min(1.0, float(seam_tolerance)))
+
+    transparentish = alpha <= threshold
+    row_empty = np.mean(transparentish, axis=1) >= tolerance   # shape (h,)
+    col_empty = np.mean(transparentish, axis=0) >= tolerance   # shape (w,)
+
+    def _spans(empty_mask: "np.ndarray") -> list[tuple[int, int]]:
+        """Return list of (start, end) index pairs for contiguous non-empty runs."""
+        spans: list[tuple[int, int]] = []
+        n = len(empty_mask)
+        in_span = False
+        start = 0
+        for i in range(n):
+            if not empty_mask[i]:
+                if not in_span:
+                    in_span = True
+                    start = i
+            else:
+                if in_span:
+                    in_span = False
+                    spans.append((start, i))
+        if in_span:
+            spans.append((start, n))
+        return spans
+
+    row_spans = _spans(row_empty)
+    col_spans = _spans(col_empty)
+
+    # If there are no seams at all, the image is not an atlas — return nothing.
+    if len(row_spans) <= 1 and len(col_spans) <= 1:
+        return []
+
+    cells: list[tuple[int, int, int, int]] = []
+    for r_start, r_end in row_spans:
+        rh = r_end - r_start
+        if rh < min_size:
+            continue
+        for c_start, c_end in col_spans:
+            cw = c_end - c_start
+            if cw < min_size:
+                continue
+            cell = alpha[r_start:r_end, c_start:c_end]
+            if np.any(cell > 0):
+                cells.append((c_start, r_start, cw, rh))
+
+    return cells
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +696,12 @@ def load_image(path: str) -> Image.Image:
         # alpha_processor for _save_dds / _load_dds).
         from .file_converter import _load_svg  # noqa: PLC0415
         return _load_svg(path)
+    if ext == ".xnb":
+        from .xnb_handler import load_xnb  # noqa: PLC0415
+        return load_xnb(path)
+    if ext == ".tim":
+        from .tim_handler import load_tim  # noqa: PLC0415
+        return load_tim(path)
     img = Image.open(path)
     if img.mode != "RGBA":
         w, h = img.size
@@ -207,7 +727,19 @@ def save_image(img: Image.Image, path: str, original_ext: str):
     if ext == ".dds":
         _save_dds(img, path)
         return
-    if ext in (".jpg", ".jpeg", ".bmp"):
+    if ext == ".xnb":
+        from .xnb_handler import save_xnb  # noqa: PLC0415
+        save_xnb(img, path)
+        return
+    if ext == ".svg":
+        from .file_converter import _save_svg  # noqa: PLC0415
+        _save_svg(img, path)
+        return
+    if ext == ".tim":
+        from .tim_handler import save_tim  # noqa: PLC0415
+        save_tim(img, path)
+        return
+    if ext in (".jpg", ".jpeg", ".jfif", ".jpe", ".bmp"):
         w, h = img.size
         try:
             img_rgb = img.convert("RGB")
@@ -227,6 +759,36 @@ def save_image(img: Image.Image, path: str, original_ext: str):
             )
         finally:
             img_rgb.close()
+        return
+    if ext in (".pbm", ".pgm", ".pnm", ".ppm"):
+        w, h = img.size
+        flat = None
+        save_img = None
+        try:
+            flat = img.convert("RGB") if img.mode not in ("RGB", "L", "1") else img
+            if ext == ".pbm":
+                grey = flat if flat.mode == "L" else flat.convert("L")
+                save_img = grey.point(lambda v: 255 if v >= 128 else 0, mode="1")
+                if grey is not flat:
+                    grey.close()
+            elif ext == ".pgm":
+                save_img = flat if flat.mode == "L" else flat.convert("L")
+            elif flat.mode not in ("RGB", "L"):
+                save_img = flat.convert("RGB")
+            else:
+                save_img = flat
+            save_img.save(path)
+        except MemoryError:
+            raise MemoryError(
+                f"Not enough memory to write {w}×{h} image "
+                f"({w * h / 1_000_000:.1f} megapixels) to {ext}. "
+                "Try processing a smaller file."
+            )
+        finally:
+            if save_img is not None and save_img is not flat and save_img is not img:
+                save_img.close()
+            if flat is not None and flat is not img:
+                flat.close()
         return
     w, h = img.size
     try:

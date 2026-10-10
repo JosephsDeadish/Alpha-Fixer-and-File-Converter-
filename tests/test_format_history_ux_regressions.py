@@ -1,0 +1,537 @@
+import csv
+import json
+from contextlib import contextmanager
+from unittest.mock import patch
+
+import pytest
+from PIL import Image
+from PyQt6 import sip
+from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtGui import QImage, QColor, QPalette
+from PyQt6.QtTest import QTest
+from PyQt6.QtWidgets import QApplication, QMessageBox, QLabel, QBoxLayout
+
+from src.core.settings_manager import SettingsManager
+from src.core.file_converter import convert_file
+from src.core.presets import PresetManager
+from src.ui.converter_tool import ConverterTab
+from src.ui.preview_pane import _ConverterPreviewLoader
+from src.ui.alpha_tool import AlphaFixerTab
+from src.ui.history_tab import HistoryTab
+from src.ui.theme_engine import PRESET_THEMES, build_stylesheet
+
+
+class PreviewLoader(QObject):
+    ready = pyqtSignal(QImage, QImage, str, str)
+    failed = pyqtSignal(str)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.options = kwargs
+
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+
+@pytest.fixture(scope="module")
+def app():
+    instance = QApplication.instance() or QApplication([])
+    yield instance
+
+
+@pytest.fixture
+def settings(app, tmp_path):
+    with patch("src.core.settings_manager._settings_ini_path",
+               return_value=str(tmp_path / "settings.ini")):
+        manager = SettingsManager()
+        yield manager
+        manager.sync()
+        sip.delete(manager._qs)
+
+
+@pytest.fixture
+def converter(settings):
+    widget = ConverterTab(settings)
+    with patch("src.ui.converter_tool._ConverterPreviewLoader", PreviewLoader):
+        yield widget
+        widget._preview_debounce.stop()
+        widget._stop_preview_loader()
+        widget._compare.clear()
+        widget.close()
+        sip.delete(widget)
+
+
+def select_format(converter, fmt):
+    index = next(i for i in range(converter._fmt_combo.count())
+                 if converter._fmt_combo.itemData(i)[0] == fmt)
+    converter._fmt_combo.setCurrentIndex(index)
+    converter._on_format_changed(index)
+    converter._preview_debounce.stop()
+
+
+@pytest.mark.parametrize("resize", [None, (24, 10), (160, 80)])
+def test_converter_preview_resize_matches_export(app, tmp_path, resize):
+    source = tmp_path / "source.png"
+    destination = tmp_path / "output.png"
+    image = Image.new("RGB", (80, 40), "navy")
+    image.paste("orange", (0, 0, 30, 20))
+    image.save(source)
+    image.close()
+    results, failures = [], []
+    loader = _ConverterPreviewLoader(str(source), "PNG", 90, resize=resize)
+    loader.ready.connect(lambda *args: results.append(args))
+    loader.failed.connect(failures.append)
+    loader.run()
+    assert not failures
+    assert len(results) == 1
+    src_qi, out_qi, src_meta, out_meta = results[0]
+    assert (src_qi.width(), src_qi.height()) == (80, 40)
+    assert "80 × 40" in src_meta
+    convert_file(str(source), str(destination), "PNG", resize=resize)
+    with Image.open(destination) as exported:
+        assert (out_qi.width(), out_qi.height()) == exported.size
+        assert f"{exported.width} × {exported.height}" in out_meta
+        for x, y in [(0, 0), (out_qi.width() // 2, out_qi.height() // 2)]:
+            assert out_qi.pixelColor(x, y).getRgb()[:3] == exported.getpixel((x, y))
+    sip.delete(loader)
+
+
+def test_converter_resize_edits_refresh_preview_after_aspect_update(converter, tmp_path):
+    source = tmp_path / "wide.png"
+    Image.new("RGB", (80, 40), "navy").save(source)
+    # Avoid unrelated queue thumbnail threads while exercising normal selection.
+    converter._file_list.addItem(str(source))
+    converter._file_list.setCurrentRow(0)
+    converter._preview_debounce.stop()
+    converter._resize_check.setChecked(True)
+    assert converter._preview_debounce.isActive()
+    for spin, value, expected in [
+        (converter._width_spin, 60, (60, 30)),
+        (converter._height_spin, 20, (40, 20)),
+    ]:
+        converter._preview_debounce.stop()
+        spin.setValue(value)
+        assert converter._preview_debounce.isActive()
+        converter._update_converted_preview()
+        assert converter._preview_loader.options["resize"] == expected
+    converter._lock_aspect_check.setChecked(False)
+    converter._preview_debounce.stop()
+    converter._height_spin.setValue(13)
+    assert converter._preview_debounce.isActive()
+    converter._update_converted_preview()
+    assert converter._preview_loader.options["resize"] == (40, 13)
+    converter._preview_debounce.stop()
+    converter._resize_check.setChecked(False)
+    assert converter._preview_debounce.isActive()
+    assert not converter._width_spin.isEnabled()
+    converter._update_converted_preview()
+    assert converter._preview_loader.options["resize"] is None
+
+
+@pytest.mark.parametrize("fmt", ["PNG", "JPEG", "WEBP", "AVIF", "JPEG2000", "DDS"])
+@pytest.mark.parametrize("compressed_dds", [False, True])
+def test_converter_restores_format_options_without_resetting_preferences(
+        settings, fmt, compressed_dds):
+    saved = {
+        "last_converter_format": fmt,
+        "last_converter_quality": 73,
+        "last_converter_dds_variant": "dxt5",
+        "converter_keep_metadata": True,
+    }
+    for key, value in saved.items():
+        settings.set(key, value)
+    with patch("src.ui.converter_tool.dds_compression_available", return_value=compressed_dds):
+        widget = ConverterTab(settings)
+    try:
+        assert widget._fmt_combo.currentData()[0] == fmt
+        assert widget._quality_spin.value() == 73
+        assert widget._quality_spin.isEnabled() == (fmt in ("JPEG", "WEBP", "AVIF", "JPEG2000"))
+        assert widget._dds_variant_combo.isHidden() == (fmt != "DDS")
+        assert widget._dds_variant_combo.currentData() == ("dxt5" if compressed_dds else "auto")
+        assert widget._keep_metadata_check.isChecked()
+        assert {key: settings.get(key) for key in saved} == saved
+    finally:
+        widget._preview_debounce.stop()
+        widget.close()
+        sip.delete(widget)
+
+
+def test_named_history_search_preserves_filter_and_clear_behavior(settings, app):
+    settings.add_converter_history({
+        "timestamp": "2026-10-09T12:00:00", "format": "PNG",
+        "file_count": 1, "success": 1, "errors": 0, "files": ["first.png"],
+    })
+    settings.add_converter_history({
+        "timestamp": "2026-10-09T13:00:00", "format": "JPEG",
+        "file_count": 1, "success": 1, "errors": 0, "files": ["second.jpg"],
+    })
+    widget = HistoryTab(settings)
+    try:
+        fields = [widget._conv_search, widget._alpha_search, widget._sel_search,
+                  widget._gif_search, widget._vid_search]
+        names = [field.accessibleName() for field in fields]
+        assert all(names) and len(set(names)) == len(names)
+        assert all("Clear" in field.accessibleDescription() for field in fields)
+        widget.show()
+        app.processEvents()
+        widget._conv_search.setFocus()
+        QTest.keyClicks(widget._conv_search, "format:PNG")
+        tree = widget._conv_tree
+        assert sum(not tree.topLevelItem(i).isHidden()
+                   for i in range(tree.topLevelItemCount())) == 1
+        widget._conv_search.clear()
+        assert all(not tree.topLevelItem(i).isHidden() for i in range(tree.topLevelItemCount()))
+        assert [field.accessibleName() for field in fields] == names
+    finally:
+        widget.close()
+        sip.delete(widget)
+
+
+@pytest.mark.parametrize("name", ["Panda Dark", "Panda Light"])
+@pytest.mark.parametrize("initial_pixels", [13, 24, 32])
+def test_history_actions_and_summaries_fit_compact_and_live_scaled_layouts(
+        settings, app, name, initial_pixels):
+    settings.add_converter_history({
+        "timestamp": "2026-10-09T12:00:00", "format": "PNG",
+        "file_count": 1, "success": 1, "errors": 0, "files": ["first.png"],
+    })
+    before = settings.get_converter_history()
+    widget = HistoryTab(settings)
+    try:
+        widget.setStyleSheet(build_stylesheet(PRESET_THEMES[name])
+                            + f"\nQWidget {{ font-size: {initial_pixels}px; }}")
+        widget.resize(640, 1000)
+        widget.show()
+        buttons = (widget._btn_export, widget._btn_clear)
+        for pixels in [initial_pixels, 13, 32, 24, 13]:
+            widget.setStyleSheet(build_stylesheet(PRESET_THEMES[name])
+                                + f"\nQWidget {{ font-size: {pixels}px; }}")
+            for _ in range(5):
+                app.processEvents()
+            assert widget.width() == 640
+            expected = (QBoxLayout.Direction.TopToBottom if pixels >= 24
+                        else QBoxLayout.Direction.LeftToRight)
+            assert widget._action_layout.direction() == expected
+            for button in buttons:
+                assert button.parentWidget().rect().contains(button.geometry())
+                assert button.width() >= button.sizeHint().width()
+            for index, summary in enumerate([
+                widget._conv_summary, widget._alpha_summary, widget._sel_summary,
+                widget._gif_summary, widget._vid_summary,
+            ]):
+                widget._sub_tabs.setCurrentIndex(index)
+                app.processEvents()
+                assert summary.wordWrap()
+                assert summary.parentWidget().rect().contains(summary.geometry())
+                assert summary.height() >= summary.heightForWidth(summary.width())
+        widget._sub_tabs.setCurrentIndex(0)
+        widget._conv_search.setText("format:PNG")
+        with patch("src.ui.history_tab.QFileDialog.getSaveFileName",
+                   return_value=("", "")) as save_dialog:
+            widget._btn_export.click()
+            save_dialog.assert_called_once()
+        with patch("src.ui.history_tab.QMessageBox.question",
+                   return_value=QMessageBox.StandardButton.No) as confirm:
+            widget._btn_clear.click()
+            confirm.assert_called_once()
+        assert settings.get_converter_history() == before
+        widget.setStyleSheet(build_stylesheet(PRESET_THEMES[name])
+                            + "\nQWidget { font-size: 32px; }")
+        widget.resize(1600, 1000)
+        for _ in range(5):
+            app.processEvents()
+        assert widget._action_layout.direction() == QBoxLayout.Direction.LeftToRight
+        widget.resize(640, 1000)
+        for _ in range(5):
+            app.processEvents()
+        assert widget.width() == 640
+        assert widget._action_layout.direction() == QBoxLayout.Direction.TopToBottom
+    finally:
+        widget.close()
+        sip.delete(widget)
+
+
+@pytest.mark.parametrize("tool", ["converter", "history", "alpha"])
+@pytest.mark.parametrize("limited", [False, True])
+def test_tool_guidance_tracks_theme_and_scale_without_losing_status(
+        settings, app, tool, limited):
+    cls = {"converter": ConverterTab, "history": HistoryTab, "alpha": AlphaFixerTab}[tool]
+    module = "history_tab" if tool == "history" else f"{tool}_tool"
+    target = f"src.ui.{module}._{tool}_capability_has_limits"
+    with patch(target, return_value=limited):
+        widget = cls(PresetManager(settings), settings) if tool == "alpha" else cls(settings)
+    try:
+        widget.show()
+        guidance = [label for label in widget.findChildren(QLabel)
+                    if label.property("toolGuidance")]
+        assert len(guidance) == (4 if tool == "alpha" else 3)
+        capability = widget._capability_lbl
+        assert capability.property("capabilityState") == ("limited" if limited else "ready")
+        original_capability = capability.text(), capability.toolTip()
+        for name, pixels in [("Panda Dark", 13), ("Panda Light", 24), ("Panda Dark", 18)]:
+            theme = PRESET_THEMES[name]
+            widget.setStyleSheet(build_stylesheet(theme) + f"\nQWidget {{ font-size: {pixels}px; }}")
+            widget._refresh_session_status()
+            if tool == "alpha":
+                widget._refresh_preview_helper_status()
+            app.processEvents()
+            for label in guidance + [capability]:
+                assert not label.styleSheet()
+                assert label.wordWrap()
+                assert label.palette().color(QPalette.ColorRole.WindowText) == QColor(theme["text"])
+                assert label.font().pixelSize() == pixels
+            assert capability.palette().color(QPalette.ColorRole.Window) == QColor(theme["surface"])
+            assert (capability.text(), capability.toolTip()) == original_capability
+            assert widget._session_status_lbl.text()
+            assert widget._next_step_lbl.text()
+            assert widget._next_step_lbl.toolTip()
+    finally:
+        if tool in ("converter", "alpha"):
+            widget._preview_debounce.stop()
+            widget._stop_preview_loader()
+            widget._compare.clear()
+        widget.close()
+        sip.delete(widget)
+
+
+def test_format_change_clears_stale_capability_warning(converter):
+    with patch("src.ui.converter_tool.output_format_unavailable_reason", return_value="Codec missing"):
+        select_format(converter, "WEBP")
+    assert converter._fmt_combo.toolTip() == "Codec missing"
+    assert "unavailable" in converter._status_lbl.text()
+    with patch("src.ui.converter_tool.output_format_unavailable_reason", return_value=""):
+        select_format(converter, "PNG")
+    assert converter._fmt_combo.toolTip() == ""
+    assert converter._status_lbl.text() == "Ready."
+    select_format(converter, "JPEG")
+    assert "transparency" in converter._status_lbl.text() or "Transparent" in converter._status_lbl.text()
+    select_format(converter, "PNG")
+    assert converter._status_lbl.text() == "Ready."
+
+
+def test_format_change_preserves_busy_and_stopping_status_until_completion(converter):
+    converter._btn_run.setEnabled(False)
+    converter._btn_run.setText("⠋  Converting…")
+    converter._status_lbl.setText("Stopping…")
+    select_format(converter, "GIF")
+    assert converter._status_lbl.text() == "Stopping…"
+    assert converter._btn_run.text() == "⠋  Converting…"
+    converter._stop_requested = True
+    converter._batch_total = 5
+    converter._on_finished(0, 0)
+    assert converter._status_lbl.text().startswith("Stopped.")
+    assert "Open GIF Builder" in converter._btn_run.text()
+    assert "GIF Builder" in converter._btn_run.toolTip()
+
+
+def test_dds_tooltip_is_updated_even_when_capability_status_is_limited(converter):
+    converter._dds_compression_available = False
+    converter._dds_variant_combo.setToolTip("stale")
+    select_format(converter, "DDS")
+    assert "require" in converter._dds_variant_combo.toolTip()
+    assert "stale" not in converter._dds_variant_combo.toolTip()
+
+
+def make_animation(tmp_path, name):
+    path = tmp_path / name
+    first = Image.new("RGB", (8, 8), "red")
+    second = Image.new("RGB", (8, 8), "blue")
+    try:
+        first.save(path, save_all=True, append_images=[second], duration=100, loop=0)
+    finally:
+        first.close()
+        second.close()
+    return str(path)
+
+
+def test_animation_speed_survives_same_source_refresh_and_matches_movie(converter, tmp_path):
+    source = make_animation(tmp_path, "first.gif")
+    converter._refresh_preview(source)
+    converter._gif_speed_slider.setValue(250)
+    assert converter._compare._movie.speed() == 250
+    converter._refresh_preview(source)
+    assert converter._gif_speed_slider.value() == 250
+    assert converter._gif_speed_value_lbl.text() == "250 %"
+    assert converter._compare._movie.speed() == 250
+    converter._refresh_preview(make_animation(tmp_path, "second.gif"))
+    assert converter._gif_speed_slider.value() == 100
+    assert converter._gif_speed_value_lbl.text() == "100 %"
+    assert converter._compare._movie.speed() == 100
+
+
+@pytest.mark.parametrize("tab", [0, 1])
+@pytest.mark.parametrize("ext,filter_text", [
+    ("json", "JSON Files (*.json)"),
+    ("csv", "CSV Files (*.csv)"),
+    ("txt", "Text Files (*.txt)"),
+    ("html", "HTML Files (*.html *.htm)"),
+])
+def test_history_exports_preserve_filtered_batch_status(settings, tmp_path, tab, ext, filter_text):
+    add = settings.add_converter_history if tab == 0 else settings.add_alpha_history
+    add({"timestamp": "2026-10-09T11:00:00", "format": "PNG", "preset": "manual",
+         "file_count": 5, "success": 2, "errors": 0, "files": ["停止.png"],
+         "stopped": True, "not_processed": 3})
+    add({"timestamp": "2026-10-09T10:00:00", "format": "PNG", "preset": "manual",
+         "file_count": 1, "success": 1, "errors": 0, "files": ["hidden.png"]})
+    widget = HistoryTab(settings)
+    try:
+        widget._sub_tabs.setCurrentIndex(tab)
+        tree = widget._conv_tree if tab == 0 else widget._alpha_tree
+        HistoryTab._apply_filter(tree, "status:stopped")
+        path = tmp_path / f"history.{ext}"
+        with patch("src.ui.history_tab.QFileDialog.getSaveFileName",
+                   return_value=(str(path), filter_text)):
+            with patch("src.ui.history_tab.QMessageBox.information"):
+                widget._export_history()
+        text = path.read_text(encoding="utf-8")
+        assert "Stopped" in text
+        assert "Not processed" in text
+        assert "停止.png" in text
+        assert "hidden.png" not in text
+        if ext == "json":
+            rows = json.loads(text)
+            assert len(rows) == 1
+            assert rows[0]["Status"] == "Stopped"
+            assert rows[0]["Not processed"] == "3"
+        elif ext == "csv":
+            with path.open(encoding="utf-8-sig", newline="") as stream:
+                rows = list(csv.DictReader(stream))
+            assert len(rows) == 1
+            assert rows[0]["Status"] == "Stopped"
+            assert rows[0]["Not processed"] == "3"
+    finally:
+        widget.close()
+        sip.delete(widget)
+
+
+@pytest.mark.parametrize("errors,status", [(0, "OK"), (1, "Issues")])
+def test_legacy_completed_history_exports_keep_status_and_zero_remaining(settings, tmp_path, errors, status):
+    settings.add_converter_history({
+        "timestamp": "2026-10-09T11:00:00", "format": "PNG",
+        "file_count": 2, "success": 2 - errors, "errors": errors, "files": ["source.png"],
+    })
+    widget = HistoryTab(settings)
+    try:
+        path = tmp_path / "legacy.json"
+        with patch("src.ui.history_tab.QFileDialog.getSaveFileName",
+                   return_value=(str(path), "JSON Files (*.json)")):
+            with patch("src.ui.history_tab.QMessageBox.information"):
+                widget._export_history()
+        row = json.loads(path.read_text(encoding="utf-8"))[0]
+        assert row["Status"] == status
+        assert row["Not processed"] == "0"
+        assert row["File names"] == "source.png"
+    finally:
+        widget.close()
+        sip.delete(widget)
+
+
+@pytest.fixture(params=[
+    ("history", "txt", "Text Files (*.txt)"),
+    ("history", "csv", "CSV Files (*.csv)"),
+    ("history", "json", "JSON Files (*.json)"),
+    ("history", "html", "HTML Files (*.html *.htm)"),
+    ("converter", "txt", "Text Report (*.txt)"),
+    ("converter", "json", "JSON Report (*.json)"),
+])
+def report(request, settings):
+    kind, extension, selected_filter = request.param
+    if kind == "history":
+        settings.add_converter_history({
+            "timestamp": "2026-10-09T12:00:00", "format": "PNG",
+            "file_count": 1, "success": 0, "errors": 1, "files": ["source.png"],
+        })
+        widget = HistoryTab(settings)
+        callback = widget._export_history
+        success_patch = patch.object(QMessageBox, "information")
+    else:
+        widget = request.getfixturevalue("converter")
+        widget._last_run_format = "PNG"
+        widget._last_run_files = ["source.png"]
+        widget._batch_error_reasons.update({"decode failed": 1})
+        widget._batch_error_files = {"decode failed": ["source.png"]}
+        widget._batch_failure_details = [{"source": "source.png", "reason": "decode failed"}]
+        callback = widget._export_failure_report
+        success_patch = patch.object(widget, "_log_msg")
+    with success_patch as success:
+        yield widget, callback, extension, selected_filter, success
+    if kind == "history":
+        widget.close()
+        sip.delete(widget)
+
+
+@pytest.mark.parametrize("accept", [False, True])
+def test_report_normalized_overwrite_confirms_and_reports_final_path(report, tmp_path, accept):
+    widget, export, extension, selected_filter, success = report
+    chosen = tmp_path / "report"
+    final = chosen.with_suffix("." + extension)
+    final.write_bytes(b"existing report")
+    reply = QMessageBox.StandardButton.Yes if accept else QMessageBox.StandardButton.No
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName",
+               return_value=(str(chosen), selected_filter)), \
+            patch.object(QMessageBox, "question", return_value=reply) as question:
+        export()
+    question.assert_called_once()
+    assert str(final) in question.call_args.args[2]
+    assert question.call_args.args[-1] == QMessageBox.StandardButton.No
+    if accept:
+        assert "source.png" in final.read_text(encoding="utf-8")
+        success.assert_called_once()
+        assert str(final) in str(success.call_args)
+        assert ".alpha_fixer_save_" not in str(success.call_args)
+    else:
+        assert final.read_bytes() == b"existing report"
+        success.assert_not_called()
+    assert not chosen.exists()
+    assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+
+
+def test_report_unchanged_destination_does_not_prompt_twice(report, tmp_path):
+    widget, export, extension, selected_filter, success = report
+    final = tmp_path / ("report." + extension)
+    final.write_bytes(b"existing")
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName",
+               return_value=(str(final), selected_filter)), \
+            patch.object(QMessageBox, "question") as question:
+        export()
+    question.assert_not_called()
+    assert "source.png" in final.read_text(encoding="utf-8")
+    success.assert_called_once()
+
+
+@pytest.mark.parametrize("failure", ["write", "replace"])
+def test_report_failure_preserves_existing_output_without_success(report, tmp_path, failure):
+    widget, export, extension, selected_filter, success = report
+    final = tmp_path / ("report." + extension)
+    final.write_bytes(b"existing report")
+    real_open = open
+
+    class FailingWriter:
+        def __init__(self, stream):
+            self.stream = stream
+
+        def write(self, text):
+            self.stream.write(text[:1])
+            raise OSError("disk write failed")
+
+    @contextmanager
+    def failing_open(path, *args, **kwargs):
+        with real_open(path, *args, **kwargs) as stream:
+            yield FailingWriter(stream)
+
+    target = widget.__class__.__module__ + ".open"
+    failure_patch = (
+        patch(target, failing_open, create=True) if failure == "write"
+        else patch("os.replace", side_effect=PermissionError("destination locked"))
+    )
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName",
+               return_value=(str(final), selected_filter)), failure_patch, \
+            patch.object(QMessageBox, "warning") as warning:
+        export()
+    warning.assert_called_once()
+    assert final.read_bytes() == b"existing report"
+    success.assert_not_called()
+    assert not list(tmp_path.glob(".alpha_fixer_save_*"))

@@ -1,0 +1,349 @@
+name: Fresh Machine Runtime Validation
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  packaged-runtime:
+    name: Packaged runtime – ${{ matrix.os }} – ${{ matrix.bundle_kind }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            bundle_kind: folder
+            smoke_repeat: 3
+            smoke_delay_seconds: 0.5
+            timeout_seconds: 45
+            max_smoke_elapsed_seconds: 30
+            max_smoke_elapsed_growth_seconds: 10
+            max_smoke_elapsed_spread_seconds: 10
+            selftest_iterations: 6
+            selftest_sample_limit: 6
+            selftest_stress_loops: 4
+            repeat_selftest_runs: 2
+            max_selftest_rss_growth_mb: 256
+            max_selftest_rss_spread_mb: 256
+          - os: ubuntu-latest
+            bundle_kind: onefile
+            smoke_repeat: 5
+            smoke_delay_seconds: 1.0
+            timeout_seconds: 75
+            max_smoke_elapsed_seconds: 45
+            max_smoke_elapsed_growth_seconds: 15
+            max_smoke_elapsed_spread_seconds: 15
+            selftest_iterations: 8
+            selftest_sample_limit: 6
+            selftest_stress_loops: 5
+            repeat_selftest_runs: 3
+            max_selftest_rss_growth_mb: 320
+            max_selftest_rss_spread_mb: 320
+          - os: windows-latest
+            bundle_kind: folder
+            smoke_repeat: 4
+            smoke_delay_seconds: 0.5
+            timeout_seconds: 60
+            max_smoke_elapsed_seconds: 35
+            max_smoke_elapsed_growth_seconds: 12
+            max_smoke_elapsed_spread_seconds: 12
+            selftest_iterations: 6
+            selftest_sample_limit: 6
+            selftest_stress_loops: 4
+            repeat_selftest_runs: 2
+            max_selftest_rss_growth_mb: 320
+            max_selftest_rss_spread_mb: 320
+          - os: windows-latest
+            bundle_kind: onefile
+            smoke_repeat: 5
+            smoke_delay_seconds: 1.0
+            timeout_seconds: 90
+            max_smoke_elapsed_seconds: 55
+            max_smoke_elapsed_growth_seconds: 20
+            max_smoke_elapsed_spread_seconds: 20
+            selftest_iterations: 8
+            selftest_sample_limit: 6
+            selftest_stress_loops: 5
+            repeat_selftest_runs: 3
+            max_selftest_rss_growth_mb: 384
+            max_selftest_rss_spread_mb: 384
+          - os: macos-latest
+            bundle_kind: folder
+            smoke_repeat: 4
+            smoke_delay_seconds: 0.5
+            timeout_seconds: 60
+            max_smoke_elapsed_seconds: 35
+            max_smoke_elapsed_growth_seconds: 12
+            max_smoke_elapsed_spread_seconds: 12
+            selftest_iterations: 6
+            selftest_sample_limit: 6
+            selftest_stress_loops: 4
+            repeat_selftest_runs: 2
+            max_selftest_rss_growth_mb: 320
+            max_selftest_rss_spread_mb: 320
+          - os: macos-latest
+            bundle_kind: onefile
+            smoke_repeat: 5
+            smoke_delay_seconds: 1.0
+            timeout_seconds: 90
+            max_smoke_elapsed_seconds: 55
+            max_smoke_elapsed_growth_seconds: 20
+            max_smoke_elapsed_spread_seconds: 20
+            selftest_iterations: 8
+            selftest_sample_limit: 6
+            selftest_stress_loops: 5
+            repeat_selftest_runs: 3
+            max_selftest_rss_growth_mb: 384
+            max_selftest_rss_spread_mb: 384
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: bash scripts/install_linux_deps.sh
+
+      - name: Install macOS native release runtimes
+        if: runner.os == 'macOS'
+        run: |
+          brew install ffmpeg imagemagick
+          echo "MAGICK_HOME=$(brew --prefix imagemagick)" >> "$GITHUB_ENV"
+
+      - name: Install Windows native release runtimes
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install ffmpeg imagemagick -y
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $magick = Get-ChildItem "C:\Program Files" -Directory -Filter "ImageMagick*" | Select-Object -First 1
+          if (-not $magick) { throw "ImageMagick installation not found" }
+          "MAGICK_HOME=$($magick.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Add-Content -Path $env:GITHUB_PATH -Value $magick.FullName
+          Add-Content -Path $env:GITHUB_PATH -Value "C:\ProgramData\chocolatey\bin"
+
+      - name: Build packaged app (Linux/macOS)
+        if: runner.os != 'Windows' && matrix.bundle_kind == 'folder'
+        run: bash scripts/build_exe.sh
+
+      - name: Build packaged app (Windows)
+        if: runner.os == 'Windows' && matrix.bundle_kind == 'folder'
+        shell: cmd
+        run: scripts\build_exe.bat
+
+      - name: Build packaged app one-file (Linux/macOS)
+        if: runner.os != 'Windows' && matrix.bundle_kind == 'onefile'
+        run: bash scripts/build_exe.sh --onefile
+
+      - name: Build packaged app one-file (Windows)
+        if: runner.os == 'Windows' && matrix.bundle_kind == 'onefile'
+        shell: cmd
+        run: scripts\build_exe.bat --onefile
+
+      - name: Verify offline bundled runtimes and generated conversions
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          suffix=""
+          if [[ "${{ runner.os }}" == "Windows" ]]; then suffix=".exe"; fi
+          if [[ "${{ matrix.bundle_kind }}" == "onefile" ]]; then
+            launch_target="dist/AlphaFixerConverter${suffix}"
+          else
+            launch_target="dist/AlphaFixerConverter/AlphaFixerConverter${suffix}"
+          fi
+          python scripts/verify_packaged_app.py "$launch_target" \
+            --bundle-kind ${{ matrix.bundle_kind }} --offline \
+            --smoke-seconds 2 --repeat 2 --timeout ${{ matrix.timeout_seconds }} \
+            --run-selftest --selftest-iterations 2 \
+            --require-selftest-pass --require-core-selftest-checks \
+            --require-video-selftest-checks --require-dds-selftest-checks \
+            --require-video-runtime --require-ffmpeg-selfcheck --require-ffprobe-selfcheck \
+            --require-bundled-ffmpeg --require-bundled-ffprobe \
+            --require-wand-runtime --require-bundled-imagemagick \
+            --require-bundled-default-theme-svg --require-packaged-bundle-ready \
+            --require-no-packaged-asset-gaps --require-no-missing-libs \
+            --json-out artifacts/offline-${{ runner.os }}-${{ matrix.bundle_kind }}.json
+
+      - name: Verify Linux bundle on a clean network-disabled operating system
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          image="ubuntu:$(. /etc/os-release && printf '%s' "$VERSION_ID")"
+          docker pull "$image"
+          if [[ "${{ matrix.bundle_kind }}" == "onefile" ]]; then
+            target="/app/AlphaFixerConverter"
+          else
+            target="/app/AlphaFixerConverter/AlphaFixerConverter"
+          fi
+          container="alpha-fixer-clean-validation"
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          for mode in smoke capabilities selftest; do
+            case "$mode" in
+              smoke) validation="ALPHA_FIXER_SMOKE_TEST=1.5" ;;
+              capabilities) validation="ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP=1" ;;
+              selftest) validation="ALPHA_FIXER_RUNTIME_SELFTEST=2" ;;
+            esac
+            timeout 120 docker run --rm --name "$container" --network none \
+              --read-only --cap-drop=ALL --user 65534:65534 --tmpfs /tmp:rw,exec \
+              --mount "type=bind,source=$PWD/dist,target=/app,readonly" \
+              --env QT_QPA_PLATFORM=offscreen --env HOME=/tmp \
+              --env XDG_DATA_HOME=/tmp/data --env LC_ALL=C.UTF-8 \
+              --env "$validation" "$image" "$target" \
+              | tee "artifacts/clean-linux-$mode.log"
+          done
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          def payload(mode, prefix):
+              lines = Path(f"artifacts/clean-linux-{mode}.log").read_text(encoding="utf-8").splitlines()
+              return json.loads(next(line[len(prefix):] for line in lines if line.startswith(prefix)))
+
+          capabilities = payload("capabilities", "ALPHA_FIXER_RUNTIME_CAPABILITIES=")
+          for key in (
+              "packaged_bundle_ready", "video_runtime_ready", "wand_runtime_ready",
+              "ffmpeg_bundled", "ffprobe_bundled", "imagemagick_bundled",
+              "qt_svg_ready", "svg_vectorization_ready",
+          ):
+              assert capabilities.get(key), f"Clean-OS capability failed: {key}"
+          selftest = payload("selftest", "ALPHA_FIXER_RUNTIME_SELFTEST=")
+          assert selftest.get("passed"), selftest.get("errors")
+          for name in (
+              "png_to_gif", "png_to_dds_rgba", "png_to_dds_dxt1",
+              "png_to_dds_dxt3", "png_to_dds_dxt5", "svg_rasterization",
+              "svg_vectorization", "generated_mp4_load", "mpegts_load", "synthetic_bin_probe",
+          ):
+              check = selftest.get("checks", {}).get(name, {})
+              assert check.get("ok") and not check.get("detail", "").startswith("skipped"), name
+          PY
+
+      - name: Verify packaged app (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p artifacts
+          if [[ "${{ matrix.bundle_kind }}" == "onefile" ]]; then
+            launch_target="dist/AlphaFixerConverter"
+          else
+            launch_target="dist/AlphaFixerConverter/AlphaFixerConverter"
+          fi
+          python scripts/verify_packaged_app.py \
+            "$launch_target" \
+            --bundle-kind ${{ matrix.bundle_kind }} \
+            --smoke-seconds 2 \
+            --repeat ${{ matrix.smoke_repeat }} \
+            --smoke-launch-delay-seconds ${{ matrix.smoke_delay_seconds }} \
+            --timeout ${{ matrix.timeout_seconds }} \
+            --max-smoke-elapsed-seconds ${{ matrix.max_smoke_elapsed_seconds }} \
+            --max-smoke-elapsed-growth-seconds ${{ matrix.max_smoke_elapsed_growth_seconds }} \
+            --max-smoke-elapsed-spread-seconds ${{ matrix.max_smoke_elapsed_spread_seconds }} \
+            --run-selftest \
+            --selftest-iterations ${{ matrix.selftest_iterations }} \
+            --selftest-sample-limit ${{ matrix.selftest_sample_limit }} \
+            --selftest-stress-loops ${{ matrix.selftest_stress_loops }} \
+            --repeat-selftest-runs ${{ matrix.repeat_selftest_runs }} \
+            --max-selftest-rss-growth-mb ${{ matrix.max_selftest_rss_growth_mb }} \
+            --max-selftest-rss-spread-mb ${{ matrix.max_selftest_rss_spread_mb }} \
+            --require-selftest-pass \
+            --require-core-selftest-checks \
+            --require-video-selftest-checks \
+            --require-dds-selftest-checks \
+            --require-stress-selftest-checks \
+            --require-public-manifest-checks \
+            --require-public-manifest-group-checks \
+            --use-public-sample-manifests \
+            --allow-sample-downloads \
+            --sample-cache-dir artifacts/sample-cache \
+            --require-odd-probe-ready \
+            --require-video-runtime \
+            --require-ffmpeg-selfcheck \
+            --require-ffprobe-selfcheck \
+            --require-bundled-ffmpeg \
+            --require-bundled-ffprobe \
+            --require-wand-runtime \
+            --require-bundled-imagemagick \
+            --require-bundled-default-theme-svg \
+            --require-packaged-bundle-ready \
+            --require-no-packaged-asset-gaps \
+            --require-no-missing-libs \
+            --json-out artifacts/runtime-validation-${{ runner.os }}-${{ matrix.bundle_kind }}.json
+
+      - name: Verify packaged app (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          if ("${{ matrix.bundle_kind }}" -eq "onefile") {
+            $launchTarget = "dist\AlphaFixerConverter.exe"
+          } else {
+            $launchTarget = "dist\AlphaFixerConverter\AlphaFixerConverter.exe"
+          }
+          python scripts/verify_packaged_app.py `
+            $launchTarget `
+            --bundle-kind ${{ matrix.bundle_kind }} `
+            --smoke-seconds 2 `
+            --repeat ${{ matrix.smoke_repeat }} `
+            --smoke-launch-delay-seconds ${{ matrix.smoke_delay_seconds }} `
+            --timeout ${{ matrix.timeout_seconds }} `
+            --max-smoke-elapsed-seconds ${{ matrix.max_smoke_elapsed_seconds }} `
+            --max-smoke-elapsed-growth-seconds ${{ matrix.max_smoke_elapsed_growth_seconds }} `
+            --max-smoke-elapsed-spread-seconds ${{ matrix.max_smoke_elapsed_spread_seconds }} `
+            --run-selftest `
+            --selftest-iterations ${{ matrix.selftest_iterations }} `
+            --selftest-sample-limit ${{ matrix.selftest_sample_limit }} `
+            --selftest-stress-loops ${{ matrix.selftest_stress_loops }} `
+            --repeat-selftest-runs ${{ matrix.repeat_selftest_runs }} `
+            --max-selftest-rss-growth-mb ${{ matrix.max_selftest_rss_growth_mb }} `
+            --max-selftest-rss-spread-mb ${{ matrix.max_selftest_rss_spread_mb }} `
+            --require-selftest-pass `
+            --require-core-selftest-checks `
+            --require-video-selftest-checks `
+            --require-dds-selftest-checks `
+            --require-stress-selftest-checks `
+            --require-public-manifest-checks `
+            --require-public-manifest-group-checks `
+            --use-public-sample-manifests `
+            --allow-sample-downloads `
+            --sample-cache-dir artifacts/sample-cache `
+            --require-odd-probe-ready `
+            --require-video-runtime `
+            --require-ffmpeg-selfcheck `
+            --require-ffprobe-selfcheck `
+            --require-bundled-ffmpeg `
+            --require-bundled-ffprobe `
+            --require-wand-runtime `
+            --require-bundled-imagemagick `
+            --require-bundled-default-theme-svg `
+            --require-packaged-bundle-ready `
+            --require-no-packaged-asset-gaps `
+            --json-out artifacts\runtime-validation-windows-${{ matrix.bundle_kind }}.json
+
+      - name: Upload build validation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-validation-${{ matrix.os }}-${{ matrix.bundle_kind }}
+          path: dist/validation-reports/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload runtime validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-validation-${{ matrix.os }}-${{ matrix.bundle_kind }}
+          path: artifacts/
+          retention-days: 30
+          if-no-files-found: warn

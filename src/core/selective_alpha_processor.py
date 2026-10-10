@@ -20,33 +20,53 @@ from PIL import Image
 # Constants
 # ---------------------------------------------------------------------------
 
-NUM_ZONES = 20
+NUM_ZONES = 40
 
-# Semi-transparent overlay colors (R, G, B, overlay-alpha) for up to 20 zones.
+# Semi-transparent overlay colors (R, G, B, overlay-alpha) for up to 40 zones.
 # overlay-alpha = 130 ≈ 51 % opacity so the source image stays visible.
 # The palette cycles through a range of well-separated hues so that even images
 # with many distinct alpha levels get clearly distinguishable highlight colours.
 ZONE_COLORS: list[tuple[int, int, int, int]] = [
-    (255,  60,  60, 130),   # zone 0  – Red
-    ( 60, 200,  60, 130),   # zone 1  – Green
-    ( 60, 120, 255, 130),   # zone 2  – Blue
-    (255, 210,  50, 130),   # zone 3  – Yellow
-    (200,  60, 255, 130),   # zone 4  – Purple
-    ( 50, 220, 220, 130),   # zone 5  – Cyan
-    (255, 140,  50, 130),   # zone 6  – Orange
-    (255, 100, 180, 130),   # zone 7  – Pink
-    (100, 255, 180, 130),   # zone 8  – Mint
-    (180, 120,  60, 130),   # zone 9  – Brown
-    (255, 255,  80, 130),   # zone 10 – Lime Yellow
-    ( 80, 255, 255, 130),   # zone 11 – Sky Cyan
-    (255,  80, 255, 130),   # zone 12 – Magenta
-    (160, 255,  80, 130),   # zone 13 – Yellow-Green
-    ( 80, 160, 255, 130),   # zone 14 – Cornflower
-    (255, 160,  80, 130),   # zone 15 – Peach
-    (160,  80, 255, 130),   # zone 16 – Violet
-    ( 80, 255, 160, 130),   # zone 17 – Sea Green
-    (255,  80, 160, 130),   # zone 18 – Rose
-    (160, 200, 255, 130),   # zone 19 – Periwinkle
+    (255,  50,  50, 170),   # zone 0  – Red
+    ( 50, 210,  50, 170),   # zone 1  – Green
+    ( 50, 120, 255, 170),   # zone 2  – Blue
+    (255, 220,  30, 170),   # zone 3  – Yellow
+    (210,  50, 255, 170),   # zone 4  – Purple
+    ( 30, 230, 230, 170),   # zone 5  – Cyan
+    (255, 130,  30, 170),   # zone 6  – Orange
+    (255,  80, 190, 170),   # zone 7  – Pink
+    ( 80, 255, 170, 170),   # zone 8  – Mint
+    (180, 110,  40, 170),   # zone 9  – Brown
+    (255, 255,  50, 170),   # zone 10 – Lime Yellow
+    ( 50, 255, 255, 170),   # zone 11 – Sky Cyan
+    (255,  50, 255, 170),   # zone 12 – Magenta
+    (155, 255,  50, 170),   # zone 13 – Yellow-Green
+    ( 50, 155, 255, 170),   # zone 14 – Cornflower
+    (255, 155,  50, 170),   # zone 15 – Peach
+    (155,  50, 255, 170),   # zone 16 – Violet
+    ( 50, 255, 155, 170),   # zone 17 – Sea Green
+    (255,  50, 155, 170),   # zone 18 – Rose
+    (155, 200, 255, 170),   # zone 19 – Periwinkle
+    (230,  50,  50, 170),   # zone 20 – Crimson
+    ( 50, 230, 110, 170),   # zone 21 – Jade
+    ( 80,  80, 255, 170),   # zone 22 – Indigo
+    (255, 210,  50, 170),   # zone 23 – Gold
+    (190,  80, 240, 170),   # zone 24 – Lavender
+    ( 50, 210, 210, 170),   # zone 25 – Teal
+    (240, 110,  40, 170),   # zone 26 – Tangerine
+    (240, 130, 180, 170),   # zone 27 – Blush
+    (120, 240, 200, 170),   # zone 28 – Seafoam
+    (175,  90,  40, 170),   # zone 29 – Copper
+    (210, 240,  40, 170),   # zone 30 – Chartreuse
+    ( 40, 230, 255, 170),   # zone 31 – Aqua
+    (255,  40, 230, 170),   # zone 32 – Fuchsia
+    (100, 240,  40, 170),   # zone 33 – Grass
+    ( 40, 130, 240, 170),   # zone 34 – Denim
+    (240, 150,  40, 170),   # zone 35 – Amber
+    (150,  40, 240, 170),   # zone 36 – Plum
+    ( 40, 240, 130, 170),   # zone 37 – Emerald
+    (240,  40, 130, 170),   # zone 38 – Berry
+    (120, 180, 240, 170),   # zone 39 – Steel Blue
 ]
 
 # Human-readable zone names shown in the UI.
@@ -71,6 +91,26 @@ ZONE_NAMES: list[str] = [
     "Zone 18 – Sea Green",
     "Zone 19 – Rose",
     "Zone 20 – Periwinkle",
+    "Zone 21 – Crimson",
+    "Zone 22 – Jade",
+    "Zone 23 – Indigo",
+    "Zone 24 – Gold",
+    "Zone 25 – Lavender",
+    "Zone 26 – Teal",
+    "Zone 27 – Tangerine",
+    "Zone 28 – Blush",
+    "Zone 29 – Seafoam",
+    "Zone 30 – Copper",
+    "Zone 31 – Chartreuse",
+    "Zone 32 – Aqua",
+    "Zone 33 – Fuchsia",
+    "Zone 34 – Grass",
+    "Zone 35 – Denim",
+    "Zone 36 – Amber",
+    "Zone 37 – Plum",
+    "Zone 38 – Emerald",
+    "Zone 39 – Berry",
+    "Zone 40 – Steel Blue",
 ]
 
 # ---------------------------------------------------------------------------
@@ -368,15 +408,17 @@ def composite_zones(
         if mask is None or not mask.any():
             continue
         a = oa / 255.0
-        out[mask, 0] = out[mask, 0] * (1.0 - a) + r * a
-        out[mask, 1] = out[mask, 1] * (1.0 - a) + g * a
-        out[mask, 2] = out[mask, 2] * (1.0 - a) + b * a
+        inv_a = 1.0 - a
+        out[mask, 0] = out[mask, 0] * inv_a + r * a
+        out[mask, 1] = out[mask, 1] * inv_a + g * a
+        out[mask, 2] = out[mask, 2] * inv_a + b * a
         if show_zero_alpha:
             # Lift fully-transparent masked pixels so the overlay is visible.
             zero_mask = mask & (src_rgba[:, :, 3] == 0)
             if zero_mask.any():
                 out[zero_mask, 3] = float(oa)
-    return np.clip(out, 0, 255).astype(np.uint8)
+    np.clip(out, 0, 255, out=out)
+    return out.astype(np.uint8)
 
 
 # ---------------------------------------------------------------------------
@@ -398,8 +440,10 @@ def detect_alpha_zones(
       - The array is not RGBA (fewer than 4 channels).
       - Fewer than 2 distinct significant alpha values exist (i.e. the image is
         uniformly transparent or uniformly opaque).
-      - More than :data:`NUM_ZONES` distinct significant alpha values exist
-        (indicates a smooth gradient rather than discrete zones).
+
+    When the image has more distinct significant alpha values than :data:`NUM_ZONES`
+    (e.g. a smooth gradient), the :data:`NUM_ZONES` most pixel-dominant zones are
+    still returned so the tool can auto-populate even for complex images.
 
     Parameters
     ----------

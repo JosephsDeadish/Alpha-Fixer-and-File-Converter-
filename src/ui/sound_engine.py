@@ -734,6 +734,8 @@ class SoundEngine(QObject):
         super().__init__(parent)
         self._settings = settings
         self._effect = None          # QSoundEffect for click (may be None)
+        self._closed = False
+        self._app = None
         self._click_wav: str = ""
         self._success_wav: str = ""
         self._error_wav: str = ""
@@ -822,7 +824,12 @@ class SoundEngine(QObject):
 
     def install_on_app(self, app: QObject) -> None:
         """Install event filter so every button click triggers a sound."""
+        if self._closed:
+            return
+        if self._filter is not None and self._app is not None:
+            self._app.removeEventFilter(self._filter)
         self._filter = _ButtonClickFilter(self)
+        self._app = app
         app.installEventFilter(self._filter)
 
     def set_theme(self, theme_name: str) -> None:
@@ -841,12 +848,10 @@ class SoundEngine(QObject):
         # Theme sound path
         if self._settings.get("use_theme_sound", False):
             try:
-                # Use the explicitly-selected sound theme preset if one is set,
-                # otherwise fall back to the active visual theme.
-                preset_name = str(self._settings.get("sound_theme_preset", "")).strip()
-                if preset_name:
-                    theme_name = preset_name
-                else:
+                # Use the saved theme-sound override when present; otherwise
+                # follow the currently active visual theme.
+                theme_name = str(self._settings.get("sound_theme_preset", "")).strip()
+                if not theme_name:
                     theme = self._settings.get_theme()
                     theme_name = theme.get("name", "")
                 # Goth/rock themes cycle between three rock sub-profiles
@@ -1045,6 +1050,8 @@ class SoundEngine(QObject):
 
     def _play(self, wav_path: str) -> None:
         """Route playback through QSoundEffect when available, else subprocess."""
+        if self._closed:
+            return
         if self._effect is not None:
             try:
                 from PyQt6.QtCore import QUrl
@@ -1091,7 +1098,23 @@ class SoundEngine(QObject):
     # ------------------------------------------------------------------
 
     def cleanup(self) -> None:
-        """Remove temp WAV files on application exit."""
+        """Release the audio backend before removing its source files."""
+        if self._closed:
+            return
+        self._closed = True
+        if self._filter is not None and self._app is not None:
+            self._app.removeEventFilter(self._filter)
+        self._app = None
+        if self._effect is not None:
+            from PyQt6 import sip
+            from PyQt6.QtCore import QUrl
+            effect = self._effect
+            self._effect = None
+            effect.stop()
+            effect.setSource(QUrl())
+            # deleteLater() alone may never run once the main event loop exits.
+            # Destroy the native audio resources while QApplication still exists.
+            sip.delete(effect)
         all_wavs = [self._click_wav, self._success_wav,
                     self._error_wav, self._unlock_wav,
                     self._file_add_wav, self._preview_wav,

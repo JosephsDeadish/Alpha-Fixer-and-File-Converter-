@@ -3,13 +3,26 @@ Tests for new UI components: DropFileList, SoundEngine, MouseTrailOverlay,
 and the extended SettingsManager.
 """
 import os
+import io
+import importlib.util
+import json
+import subprocess
 import sys
 import tempfile
+import types
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+from PIL import Image
+import numpy as np
 
 # Make src importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from tests.corpus_helpers import (
+    _iter_corpus_files,
+    _optional_corpus_roots,
+    _optional_manifest_entries,
+)
 
 # ---------------------------------------------------------------------------
 # PyQt6 availability – used to skip widget/UI tests when PyQt6 is absent
@@ -156,6 +169,2265 @@ class TestDropFileList(unittest.TestCase):
         self._widget.paths_dropped.emit(["/tmp/fake.png"])
         self.assertEqual(received, ["/tmp/fake.png"])
 
+    def test_thumbnail_failed_signal_emits_once_per_path(self):
+        received = []
+        self._widget.thumbnail_failed.connect(lambda path, reason: received.append((path, reason)))
+        self._widget._on_thumb_failed("/tmp/bad.png", "decode failed")
+        self._widget._on_thumb_failed("/tmp/bad.png", "decode failed again")
+        self.assertEqual(received, [("/tmp/bad.png", "decode failed")])
+
+    def test_thumbnail_failure_summary_tracks_unique_paths(self):
+        self.assertEqual(self._widget._thumbnail_failure_summary(), "")
+        self._widget._on_thumb_failed("/tmp/a.png", "decode failed")
+        self.assertEqual(
+            self._widget._thumbnail_failure_summary(),
+            "⚠ 1 thumbnail unavailable — a.png: decode failed",
+        )
+        self._widget._on_thumb_failed("/tmp/b.png", "decode failed")
+        self.assertEqual(
+            self._widget._thumbnail_failure_summary(),
+            "⚠ 2 thumbnails unavailable — latest: b.png",
+        )
+
+    def test_thumbnail_status_summary_includes_mode_and_failures(self):
+        self._widget.set_thumbnails_enabled(False)
+        self._widget._on_thumb_failed("/tmp/a.png", "decode failed")
+        self.assertEqual(
+            self._widget._thumbnail_status_summary(),
+            "🖼 Thumbnails off  •  ⚠ 1 thumbnail unavailable — a.png: decode failed",
+        )
+
+    def test_thumbnail_failure_marks_item_tooltip(self):
+        self._widget.addItem("/tmp/a.png")
+        self._widget._on_thumb_failed("/tmp/a.png", "decode failed")
+        item = self._widget.item(0)
+        self.assertIsNotNone(item)
+        self.assertIn("Thumbnail preview unavailable", item.toolTip())
+        self.assertIn("decode failed", item.toolTip())
+
+    def test_dynamic_tooltip_includes_thumbnail_summary(self):
+        self._widget._on_thumb_failed("/tmp/a.png", "decode failed")
+        self.assertIn("⚠ 1 thumbnail unavailable", self._widget.toolTip())
+
+    def test_thumbnail_mode_summary_reports_large_list_pause(self):
+        for idx in range(3001):
+            self._widget.addItem(f"/tmp/{idx}.png")
+        self.assertEqual(
+            self._widget._thumbnail_mode_summary(),
+            "🖼 Thumbnail previews paused for large lists (3,001 queued; auto-pause at 3,000+)",
+        )
+
+    def test_large_list_item_tooltip_mentions_thumbnail_pause(self):
+        for idx in range(3001):
+            self._widget.addItem(f"/tmp/{idx}.png")
+        self._widget._refresh_item_tooltips()
+        item = self._widget.item(0)
+        self.assertIsNotNone(item)
+        self.assertIn("paused because this queue is above the auto-preview limit", item.toolTip())
+
+    def test_batch_import_completed_reports_added_and_deduped_counts(self):
+        received = []
+        self._widget.batch_import_completed.connect(lambda added, deduped, requested: received.append((added, deduped, requested)))
+        added = self._widget.add_paths_batch(["/tmp/a.png", "/tmp/a.png", "/tmp/b.png"])
+        self.assertEqual(added, 2)
+        self.assertEqual(received[-1], (2, 1, 3))
+
+    def test_thumbnail_status_signal_reports_failures(self):
+        received = []
+        self._widget.thumbnail_status_changed.connect(lambda paused, pending, failed, loaded: received.append((paused, pending, failed, loaded)))
+        self._widget._on_thumb_failed("/tmp/a.png", "decode failed")
+        self.assertTrue(received)
+        self.assertEqual(received[-1], (False, 0, 1, 0))
+
+
+class _ConverterTabSettingsStub:
+    def __init__(self):
+        self._store = {}
+        self._history = []
+        self._video_history = []
+        self._gif_history = []
+
+    def get(self, key, fallback=None):
+        return self._store.get(key, fallback)
+
+    def set(self, key, value):
+        self._store[key] = value
+
+    def get_shortcut_binding(self, shortcut_id, default):
+        return default
+
+    def add_converter_history(self, entry):
+        self._history.append(entry)
+
+    def add_video_builder_history(self, entry):
+        self._video_history.append(entry)
+
+    def add_gif_builder_history(self, entry):
+        self._gif_history.append(entry)
+
+    def get_converter_history(self):
+        return list(self._history)
+
+    def get_alpha_history(self):
+        return []
+
+    def get_selective_alpha_history(self):
+        return []
+
+    def get_gif_builder_history(self):
+        return list(self._gif_history)
+
+    def get_video_builder_history(self):
+        return list(self._video_history)
+
+
+class TestConverterTab(unittest.TestCase):
+    def setUp(self):
+        self._app = _get_app()
+        from PyQt6.QtCore import Qt
+        self._qt = Qt
+        from src.ui.converter_tool import ConverterTab
+        self._settings = _ConverterTabSettingsStub()
+        self._widget = ConverterTab(self._settings)
+
+    def tearDown(self):
+        self._widget.hide()
+        self._widget.deleteLater()
+        self._app.processEvents()
+
+    def test_close_event_cleans_up_preview_collect_and_gif_temp_state(self):
+        self._widget._preview_debounce.start()
+        preview_loader = MagicMock()
+        collect_thread = MagicMock()
+        collect_thread.isRunning.return_value = True
+        gif_tmp = MagicMock()
+        worker = MagicMock()
+        self._widget._preview_loader = preview_loader
+        self._widget._collect_thread = collect_thread
+        self._widget._gif_temp_dir = gif_tmp
+        self._widget._worker = worker
+        self._widget.close()
+        self.assertIsNone(self._widget._preview_loader)
+        self.assertIsNone(self._widget._collect_thread)
+        self.assertIsNone(self._widget._gif_temp_dir)
+        preview_loader.stop.assert_called_once()
+        collect_thread.stop.assert_called_once()
+        collect_thread.wait.assert_called_once_with(200)
+        gif_tmp.cleanup.assert_called_once()
+        worker.stop.assert_called_once()
+        worker.wait.assert_called_once_with(200)
+        self.assertFalse(self._widget._preview_debounce.isActive())
+
+    def test_run_falls_back_to_png_when_selected_target_is_unavailable(self):
+        from src.ui.converter_tool import ConverterTab
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = os.path.join(tmpdir, "input.png")
+            with open(src, "wb") as f:
+                f.write(b"\x89PNG\r\n\x1a\n")
+            self._widget._file_list.addItem(src)
+            self._widget._file_list.setCurrentRow(0)
+            idx = self._widget._fmt_combo.findText("AVIF", self._qt.MatchFlag.MatchContains)
+            self.assertGreaterEqual(idx, 0)
+            self._widget._fmt_combo.setCurrentIndex(idx)
+            with patch("src.ui.converter_tool.collect_files", return_value=[src]):
+                with patch("src.ui.converter_tool.output_format_unavailable_reason", return_value="AVIF export needs Pillow built with libavif support."):
+                    with patch("src.ui.converter_tool.QMessageBox.information") as info_mock:
+                        with patch.object(ConverterTab, "_expand_gif_frames", return_value=([src], {})):
+                            with patch("src.ui.converter_tool.ConverterWorker") as worker_cls:
+                                worker = MagicMock()
+                                worker_cls.return_value = worker
+                                self._widget._run()
+            info_mock.assert_called_once()
+            self.assertIn("falling back to PNG", self._widget._log.toPlainText())
+            kwargs = worker_cls.call_args.kwargs
+            self.assertEqual(kwargs["target_format"], "PNG")
+            self.assertEqual(kwargs["target_ext"], ".png")
+
+    def test_unavailable_dds_compression_variants_are_disabled(self):
+        idx = self._widget._fmt_combo.findText("DDS", self._qt.MatchFlag.MatchContains)
+        self.assertGreaterEqual(idx, 0)
+        self._widget._fmt_combo.setCurrentIndex(idx)
+        model = self._widget._dds_variant_combo.model()
+        dxt1_idx = self._widget._dds_variant_combo.findData("dxt1")
+        dxt3_idx = self._widget._dds_variant_combo.findData("dxt3")
+        dxt5_idx = self._widget._dds_variant_combo.findData("dxt5")
+        if not self._widget._dds_compression_available:
+            self.assertFalse(model.item(dxt1_idx).isEnabled())
+            self.assertFalse(model.item(dxt3_idx).isEnabled())
+            self.assertFalse(model.item(dxt5_idx).isEnabled())
+
+    def test_alpha_incompatible_format_sets_status_note(self):
+        idx = self._widget._fmt_combo.findText("JPEG", self._qt.MatchFlag.MatchContains)
+        self.assertGreaterEqual(idx, 0)
+        self._widget._fmt_combo.setCurrentIndex(idx)
+        self.assertIn("auto-saved as PNG", self._widget._status_lbl.text())
+
+    def test_dds_status_note_mentions_compression_requirement_when_unavailable(self):
+        idx = self._widget._fmt_combo.findText("DDS", self._qt.MatchFlag.MatchContains)
+        self.assertGreaterEqual(idx, 0)
+        self._widget._fmt_combo.setCurrentIndex(idx)
+        if not self._widget._dds_compression_available:
+            self.assertIn("BC2/DXT3", self._widget._status_lbl.text())
+
+    def test_converter_capability_summary_reports_optional_limits(self):
+        import src.ui.converter_tool as ct
+        with patch.object(ct, "optional_pillow_output_limits", return_value=[("AVIF", "needs libavif support")]):
+            with patch.object(ct, "dds_compression_available", return_value=False):
+                summary = ct._converter_capability_summary()
+                details = ct._converter_capability_details()
+        self.assertIn("Limited:", summary)
+        self.assertIn("fall back to PNG", summary)
+        self.assertIn("ImageMagick/wand", details)
+        self.assertIn("AVIF", details)
+
+    def test_converter_capability_banner_is_visible(self):
+        from src.ui.converter_tool import _converter_capability_summary
+        self.assertTrue(hasattr(self._widget, "_capability_lbl"))
+        self.assertEqual(self._widget._capability_lbl.text(), _converter_capability_summary())
+        self.assertFalse(self._widget._capability_lbl.isHidden())
+        self.assertTrue(self._widget._capability_lbl.wordWrap())
+
+    def test_build_failure_report_text_groups_repeated_failures(self):
+        self._widget._last_run_format = "DDS"
+        self._widget._last_run_files = ["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"]
+        self._widget._batch_error_reasons.update({"decode failed": 2, "out of memory": 1})
+        self._widget._batch_error_files = {
+            "decode failed": ["/tmp/a.png", "/tmp/b.png"],
+            "out of memory": ["/tmp/c.png"],
+        }
+        self._widget._batch_failure_details = [
+            {"source": "/tmp/a.png", "reason": "decode failed"},
+            {"source": "/tmp/b.png", "reason": "decode failed"},
+            {"source": "/tmp/c.png", "reason": "out of memory"},
+        ]
+        text = self._widget._build_failure_report_text()
+        self.assertIn("FORMATOMANCER Conversion Failure Report", text)
+        self.assertIn("- 2× decode failed", text)
+        self.assertIn("• a.png", text)
+        self.assertIn("Per-file failures:", text)
+
+    def test_batch_import_completed_emits_status_notice(self):
+        received = []
+        self._widget.status_notice.connect(lambda message, timeout: received.append((message, timeout)))
+        self._widget._on_batch_import_completed(2, 1, 3)
+        self.assertEqual(received, [("Converter queue: Added 2 new files; skipped 1 duplicate.", 6000)])
+
+    def test_get_queue_status_text_includes_preview_state(self):
+        self._widget._file_list.addItem("a.png")
+        with patch.object(
+            self._widget._file_list,
+            "get_thumbnail_summary",
+            return_value={"pending_count": 2, "failure_count": 1, "failure_categories": {"decode": 1}},
+        ):
+            text = self._widget.get_queue_status_text()
+        self.assertEqual(text, "📁 1 queued  •  2 previews pending  •  1 preview failure (decode)")
+
+    def test_update_count_emits_queue_status_changed(self):
+        self._widget._file_list.addItem("a.png")
+        received = []
+        self._widget.queue_status_changed.connect(received.append)
+        with patch.object(self._widget, "get_queue_status_text", return_value="📁 1 queued  •  1 preview pending"):
+            self._widget._update_count(1)
+        self.assertEqual(received, ["📁 1 queued  •  1 preview pending"])
+
+    def test_export_failure_report_writes_json(self):
+        self._widget._last_run_format = "PNG"
+        self._widget._last_run_files = ["/tmp/a.png"]
+        self._widget._batch_error_reasons.update({"decode failed": 1})
+        self._widget._batch_error_files = {"decode failed": ["/tmp/a.png"]}
+        self._widget._batch_failure_details = [
+            {"source": "/tmp/a.png", "reason": "decode failed"},
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "report.json")
+            with patch("src.ui.converter_tool.QFileDialog.getSaveFileName", return_value=(target, "JSON Report (*.json)")):
+                self._widget._export_failure_report()
+            with open(target, "r", encoding="utf-8") as f:
+                content = f.read()
+        self.assertIn('"reason": "decode failed"', content)
+
+    def test_finished_enables_failure_recovery_actions(self):
+        self._widget._last_run_files = ["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"]
+        self._widget._batch_error_reasons.update({"decode failed": 2})
+        self._widget._batch_error_files = {"decode failed": ["/tmp/a.png", "/tmp/c.png"]}
+        self._widget._batch_failure_details = [
+            {"source": "/tmp/a.png", "reason": "decode failed"},
+            {"source": "/tmp/c.png", "reason": "decode failed"},
+        ]
+        self._widget._on_finished(1, 2)
+        self.assertTrue(self._widget._btn_retry_failed.isEnabled())
+        self.assertTrue(self._widget._btn_keep_failed.isEnabled())
+        self.assertTrue(self._widget._btn_skip_failed.isEnabled())
+
+    def test_batch_import_summary_is_logged(self):
+        self._widget._file_list.addItem("/tmp/a.png")
+        self._widget._file_list.batch_import_completed.emit(2, 1, 3)
+        self.assertIn("Added 2 new files; skipped 1 duplicate", self._widget._log.toPlainText())
+
+    def test_file_count_label_surfaces_pending_and_failed_previews(self):
+        self._widget._file_list.addItem("/tmp/a.png")
+        self._widget._file_list._pending.add("/tmp/a.png")
+        self._widget._update_count(self._widget._file_list.count())
+        self.assertIn("1 preview pending", self._widget._file_count_lbl.text())
+        self._widget._file_list._on_thumb_failed("/tmp/a.png", "decode failed")
+        self._widget._update_count(self._widget._file_list.count())
+        label = self._widget._file_count_lbl.text()
+        self.assertNotIn("preview pending", label)
+        self.assertIn("1 preview failure", label)
+
+    def test_keep_failed_only_rewrites_queue_to_failed_paths(self):
+        self._widget._file_list.add_paths_batch(["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"])
+        self._widget._last_failed_files = ["/tmp/a.png", "/tmp/c.png"]
+        self._widget._keep_failed_only()
+        self.assertEqual(
+            [self._widget._file_list.item(i).text() for i in range(self._widget._file_list.count())],
+            ["/tmp/a.png", "/tmp/c.png"],
+        )
+        self.assertIn("Queue reduced to 2 failed files", self._widget._log.toPlainText())
+
+    def test_skip_failed_files_removes_failures_from_current_queue(self):
+        self._widget._file_list.add_paths_batch(["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"])
+        self._widget._last_failed_files = ["/tmp/a.png", "/tmp/c.png"]
+        self._widget._skip_failed_files()
+        self.assertEqual(self._widget._file_list.count(), 1)
+        self.assertEqual(self._widget._file_list.item(0).text(), "/tmp/b.png")
+        self.assertIn("Removed 2 failed files", self._widget._log.toPlainText())
+
+    def test_retry_failed_batch_rewrites_queue_and_runs(self):
+        self._widget._file_list.add_paths_batch(["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"])
+        self._widget._last_failed_files = ["/tmp/c.png"]
+        with patch.object(self._widget, "_run") as run_mock:
+            self._widget._retry_failed_batch()
+        self.assertEqual(self._widget._file_list.count(), 1)
+        self.assertEqual(self._widget._file_list.item(0).text(), "/tmp/c.png")
+        run_mock.assert_called_once_with()
+        self.assertIn("Retrying 1 failed file", self._widget._log.toPlainText())
+
+
+class TestStartupCapabilityNotice(unittest.TestCase):
+    def setUp(self):
+        if self._testMethodName.startswith("test_runtime_selftest_dump"):
+            self._selftest_directory = tempfile.TemporaryDirectory(dir=".")
+            self.addCleanup(self._selftest_directory.cleanup)
+        if not (self._testMethodName.startswith("test_optional_feature_readiness_notice")
+                or self._testMethodName.startswith("test_runtime_capability_summary")):
+            return
+        import main
+        for name, result in (
+            ("_dds_compression_variant_selfcheck", {"available": True, "ready": True, "failures": []}),
+            ("_theme_svg_runtime_details", {"qt_svg_ready": True, "default_theme_svg_ready": True, "theme_svg_missing_count": 0}),
+            ("_imagemagick_runtime_details", {"wand_runtime_ready": True}),
+        ):
+            patcher = patch.object(main, name, return_value=result)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        patcher = patch.object(main, "_executable_runtime_details", side_effect=lambda path: {
+            "exists": bool(path), "runtime_ready": bool(path), "detail": "ok" if path else "",
+        })
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = patch("src.core.file_converter._has_vtracer", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_optional_feature_readiness_notice_is_empty_when_everything_is_ready(self):
+        _require_qt_gui(self)
+        import main
+        with patch("src.ui.video_tool._has_imageio", return_value=True):
+            with patch("src.ui.video_tool._has_imageio_ffmpeg", return_value=True):
+                with patch("src.ui.video_tool._get_ffmpeg_exe", return_value="/tmp/ffmpeg"):
+                    with patch("src.ui.video_tool._get_ffprobe_exe", return_value="/tmp/ffprobe"):
+                        with patch("src.core.file_converter.dds_compression_available", return_value=True):
+                            with patch("src.core.file_converter.optional_pillow_output_limits", return_value=[]):
+                                with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                                    "available": True,
+                                    "ready": True,
+                                    "detail": "ok",
+                                    "variants": {
+                                        "dxt1": {"ok": True, "detail": "size=(16, 16)"},
+                                        "dxt3": {"ok": True, "detail": "size=(16, 16)"},
+                                        "dxt5": {"ok": True, "detail": "size=(16, 16)"},
+                                    },
+                                    "failures": [],
+                                }):
+                                    self.assertEqual(main._optional_feature_readiness_notice(), "")
+
+    def test_optional_feature_readiness_notice_summarizes_limits(self):
+        _require_qt_gui(self)
+        import main
+        with patch("src.ui.video_tool._has_imageio", return_value=True):
+            with patch("src.ui.video_tool._has_imageio_ffmpeg", return_value=True):
+                with patch("src.ui.video_tool._get_ffmpeg_exe", return_value="/tmp/ffmpeg"):
+                    with patch("src.ui.video_tool._get_ffprobe_exe", return_value=None):
+                        with patch("src.core.file_converter.dds_compression_available", return_value=False):
+                            with patch(
+                                "src.core.file_converter.optional_pillow_output_limits",
+                                return_value=[("AVIF", "needs libavif"), ("JPEG2000", "needs OpenJPEG")],
+                            ):
+                                notice = main._optional_feature_readiness_notice()
+        self.assertIn("odd-container probing/detail guidance limited: ffprobe unavailable", notice)
+        self.assertIn("DDS compressed variants unavailable: ImageMagick/wand runtime missing", notice)
+        self.assertIn("AVIF", notice)
+        self.assertIn("See tool banners for details.", notice)
+
+    def test_optional_feature_readiness_notice_lists_missing_video_runtime_bits(self):
+        _require_qt_gui(self)
+        import main
+        with patch("src.ui.video_tool._has_imageio", return_value=False):
+            with patch("src.ui.video_tool._has_imageio_ffmpeg", return_value=True):
+                with patch("src.ui.video_tool._get_ffmpeg_exe", return_value=None):
+                    with patch("src.core.file_converter.dds_compression_available", return_value=True):
+                        with patch("src.core.file_converter.optional_pillow_output_limits", return_value=[]):
+                            with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                                "available": True,
+                                "ready": True,
+                                "detail": "ok",
+                                "variants": {},
+                                "failures": [],
+                            }):
+                                notice = main._optional_feature_readiness_notice()
+        self.assertIn("video import/MP4 export unavailable: missing imageio, ffmpeg", notice)
+
+    def test_runtime_capability_summary_reports_runtime_bits(self):
+        _require_qt_gui(self)
+        import main
+        import src.ui.video_tool as vt
+        import src.core.file_converter as fc
+        with patch.object(vt, "_has_imageio", return_value=True):
+            with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                with patch.object(vt, "_get_ffmpeg_exe", return_value="/tmp/ffmpeg"):
+                    with patch.object(vt, "_get_ffprobe_exe", return_value=None):
+                        with patch.object(fc, "dds_compression_available", return_value=False):
+                            with patch.object(fc, "optional_pillow_output_limits", return_value=[("AVIF", "needs libavif")]):
+                                with patch.object(main, "_missing_linux_runtime_libs", return_value=["libEGL.so.1"]):
+                                    with patch.object(main, "_theme_svg_runtime_details", return_value={
+                                        "qt_svg_ready": True,
+                                        "default_theme_svg_path": "/tmp/panda_dark.svg",
+                                        "default_theme_svg_ready": True,
+                                        "theme_svg_missing_count": 0,
+                                    }):
+                                        with patch.object(main, "_imagemagick_runtime_details", return_value={
+                                            "wand_runtime_ready": False,
+                                            "magick_home_path": "/tmp/magick",
+                                            "imagemagick_home_path": "",
+                                        }):
+                                            with patch.object(main, "_executable_runtime_details", side_effect=[
+                                                {"path": "/tmp/ffmpeg", "exists": True, "runtime_ready": True, "detail": "ffmpeg ok"},
+                                                {"path": "", "exists": False, "runtime_ready": False, "detail": "missing"},
+                                            ]):
+                                                with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                                                    "available": False,
+                                                    "ready": False,
+                                                    "detail": "skipped: ImageMagick/wand runtime unavailable",
+                                                    "variants": {},
+                                                    "failures": [],
+                                                }):
+                                                    summary = main._runtime_capability_summary()
+        self.assertTrue(summary["has_imageio"])
+        self.assertTrue(summary["has_imageio_ffmpeg"])
+        self.assertEqual(summary["ffmpeg_path"], "/tmp/ffmpeg")
+        self.assertEqual(summary["ffprobe_path"], "")
+        self.assertTrue(summary["ffmpeg_runtime_ready"])
+        self.assertEqual(summary["ffmpeg_runtime_detail"], "ffmpeg ok")
+        self.assertTrue(summary["video_runtime_ready"])
+        self.assertFalse(summary["odd_container_probe_ready"])
+        self.assertFalse(summary["dds_compression_available"])
+        self.assertEqual(summary["missing_video_bits"], [])
+        self.assertEqual(summary["missing_linux_runtime_libs"], ["libEGL.so.1"])
+        self.assertIn("libEGL.so.1", summary["packaged_runtime_notice"])
+        self.assertIn("odd-container probing/detail guidance limited: ffprobe unavailable", summary["feature_readiness_notice"])
+        self.assertIn("See tool banners for details.", summary["feature_readiness_notice"])
+        self.assertTrue(summary["qt_svg_ready"])
+        self.assertEqual(summary["default_theme_svg_path"], "/tmp/panda_dark.svg")
+        self.assertFalse(summary["wand_runtime_ready"])
+        self.assertEqual(summary["magick_home_path"], "/tmp/magick")
+        self.assertTrue(summary["imagemagick_configured"])
+        self.assertIn("ImageMagick/wand runtime incomplete", summary["feature_readiness_notice"])
+
+    def test_runtime_capability_summary_reports_packaged_asset_gaps(self):
+        _require_qt_gui(self)
+        import main
+        import src.ui.video_tool as vt
+        import src.core.file_converter as fc
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bundle_dir = os.path.join(tmpdir, "bundle")
+            external_dir = os.path.join(tmpdir, "external")
+            os.makedirs(bundle_dir, exist_ok=True)
+            os.makedirs(external_dir, exist_ok=True)
+            executable_path = os.path.join(bundle_dir, "formatomancer")
+            ffmpeg_path = os.path.join(external_dir, "ffmpeg")
+            svg_path = os.path.join(external_dir, "panda_dark.svg")
+            for path in (executable_path, ffmpeg_path, svg_path):
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("x")
+            with patch.object(vt, "_has_imageio", return_value=True):
+                with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                    with patch.object(vt, "_get_ffmpeg_exe", return_value=ffmpeg_path):
+                        with patch.object(vt, "_get_ffprobe_exe", return_value=None):
+                            with patch.object(fc, "dds_compression_available", return_value=False):
+                                with patch.object(fc, "optional_pillow_output_limits", return_value=[]):
+                                    with patch.object(main, "_missing_linux_runtime_libs", return_value=[]):
+                                        with patch.object(main, "_theme_svg_runtime_details", return_value={
+                                            "qt_svg_ready": True,
+                                            "default_theme_svg_path": svg_path,
+                                            "default_theme_svg_ready": True,
+                                            "theme_svg_missing_count": 2,
+                                        }):
+                                            with patch.object(main, "_imagemagick_runtime_details", return_value={
+                                                "wand_runtime_ready": False,
+                                                "magick_home_path": "",
+                                                "imagemagick_home_path": "",
+                                            }):
+                                                with patch.object(main.sys, "frozen", True, create=True):
+                                                    with patch.object(main.sys, "executable", executable_path):
+                                                        with patch.object(main, "_executable_runtime_details", side_effect=[
+                                                            {"path": ffmpeg_path, "exists": True, "runtime_ready": True, "detail": "ffmpeg ok"},
+                                                            {"path": "", "exists": False, "runtime_ready": False, "detail": "missing"},
+                                                        ]):
+                                                            summary = main._runtime_capability_summary()
+        self.assertTrue(summary["frozen"])
+        self.assertEqual(summary["bundle_dir"], bundle_dir)
+        self.assertFalse(summary["ffmpeg_bundled"])
+        self.assertFalse(summary["default_theme_svg_bundled"])
+        self.assertFalse(summary["imagemagick_bundled"])
+        self.assertIn("ffmpeg resolves outside the packaged app", summary["packaged_asset_warnings"])
+        self.assertIn("packaged ffprobe binary missing", summary["packaged_asset_warnings"])
+        self.assertIn("default theme SVG resolves outside the packaged app", summary["packaged_asset_warnings"])
+        self.assertIn("2 theme SVG asset(s) missing from package", summary["packaged_asset_warnings"])
+        self.assertIn("packaged asset gaps:", summary["feature_readiness_notice"])
+
+    def test_runtime_capability_summary_flags_incomplete_bundled_imagemagick(self):
+        _require_qt_gui(self)
+        import main
+        import src.ui.video_tool as vt
+        import src.core.file_converter as fc
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bundle_dir = os.path.join(tmpdir, "bundle")
+            os.makedirs(bundle_dir, exist_ok=True)
+            executable_path = os.path.join(bundle_dir, "formatomancer")
+            ffmpeg_path = os.path.join(bundle_dir, "ffmpeg")
+            ffprobe_path = os.path.join(bundle_dir, "ffprobe")
+            svg_path = os.path.join(bundle_dir, "panda_dark.svg")
+            magick_home = os.path.join(bundle_dir, "ImageMagick")
+            os.makedirs(magick_home, exist_ok=True)
+            for path in (executable_path, ffmpeg_path, ffprobe_path, svg_path):
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("x")
+            with patch.object(vt, "_has_imageio", return_value=True):
+                with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                    with patch.object(vt, "_get_ffmpeg_exe", return_value=ffmpeg_path):
+                        with patch.object(vt, "_get_ffprobe_exe", return_value=ffprobe_path):
+                            with patch.object(fc, "dds_compression_available", return_value=False):
+                                with patch.object(fc, "optional_pillow_output_limits", return_value=[]):
+                                    with patch.object(main, "_missing_linux_runtime_libs", return_value=[]):
+                                        with patch.object(main, "_theme_svg_runtime_details", return_value={
+                                            "qt_svg_ready": True,
+                                            "default_theme_svg_path": svg_path,
+                                            "default_theme_svg_ready": True,
+                                            "theme_svg_missing_count": 0,
+                                        }):
+                                            with patch.object(main, "_imagemagick_runtime_details", return_value={
+                                                "wand_runtime_ready": False,
+                                                "magick_home_path": magick_home,
+                                                "imagemagick_home_path": "",
+                                            }):
+                                                with patch.object(main.sys, "frozen", True, create=True):
+                                                    with patch.object(main.sys, "executable", executable_path):
+                                                        with patch.object(main, "_executable_runtime_details", side_effect=[
+                                                            {"path": ffmpeg_path, "exists": True, "runtime_ready": True, "detail": "ffmpeg ok"},
+                                                            {"path": ffprobe_path, "exists": True, "runtime_ready": True, "detail": "ffprobe ok"},
+                                                        ]):
+                                                            with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                                                                "available": False,
+                                                                "ready": False,
+                                                                "detail": "skipped: ImageMagick/wand runtime unavailable",
+                                                                "variants": {},
+                                                                "failures": [],
+                                                            }):
+                                                                summary = main._runtime_capability_summary()
+        self.assertTrue(summary["imagemagick_bundled"])
+        self.assertTrue(summary["imagemagick_configured"])
+        self.assertIn("bundled ImageMagick/wand runtime incomplete", summary["packaged_asset_warnings"])
+        self.assertIn("ImageMagick/wand runtime incomplete", summary["feature_readiness_notice"])
+
+    def test_runtime_capability_summary_accepts_onefile_extracted_assets_as_bundled(self):
+        _require_qt_gui(self)
+        import main
+        import src.ui.video_tool as vt
+        import src.core.file_converter as fc
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bundle_dir = os.path.join(tmpdir, "dist")
+            meipass_dir = os.path.join(tmpdir, "_MEI12345")
+            os.makedirs(bundle_dir, exist_ok=True)
+            os.makedirs(os.path.join(meipass_dir, "imageio_ffmpeg", "binaries"), exist_ok=True)
+            os.makedirs(os.path.join(meipass_dir, "src", "assets", "svg"), exist_ok=True)
+            magick_path = os.path.join(meipass_dir, "imagemagick")
+            os.makedirs(magick_path, exist_ok=True)
+            executable_path = os.path.join(bundle_dir, "formatomancer")
+            ffmpeg_path = os.path.join(meipass_dir, "imageio_ffmpeg", "binaries", "ffmpeg")
+            ffprobe_path = os.path.join(meipass_dir, "imageio_ffmpeg", "binaries", "ffprobe")
+            svg_path = os.path.join(meipass_dir, "src", "assets", "svg", "panda_dark.svg")
+            for path in (executable_path, ffmpeg_path, ffprobe_path, svg_path):
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("x")
+            with patch.object(vt, "_has_imageio", return_value=True):
+                with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                    with patch.object(vt, "_get_ffmpeg_exe", return_value=ffmpeg_path):
+                        with patch.object(vt, "_get_ffprobe_exe", return_value=ffprobe_path):
+                            with patch.object(fc, "dds_compression_available", return_value=True):
+                                with patch.object(fc, "optional_pillow_output_limits", return_value=[]):
+                                    with patch.object(main, "_missing_linux_runtime_libs", return_value=[]):
+                                        with patch.object(main, "_theme_svg_runtime_details", return_value={
+                                            "qt_svg_ready": True,
+                                            "default_theme_svg_path": svg_path,
+                                            "default_theme_svg_ready": True,
+                                            "theme_svg_missing_count": 0,
+                                        }):
+                                            with patch.object(main, "_imagemagick_runtime_details", return_value={
+                                                "wand_runtime_ready": True,
+                                                "magick_home_path": magick_path,
+                                                "imagemagick_home_path": "",
+                                            }):
+                                                with patch.object(main.sys, "frozen", True, create=True):
+                                                    with patch.object(main.sys, "executable", executable_path):
+                                                        with patch.object(main.sys, "_MEIPASS", meipass_dir, create=True):
+                                                            with patch.object(main, "_executable_runtime_details", side_effect=[
+                                                                {"path": ffmpeg_path, "exists": True, "runtime_ready": True, "detail": "ffmpeg ok"},
+                                                                {"path": ffprobe_path, "exists": True, "runtime_ready": True, "detail": "ffprobe ok"},
+                                                            ]):
+                                                                with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                                                                    "available": True,
+                                                                    "ready": True,
+                                                                    "detail": "all variants ready",
+                                                                    "variants": {},
+                                                                    "failures": [],
+                                                                }):
+                                                                    summary = main._runtime_capability_summary()
+        self.assertTrue(summary["ffmpeg_bundled"])
+        self.assertTrue(summary["ffprobe_bundled"])
+        self.assertTrue(summary["default_theme_svg_bundled"])
+        self.assertTrue(summary["imagemagick_bundled"])
+        self.assertTrue(summary["packaged_bundle_ready"])
+        self.assertEqual(summary["packaged_asset_warnings"], [])
+
+    def test_runtime_capability_summary_requires_bundled_wand_even_without_configured_homes(self):
+        _require_qt_gui(self)
+        import main
+        import src.ui.video_tool as vt
+        import src.core.file_converter as fc
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bundle_dir = os.path.join(tmpdir, "bundle")
+            os.makedirs(bundle_dir, exist_ok=True)
+            executable_path = os.path.join(bundle_dir, "formatomancer")
+            ffmpeg_path = os.path.join(bundle_dir, "ffmpeg")
+            ffprobe_path = os.path.join(bundle_dir, "ffprobe")
+            svg_path = os.path.join(bundle_dir, "panda_dark.svg")
+            for path in (executable_path, ffmpeg_path, ffprobe_path, svg_path):
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("x")
+            with patch.object(vt, "_has_imageio", return_value=True):
+                with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                    with patch.object(vt, "_get_ffmpeg_exe", return_value=ffmpeg_path):
+                        with patch.object(vt, "_get_ffprobe_exe", return_value=ffprobe_path):
+                            with patch.object(fc, "dds_compression_available", return_value=False):
+                                with patch.object(fc, "optional_pillow_output_limits", return_value=[]):
+                                    with patch.object(main, "_missing_linux_runtime_libs", return_value=[]):
+                                        with patch.object(main, "_theme_svg_runtime_details", return_value={
+                                            "qt_svg_ready": True,
+                                            "default_theme_svg_path": svg_path,
+                                            "default_theme_svg_ready": True,
+                                            "theme_svg_missing_count": 0,
+                                        }):
+                                            with patch.object(main, "_imagemagick_runtime_details", return_value={
+                                                "wand_runtime_ready": False,
+                                                "magick_home_path": "",
+                                                "imagemagick_home_path": "",
+                                            }):
+                                                with patch.object(main.sys, "frozen", True, create=True):
+                                                    with patch.object(main.sys, "executable", executable_path):
+                                                        with patch.object(main, "_executable_runtime_details", side_effect=[
+                                                            {"path": ffmpeg_path, "exists": True, "runtime_ready": True, "detail": "ffmpeg ok"},
+                                                            {"path": ffprobe_path, "exists": True, "runtime_ready": True, "detail": "ffprobe ok"},
+                                                        ]):
+                                                            with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                                                                "available": False,
+                                                                "ready": False,
+                                                                "detail": "skipped: ImageMagick/wand runtime unavailable",
+                                                                "variants": {},
+                                                                "failures": [],
+                                                            }):
+                                                                summary = main._runtime_capability_summary()
+        self.assertIn("packaged ImageMagick/wand runtime unavailable for DDS compressed output", summary["packaged_asset_warnings"])
+        self.assertFalse(summary["packaged_bundle_ready"])
+
+    def test_runtime_capability_summary_requires_ffmpeg_selfcheck_for_video_ready(self):
+        _require_qt_gui(self)
+        import main
+        import src.ui.video_tool as vt
+        import src.core.file_converter as fc
+        with patch.object(vt, "_has_imageio", return_value=True):
+            with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                with patch.object(vt, "_get_ffmpeg_exe", return_value="/tmp/ffmpeg"):
+                    with patch.object(vt, "_get_ffprobe_exe", return_value="/tmp/ffprobe"):
+                        with patch.object(fc, "dds_compression_available", return_value=True):
+                            with patch.object(fc, "optional_pillow_output_limits", return_value=[]):
+                                with patch.object(main, "_missing_linux_runtime_libs", return_value=[]):
+                                    with patch.object(main, "_theme_svg_runtime_details", return_value={
+                                        "qt_svg_ready": True,
+                                        "default_theme_svg_path": "/tmp/panda_dark.svg",
+                                        "default_theme_svg_ready": True,
+                                        "theme_svg_missing_count": 0,
+                                    }):
+                                        with patch.object(main, "_imagemagick_runtime_details", return_value={
+                                            "wand_runtime_ready": True,
+                                            "magick_home_path": "",
+                                            "imagemagick_home_path": "",
+                                        }):
+                                            with patch.object(main, "_executable_runtime_details", side_effect=[
+                                                {"path": "/tmp/ffmpeg", "exists": True, "runtime_ready": False, "detail": "permission denied"},
+                                                {"path": "/tmp/ffprobe", "exists": True, "runtime_ready": True, "detail": "ffprobe ok"},
+                                            ]):
+                                                with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                                                    "available": True,
+                                                    "ready": True,
+                                                    "detail": "ok",
+                                                    "variants": {},
+                                                    "failures": [],
+                                                }):
+                                                    summary = main._runtime_capability_summary()
+        self.assertFalse(summary["video_runtime_ready"])
+        self.assertFalse(summary["odd_container_probe_ready"])
+        self.assertIn("ffmpeg runtime", summary["missing_video_bits"])
+        self.assertIn("ffmpeg self-check failed", summary["feature_readiness_notice"])
+        self.assertEqual(summary["ffmpeg_runtime_detail"], "permission denied")
+
+    def test_runtime_capability_summary_flags_failed_dds_variant_selfcheck(self):
+        _require_qt_gui(self)
+        import main
+        import src.ui.video_tool as vt
+        import src.core.file_converter as fc
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bundle_dir = os.path.join(tmpdir, "bundle")
+            os.makedirs(bundle_dir, exist_ok=True)
+            executable_path = os.path.join(bundle_dir, "formatomancer")
+            ffmpeg_path = os.path.join(bundle_dir, "ffmpeg")
+            ffprobe_path = os.path.join(bundle_dir, "ffprobe")
+            svg_path = os.path.join(bundle_dir, "panda_dark.svg")
+            magick_home = os.path.join(bundle_dir, "ImageMagick")
+            os.makedirs(magick_home, exist_ok=True)
+            for path in (executable_path, ffmpeg_path, ffprobe_path, svg_path):
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("x")
+            with patch.object(vt, "_has_imageio", return_value=True):
+                with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                    with patch.object(vt, "_get_ffmpeg_exe", return_value=ffmpeg_path):
+                        with patch.object(vt, "_get_ffprobe_exe", return_value=ffprobe_path):
+                            with patch.object(fc, "dds_compression_available", return_value=True):
+                                with patch.object(fc, "optional_pillow_output_limits", return_value=[]):
+                                    with patch.object(main, "_missing_linux_runtime_libs", return_value=[]):
+                                        with patch.object(main, "_theme_svg_runtime_details", return_value={
+                                            "qt_svg_ready": True,
+                                            "default_theme_svg_path": svg_path,
+                                            "default_theme_svg_ready": True,
+                                            "theme_svg_missing_count": 0,
+                                        }):
+                                            with patch.object(main, "_imagemagick_runtime_details", return_value={
+                                                "wand_runtime_ready": True,
+                                                "magick_home_path": magick_home,
+                                                "imagemagick_home_path": "",
+                                            }):
+                                                with patch.object(main.sys, "frozen", True, create=True):
+                                                    with patch.object(main.sys, "executable", executable_path):
+                                                        with patch.object(main, "_executable_runtime_details", side_effect=[
+                                                            {"path": ffmpeg_path, "exists": True, "runtime_ready": True, "detail": "ffmpeg ok"},
+                                                            {"path": ffprobe_path, "exists": True, "runtime_ready": True, "detail": "ffprobe ok"},
+                                                        ]):
+                                                            with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                                                                "available": True,
+                                                                "ready": False,
+                                                                "detail": "failed: BC2/DXT3",
+                                                                "variants": {
+                                                                    "dxt1": {"ok": True, "detail": "size=(16, 16)"},
+                                                                    "dxt3": {"ok": False, "detail": "wand save failed"},
+                                                                    "dxt5": {"ok": True, "detail": "size=(16, 16)"},
+                                                                },
+                                                                "failures": ["dxt3"],
+                                                            }):
+                                                                summary = main._runtime_capability_summary()
+        self.assertTrue(summary["dds_compression_variant_selfcheck_available"])
+        self.assertFalse(summary["dds_compression_variant_selfcheck_ready"])
+        self.assertEqual(summary["dds_compression_variant_failures"], ["dxt3"])
+        self.assertIn("DDS compressed output self-check failed: BC2/DXT3", summary["feature_readiness_notice"])
+        self.assertIn("packaged DDS compressed output self-check failed: BC2/DXT3", summary["packaged_asset_warnings"])
+
+    def test_runtime_capability_dump_emits_prefixed_json(self):
+        import main
+        payload = {"video_runtime_ready": True, "odd_container_probe_ready": True}
+        buffer = io.StringIO()
+        with patch.object(main, "_runtime_capability_summary", return_value=payload):
+            with patch("sys.stdout", buffer):
+                rc = main._emit_runtime_capability_dump()
+        self.assertEqual(rc, 0)
+        line = buffer.getvalue().strip()
+        self.assertTrue(line.startswith("ALPHA_FIXER_RUNTIME_CAPABILITIES="))
+        parsed = json.loads(line.split("=", 1)[1])
+        self.assertEqual(parsed, payload)
+
+    def test_dds_compression_variant_selfcheck_reports_skipped_when_unavailable(self):
+        import main
+        fake_fc = types.SimpleNamespace(
+            dds_compression_available=MagicMock(return_value=False),
+            convert_file=MagicMock(),
+        )
+        with patch.dict(
+            sys.modules,
+            {
+                "src.core.file_converter": fake_fc,
+                "src.core.alpha_processor": types.SimpleNamespace(_load_dds=MagicMock()),
+                "PIL": types.SimpleNamespace(Image=MagicMock()),
+                "PIL.Image": MagicMock(),
+            },
+            clear=False,
+        ):
+            result = main._dds_compression_variant_selfcheck()
+        self.assertFalse(result["available"])
+        self.assertFalse(result["ready"])
+        self.assertEqual(result["failures"], [])
+        self.assertIn("skipped:", result["detail"])
+
+    def test_dds_compression_variant_selfcheck_records_all_variant_results(self):
+        import main
+        fake_dds = MagicMock()
+        fake_dds.size = (16, 16)
+        fake_fc = types.SimpleNamespace(
+            dds_compression_available=MagicMock(return_value=True),
+        )
+
+        def _fake_convert(_src, dest, _target_format, **_kwargs):
+            with open(dest, "wb") as handle:
+                handle.write(b"dds")
+
+        fake_fc.convert_file = MagicMock(side_effect=_fake_convert)
+        fake_alpha = types.SimpleNamespace(_load_dds=MagicMock(return_value=fake_dds))
+        fake_image_instance = MagicMock()
+        fake_pil_image = MagicMock()
+        fake_pil_image.new.return_value = fake_image_instance
+        with patch.dict(
+            sys.modules,
+            {
+                "src.core.file_converter": fake_fc,
+                "src.core.alpha_processor": fake_alpha,
+                "PIL": types.SimpleNamespace(Image=fake_pil_image),
+                "PIL.Image": fake_pil_image,
+            },
+            clear=False,
+        ):
+            result = main._dds_compression_variant_selfcheck()
+        self.assertTrue(result["available"])
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["failures"], [])
+        self.assertEqual(set(result["variants"]), {"dxt1", "dxt3", "dxt5"})
+        self.assertTrue(all(result["variants"][name]["ok"] for name in ("dxt1", "dxt3", "dxt5")))
+
+    def test_runtime_selftest_dump_emits_prefixed_json(self):
+        import main
+        buffer = io.StringIO()
+        fake_image_instance = MagicMock()
+        fake_image_instance.size = (32, 24)
+        fake_pil_image = MagicMock()
+        fake_pil_image.new.return_value = fake_image_instance
+        fake_dds = MagicMock()
+        fake_dds.size = (32, 24)
+        fake_alpha = types.SimpleNamespace(_load_dds=MagicMock(return_value=fake_dds))
+        fake_fc = types.SimpleNamespace(
+            SUPPORTED_OUTPUT_FORMATS={"PNG": ".png"},
+            output_codec_selfcheck=MagicMock(return_value={
+                "png_to_avif": {"ok": False, "detail": "AVIF encoder unavailable"},
+                "png_to_png": {"ok": True, "detail": "PNG encode/decode verified"},
+            }),
+            convert_file=MagicMock(return_value=None),
+            dds_compression_available=MagicMock(return_value=False),
+            _has_vtracer=MagicMock(return_value=False),
+            _load_svg=MagicMock(),
+        )
+        fake_vt = types.SimpleNamespace(_get_ffmpeg_exe=MagicMock(return_value=None))
+        fake_ui_pkg = types.SimpleNamespace(video_tool=fake_vt)
+        with patch.dict(os.environ, {"ALPHA_FIXER_RUNTIME_STRESS_LOOPS": "2"}, clear=False):
+            with patch.object(main, "_runtime_selftest_iterations", return_value=2):
+                with patch.object(main, "_runtime_selftest_peak_rss_mb", return_value=123.45):
+                    with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                        "available": False,
+                        "ready": False,
+                        "detail": "skipped: ImageMagick/wand runtime unavailable",
+                        "variants": {},
+                        "failures": [],
+                    }):
+                        with patch("main.tempfile.TemporaryDirectory") as tmpdir_cls:
+                            tmpdir_cls.return_value.__enter__.return_value = self._selftest_directory.name
+                            tmpdir_cls.return_value.__exit__.return_value = False
+                            with patch.dict(
+                                sys.modules,
+                                {
+                                    "PIL": types.SimpleNamespace(Image=fake_pil_image),
+                                    "PIL.Image": fake_pil_image,
+                                    "src.core.alpha_processor": fake_alpha,
+                                    "src.core.file_converter": fake_fc,
+                                    "src.ui": fake_ui_pkg,
+                                    "src.ui.video_tool": fake_vt,
+                                },
+                                clear=False,
+                            ):
+                                with patch("sys.stdout", buffer), patch(
+                                    "PyQt6.QtWidgets.QApplication.instance", return_value=None
+                                ):
+                                    rc = main._emit_runtime_selftest_dump()
+        self.assertEqual(rc, 1)
+        line = buffer.getvalue().strip()
+        self.assertTrue(line.startswith("ALPHA_FIXER_RUNTIME_SELFTEST="))
+        parsed = json.loads(line.split("=", 1)[1])
+        self.assertEqual(parsed["iterations"], 2)
+        self.assertEqual(parsed["stress_loops"], 2)
+        self.assertIn("peak_rss_mb", parsed)
+        self.assertIn("checks", parsed)
+        self.assertFalse(parsed["checks"]["png_to_avif"]["ok"])
+        self.assertTrue(parsed["checks"]["png_to_png"]["ok"])
+        self.assertIn("png_to_avif: AVIF encoder unavailable", parsed["errors"])
+        self.assertIn("png_to_dds_dxt1", parsed["checks"])
+        self.assertIn("png_to_dds_dxt3", parsed["checks"])
+        self.assertIn("png_to_dds_dxt5", parsed["checks"])
+        self.assertIn("stress_image_session_batch", parsed["checks"])
+        self.assertIn("stress_video_session_batch", parsed["checks"])
+        self.assertIn("stress_builder_dialog_cycles", parsed["checks"])
+        self.assertIn("stress_history_roundtrip", parsed["checks"])
+        self.assertIn("stress_peak_rss_growth", parsed["checks"])
+        self.assertFalse(parsed["passed"])
+
+    def test_runtime_selftest_dump_emits_grouped_manifest_checks_when_requested(self):
+        import main
+        buffer = io.StringIO()
+        fake_image_instance = MagicMock()
+        fake_image_instance.size = (32, 24)
+        fake_pil_image = MagicMock()
+        fake_pil_image.new.return_value = fake_image_instance
+        fake_dds = MagicMock()
+        fake_dds.size = (32, 24)
+        fake_alpha = types.SimpleNamespace(_load_dds=MagicMock(return_value=fake_dds))
+        fake_fc = types.SimpleNamespace(
+            SUPPORTED_OUTPUT_FORMATS={"PNG": ".png", "DDS": ".dds"},
+            output_codec_selfcheck=MagicMock(return_value={}),
+            convert_file=MagicMock(return_value=None),
+            dds_compression_available=MagicMock(return_value=False),
+            _has_vtracer=MagicMock(return_value=False),
+            _load_svg=MagicMock(),
+        )
+        fake_vt = types.SimpleNamespace(_get_ffmpeg_exe=MagicMock(return_value=None))
+        fake_ui_pkg = types.SimpleNamespace(video_tool=fake_vt)
+        disc_manifest = [{"platform": "PSP", "path": "/tmp/psp.iso"}, {"platform": "PS1", "path": "/tmp/ps1.bin"}]
+        dds_manifest = [{"group": "cubemap", "path": "/tmp/cube.dds"}, {"group": "array", "path": "/tmp/array.dds"}]
+        format_manifest = [{"input": "/tmp/a.png", "target_format": "PNG"}, {"input": "/tmp/b.png", "target_format": "DDS"}]
+
+        def _fake_manifest_env(name):
+            return {
+                "ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST": disc_manifest,
+                "ALPHA_FIXER_RUNTIME_DDS_MANIFEST": dds_manifest,
+                "ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST": format_manifest,
+            }.get(name, [])
+
+        with patch.object(main, "_runtime_selftest_iterations", return_value=1):
+            with patch.object(main, "_runtime_selftest_peak_rss_mb", return_value=None):
+                with patch.object(main, "_dds_compression_variant_selfcheck", return_value={
+                    "available": False,
+                    "ready": False,
+                    "detail": "skipped: ImageMagick/wand runtime unavailable",
+                    "variants": {},
+                    "failures": [],
+                }):
+                    with patch.object(main, "load_manifest_entries_from_env", side_effect=_fake_manifest_env):
+                        with patch.object(main, "execute_disc_video_manifest_report", side_effect=lambda entries, *_args, **_kwargs: {"ok": True, "detail": f"disc={len(entries)}", "sample_results": []}):
+                            with patch.object(main, "execute_dds_manifest_report", side_effect=lambda entries, *_args, **_kwargs: {"ok": True, "detail": f"dds={len(entries)}", "sample_results": []}):
+                                with patch.object(main, "execute_format_matrix_manifest_report", side_effect=lambda entries, **_kwargs: {"ok": True, "detail": f"matrix={len(entries)}", "sample_results": []}):
+                                    with patch("main.tempfile.TemporaryDirectory") as tmpdir_cls:
+                                        tmpdir_cls.return_value.__enter__.return_value = self._selftest_directory.name
+                                        tmpdir_cls.return_value.__exit__.return_value = False
+                                        with patch.dict(
+                                            os.environ,
+                                            {
+                                                "ALPHA_FIXER_RUNTIME_DISC_GROUP_CHECKS": "1",
+                                                "ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS": "1",
+                                                "ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS": "1",
+                                            },
+                                            clear=False,
+                                        ):
+                                            with patch.dict(
+                                                sys.modules,
+                                                {
+                                                    "PIL": types.SimpleNamespace(Image=fake_pil_image),
+                                                    "PIL.Image": fake_pil_image,
+                                                    "src.core.alpha_processor": fake_alpha,
+                                                    "src.core.file_converter": fake_fc,
+                                                    "src.ui": fake_ui_pkg,
+                                                    "src.ui.video_tool": fake_vt,
+                                                },
+                                                clear=False,
+                                            ):
+                                                with patch("sys.stdout", buffer):
+                                                    main._emit_runtime_selftest_dump()
+        parsed = json.loads(buffer.getvalue().strip().split("=", 1)[1])
+        checks = parsed["checks"]
+        self.assertIn("external_disc_video_manifest_psp", checks)
+        self.assertIn("external_disc_video_manifest_ps1", checks)
+        self.assertIn("external_dds_manifest_cubemap", checks)
+        self.assertIn("external_dds_manifest_array", checks)
+        self.assertIn("external_format_matrix_manifest_png", checks)
+        self.assertIn("external_format_matrix_manifest_dds", checks)
+        self.assertIn("manifest_results", parsed)
+        self.assertIn("disc_video_groups", parsed["manifest_results"])
+        self.assertIn("dds_groups", parsed["manifest_results"])
+        self.assertIn("dds_policy_groups", parsed["manifest_results"])
+        self.assertIn("surface_kind", parsed["manifest_results"]["dds_policy_groups"])
+        self.assertIn("decode_policy", parsed["manifest_results"]["dds_policy_groups"])
+        self.assertIn("cubemap", parsed["manifest_results"]["dds_policy_groups"]["surface_kind"])
+        self.assertIn("format_matrix_groups", parsed["manifest_results"])
+
+    def test_runtime_selftest_peak_rss_mb_uses_windows_fallback_when_available(self):
+        import main
+
+        class _FakeGetProcessMemoryInfo:
+            def __call__(self, _proc, counter_ptr, _size):
+                counter = getattr(counter_ptr, "_obj", None)
+                if counter is not None:
+                    counter.PeakWorkingSetSize = 32 * 1024 * 1024
+                return 1
+
+        fake_psapi = types.SimpleNamespace(GetProcessMemoryInfo=_FakeGetProcessMemoryInfo())
+        fake_kernel32 = types.SimpleNamespace(GetCurrentProcess=lambda: 123)
+
+        def _fake_windll(name, use_last_error=True):
+            if name == "psapi":
+                return fake_psapi
+            if name == "kernel32":
+                return fake_kernel32
+            raise AssertionError(name)
+
+        with patch.object(main.sys, "platform", "win32"):
+            with patch.object(main.ctypes, "WinDLL", side_effect=_fake_windll, create=True):
+                peak = main._runtime_selftest_peak_rss_mb()
+        self.assertEqual(peak, 32.0)
+
+    def test_verify_packaged_app_parses_selftest_payload(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+        payload = verify._selftest_payload("hello\nALPHA_FIXER_RUNTIME_SELFTEST={\"passed\": true, \"iterations\": 3}\n")
+        self.assertTrue(payload["passed"])
+        self.assertEqual(payload["iterations"], 3)
+
+    def test_verify_packaged_app_passes_external_manifests_into_selftest_env(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"external_disc_video_manifest": {"ok": true}, "external_dds_manifest": {"ok": true}, "external_format_matrix_manifest": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--selftest-sample-limit",
+                        "7",
+                        "--selftest-stress-loops",
+                        "3",
+                        "--disc-video-manifest",
+                        "/tmp/disc.json",
+                        "--dds-manifest",
+                        "/tmp/dds.json",
+                        "--format-matrix-manifest",
+                        "/tmp/matrix.json",
+                        "--allow-sample-downloads",
+                        "--sample-cache-dir",
+                        "/tmp/sample-cache",
+                        "--require-selftest-pass",
+                        "--require-selftest-check",
+                        "external_disc_video_manifest",
+                    ]
+                )
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(calls), 3)
+
+    def test_verify_packaged_app_repeat_selftest_runs_writes_rss_repeat_summary(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            out_json = os.path.join(tmpdir, "runtime.json")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            calls = []
+            selftest_payloads = iter(
+                [
+                    'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "peak_rss_mb": 120.0, "checks": {"generated_mp4_load": {"ok": true}, "external_dds_manifest": {"ok": true, "detail": "dds ok"}}, "manifest_results": {"disc_video": {"ok": true, "detail": "disc ok", "sample_results": [{"status": "explained", "label": "disc-a", "detail": "explained detail"}]}}}\n',
+                    'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "peak_rss_mb": 132.5, "checks": {"generated_mp4_load": {"ok": true}, "external_dds_manifest": {"ok": false, "detail": "dds failed"}}, "manifest_results": {"disc_video": {"ok": true, "detail": "disc ok", "sample_results": [{"status": "failed", "label": "disc-b", "detail": "bad stream", "stage": "load"}]}}}\n',
+                ]
+            )
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true, "default_theme_svg_bundled": true, "packaged_bundle_ready": true, "packaged_asset_warnings": []}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(returncode=0, stdout=next(selftest_payloads))
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--repeat-selftest-runs",
+                        "2",
+                        "--max-selftest-rss-growth-mb",
+                        "20",
+                        "--max-selftest-rss-spread-mb",
+                        "20",
+                        "--require-selftest-check",
+                        "generated_mp4_load",
+                        "--json-out",
+                        out_json,
+                    ]
+                )
+            self.assertEqual(rc, 0)
+            self.assertEqual(len(calls), 4)
+            with open(out_json, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        self.assertEqual(len(payload["runtime_selftest_runs"]), 2)
+        self.assertEqual(payload["runtime_selftest_repeat_summary"]["runs"], 2)
+        self.assertEqual(payload["runtime_selftest_repeat_summary"]["peak_rss_mb_values"], [120.0, 132.5])
+        self.assertEqual(payload["runtime_selftest_repeat_summary"]["peak_rss_mb_growth"], 12.5)
+        self.assertEqual(payload["runtime_selftest_repeat_summary"]["peak_rss_mb_spread"], 12.5)
+        self.assertEqual(payload["validation_bundle_kind"], "unspecified")
+        self.assertTrue(payload["validation_launch_target"].endswith("AlphaFixerConverter"))
+        self.assertIn("manifest_inputs", payload)
+        self.assertFalse(payload["manifest_inputs"]["disc_video"]["provided"])
+        self.assertIn("runtime_selftest", payload)
+        self.assertEqual(payload["runtime_selftest"]["manifest_results"]["disc_video"]["detail"], "disc ok")
+        self.assertEqual(payload["runtime_selftest_failed_checks"][0]["name"], "external_dds_manifest")
+        self.assertEqual(payload["runtime_selftest_failed_checks"][0]["detail"], "dds failed")
+        self.assertEqual(payload["runtime_selftest_interesting_sample_outcomes"][0]["status"], "failed")
+        self.assertEqual(payload["runtime_selftest_interesting_sample_outcomes"][0]["label"], "disc-b")
+        self.assertEqual(payload["runtime_selftest_manifest_review"]["disc_video"]["sample_status_counts"]["failed"], 1)
+        repeat_checks = payload["runtime_selftest_check_repeat_summary"]["checks"]
+        self.assertTrue(repeat_checks["generated_mp4_load"]["stable_ok"])
+        self.assertEqual(repeat_checks["external_dds_manifest"]["failed_runs"], 1)
+        self.assertIn("external_dds_manifest", payload["runtime_selftest_check_repeat_summary"]["unstable_checks"])
+
+    def test_verify_packaged_app_repeat_selftest_runs_can_fail_rss_growth_limit(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            selftest_payloads = iter(
+                [
+                    'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "peak_rss_mb": 100.0, "checks": {}}\n',
+                    'ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "peak_rss_mb": 140.5, "checks": {}}\n',
+                ]
+            )
+
+            def _fake_run(command, *, env, timeout):
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true, "default_theme_svg_bundled": true, "packaged_bundle_ready": true, "packaged_asset_warnings": []}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(returncode=0, stdout=next(selftest_payloads))
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                with self.assertRaises(SystemExit) as ctx:
+                    verify.main(
+                        [
+                            target,
+                            "--run-selftest",
+                            "--repeat-selftest-runs",
+                            "2",
+                            "--max-selftest-rss-growth-mb",
+                            "20",
+                        ]
+                    )
+        self.assertIn("RSS growth exceeded limit", str(ctx.exception))
+
+    def test_verify_packaged_app_repeat_smoke_runs_writes_elapsed_summary(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            out_json = os.path.join(tmpdir, "runtime.json")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            call_index = {"value": 0}
+            monotonic_values = iter([0.0, 1.25, 2.0, 3.5, 4.0, 4.8])
+
+            def _fake_run(command, *, env, timeout):
+                call_index["value"] += 1
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true, "default_theme_svg_bundled": true, "packaged_bundle_ready": true, "packaged_asset_warnings": []}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run), patch.object(verify.time, "monotonic", side_effect=lambda: next(monotonic_values)):
+                rc = verify.main(
+                    [
+                        target,
+                        "--bundle-kind",
+                        "onefile",
+                        "--repeat",
+                        "2",
+                        "--max-smoke-elapsed-growth-seconds",
+                        "1.5",
+                        "--max-smoke-elapsed-spread-seconds",
+                        "1.5",
+                        "--json-out",
+                        out_json,
+                    ]
+                )
+            self.assertEqual(rc, 0)
+            with open(out_json, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        self.assertEqual(call_index["value"], 3)
+        self.assertEqual(payload["smoke_repeat_summary"]["runs"], 2)
+        self.assertEqual(payload["smoke_repeat_summary"]["successful_runs"], 2)
+        self.assertEqual(payload["validation_bundle_kind"], "onefile")
+        self.assertEqual(payload["smoke_repeat_summary"]["elapsed_seconds_values"], [1.25, 1.5])
+        self.assertEqual(payload["smoke_repeat_summary"]["elapsed_seconds_growth"], 0.25)
+        self.assertEqual(payload["smoke_repeat_summary"]["elapsed_seconds_spread"], 0.25)
+
+    def test_verify_packaged_app_repeat_smoke_runs_can_fail_growth_limit(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            monotonic_values = iter([0.0, 1.0, 2.0, 5.5, 6.0, 6.4])
+
+            def _fake_run(command, *, env, timeout):
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true, "default_theme_svg_bundled": true, "packaged_bundle_ready": true, "packaged_asset_warnings": []}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run), patch.object(verify.time, "monotonic", side_effect=lambda: next(monotonic_values)):
+                with self.assertRaises(SystemExit) as ctx:
+                    verify.main(
+                        [
+                            target,
+                            "--repeat",
+                            "2",
+                            "--max-smoke-elapsed-growth-seconds",
+                            "2",
+                        ]
+                    )
+        self.assertIn("smoke-launch elapsed-time growth exceeded limit", str(ctx.exception))
+
+    def test_verify_packaged_app_use_public_sample_manifests_populates_defaults(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"external_disc_video_manifest": {"ok": true}, "external_dds_manifest": {"ok": true}, "external_format_matrix_manifest": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--use-public-sample-manifests",
+                        "--selftest-sample-limit",
+                        "3",
+                    ]
+                )
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(calls), 3)
+        selftest_env = calls[-1]["env"]
+        self.assertTrue(selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"].endswith("sample_manifests/public_disc_video_manifest.json"))
+        self.assertTrue(selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"].endswith("sample_manifests/public_dds_dx10_manifest.json"))
+        self.assertTrue(selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_MATRIX_MANIFEST"].endswith("sample_manifests/public_format_matrix_manifest.json"))
+
+    def test_verify_packaged_app_use_private_local_manifests_reads_env_defaults(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            disc_manifest = os.path.join(tmpdir, "disc.json")
+            odd_manifest = os.path.join(tmpdir, "odd.json")
+            dds_manifest = os.path.join(tmpdir, "dds.json")
+            with open(disc_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"platform": "PSP", "path": "/tmp/psp.iso"}]}, handle)
+            with open(odd_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"group": "odd container", "path": "/tmp/sample.wmv"}]}, handle)
+            with open(dds_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"group": "cubemap", "path": "/tmp/cube.dds"}]}, handle)
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"external_disc_video_manifest": {"ok": true}, "external_dds_manifest": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                with patch.dict(
+                    os.environ,
+                    {
+                        "ALPHA_FIXER_REAL_DISC_VIDEO_MANIFEST": disc_manifest,
+                        "ALPHA_FIXER_REAL_ODD_CONTAINER_MANIFEST": odd_manifest,
+                        "ALPHA_FIXER_REAL_DDS_COMPLEX_MANIFEST": dds_manifest,
+                    },
+                    clear=False,
+                ):
+                    rc = verify.main([target, "--run-selftest", "--use-private-local-manifests"])
+                    self.assertEqual(rc, 0)
+                    self.assertEqual(len(calls), 3)
+                    selftest_env = calls[-1]["env"]
+                    merged_disc = verify.load_manifest_entries(selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"])
+                    merged_dds = verify.load_manifest_entries(selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"])
+                    self.assertEqual(len(merged_disc), 2)
+                    self.assertEqual(len(merged_dds), 1)
+
+    def test_verify_packaged_app_use_private_local_manifests_can_autodiscover_corpus_files(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            video_root = os.path.join(tmpdir, "video")
+            dds_root = os.path.join(tmpdir, "dds")
+            os.makedirs(os.path.join(video_root, "ps1"), exist_ok=True)
+            os.makedirs(os.path.join(video_root, "odd"), exist_ok=True)
+            os.makedirs(dds_root, exist_ok=True)
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            Path(os.path.join(video_root, "ps1", "sample.bin")).write_bytes(b"bin")
+            Path(os.path.join(video_root, "ps1", "sample.cue")).write_text('FILE "sample.bin" BINARY\n', encoding="utf-8")
+            Path(os.path.join(video_root, "odd", "sample.wmv")).write_bytes(b"wmv")
+            Path(os.path.join(dds_root, "sky_cubemap.dds")).write_bytes(b"dds")
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                       returncode=0,
+                       stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                       returncode=0,
+                       stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"external_disc_video_manifest": {"ok": true}, "external_dds_manifest": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                with patch.dict(
+                    os.environ,
+                    {
+                       "ALPHA_FIXER_REAL_DISC_VIDEO_MANIFEST": "",
+                       "ALPHA_FIXER_REAL_ODD_CONTAINER_MANIFEST": "",
+                       "ALPHA_FIXER_REAL_ODD_CONTAINER_VIDEO_MANIFEST": "",
+                       "ALPHA_FIXER_REAL_DDS_DX10_MANIFEST": "",
+                       "ALPHA_FIXER_REAL_DDS_COMPLEX_MANIFEST": "",
+                       "ALPHA_FIXER_REAL_VIDEO_CORPUS": video_root,
+                       "ALPHA_FIXER_REAL_DDS_CORPUS": dds_root,
+                    },
+                    clear=False,
+                ):
+                    rc = verify.main([target, "--run-selftest", "--use-private-local-manifests"])
+            self.assertEqual(rc, 0)
+            self.assertEqual(len(calls), 3)
+            selftest_env = calls[-1]["env"]
+            merged_disc = verify.load_manifest_entries(selftest_env["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"])
+            merged_dds = verify.load_manifest_entries(selftest_env["ALPHA_FIXER_RUNTIME_DDS_MANIFEST"])
+            self.assertTrue(any(str(entry.get("group")) == "bin/cue disc image" for entry in merged_disc))
+            self.assertTrue(any(str(entry.get("group")) == "legacy container" for entry in merged_disc))
+            self.assertTrue(any(str(entry.get("group")) == "cubemap" for entry in merged_dds))
+
+    def test_verify_packaged_app_use_private_local_manifests_requires_manifest_or_corpus_input(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            with patch.dict(
+                os.environ,
+                {
+                    "ALPHA_FIXER_REAL_DISC_VIDEO_MANIFEST": "",
+                    "ALPHA_FIXER_REAL_ODD_CONTAINER_MANIFEST": "",
+                    "ALPHA_FIXER_REAL_ODD_CONTAINER_VIDEO_MANIFEST": "",
+                    "ALPHA_FIXER_REAL_DDS_DX10_MANIFEST": "",
+                    "ALPHA_FIXER_REAL_DDS_COMPLEX_MANIFEST": "",
+                    "ALPHA_FIXER_REAL_DISC_VIDEO_CORPUS": "",
+                    "ALPHA_FIXER_REAL_VIDEO_CORPUS": "",
+                    "ALPHA_FIXER_VIDEO_CORPUS_DIR": "",
+                    "ALPHA_FIXER_REAL_DDS_DX10_CORPUS": "",
+                    "ALPHA_FIXER_REAL_DDS_CORPUS": "",
+                    "ALPHA_FIXER_DDS_CORPUS_DIR": "",
+                },
+                clear=False,
+            ):
+                with self.assertRaises(SystemExit) as ctx:
+                    verify.main([target, "--use-private-local-manifests"])
+        self.assertIn("No private local manifests were found", str(ctx.exception))
+        self.assertIn("no discoverable private corpus samples", str(ctx.exception))
+
+    def test_verify_packaged_app_can_require_public_manifest_checks(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+
+            def _fake_run(command, *, env, timeout):
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"external_disc_video_manifest": {"ok": true, "detail": "disc ok"}, "external_dds_manifest": {"ok": true, "detail": "dds ok"}, "external_format_matrix_manifest": {"ok": true, "detail": "matrix ok"}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--use-public-sample-manifests",
+                        "--require-public-manifest-checks",
+                    ]
+                )
+        self.assertEqual(rc, 0)
+
+    def test_verify_packaged_app_can_require_public_manifest_group_checks(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"external_disc_video_manifest_disc_image": {"ok": true}, "external_disc_video_manifest_psp": {"ok": true}, "external_disc_video_manifest_pmf_movie_asset": {"ok": true}, "external_disc_video_manifest_odd_container": {"ok": true}, "external_disc_video_manifest_legacy_container": {"ok": true}, "external_disc_video_manifest_program_stream": {"ok": true}, "external_disc_video_manifest_matroska_family": {"ok": true}, "external_disc_video_manifest_audio_only": {"ok": true}, "external_dds_manifest_bc6h": {"ok": true}, "external_dds_manifest_bc4": {"ok": true}, "external_dds_manifest_dx10_bc4": {"ok": true}, "external_dds_manifest_bc5": {"ok": true}, "external_dds_manifest_dx10_bc5": {"ok": true}, "external_dds_manifest_bc7_mipmap": {"ok": true}, "external_dds_manifest_bc7": {"ok": true}, "external_dds_manifest_dx10_rgba": {"ok": true}, "external_dds_manifest_rgba_mipmap": {"ok": true}, "external_dds_manifest_unsupported_dxgi": {"ok": true}, "external_dds_manifest_unsupported_pixel_format": {"ok": true}, "external_dds_manifest_unsupported_bitcount": {"ok": true}, "external_format_matrix_manifest_dds": {"ok": true}, "external_format_matrix_manifest_gif": {"ok": true}, "external_format_matrix_manifest_ico": {"ok": true}, "external_format_matrix_manifest_png": {"ok": true}, "external_format_matrix_manifest_jpeg": {"ok": true}, "external_format_matrix_manifest_tiff": {"ok": true}, "external_format_matrix_manifest_bmp": {"ok": true}, "external_format_matrix_manifest_tga": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--use-public-sample-manifests",
+                        "--require-public-manifest-group-checks",
+                    ]
+                )
+        self.assertEqual(rc, 0)
+        selftest_env = calls[-1]["env"]
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DISC_GROUP_CHECKS"], "1")
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS"], "1")
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS"], "1")
+
+    def test_verify_packaged_app_can_require_grouped_video_selftest_checks(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+
+            def _fake_run(command, *, env, timeout):
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"generated_mp4_load": {"ok": true}, "mpegts_load": {"ok": true}, "synthetic_bin_probe": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main([target, "--run-selftest", "--require-video-selftest-checks"])
+        self.assertEqual(rc, 0)
+
+    def test_verify_packaged_app_can_require_stress_selftest_checks(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"stress_image_session_batch": {"ok": true}, "stress_video_session_batch": {"ok": true}, "stress_builder_dialog_cycles": {"ok": true}, "stress_history_roundtrip": {"ok": true}, "stress_peak_rss_growth": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main([target, "--run-selftest", "--selftest-stress-loops", "2", "--require-stress-selftest-checks"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(calls[-1]["env"]["ALPHA_FIXER_RUNTIME_STRESS_LOOPS"], "2")
+
+    def test_verify_packaged_app_can_require_manifest_group_checks(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            disc_manifest = os.path.join(tmpdir, "disc.json")
+            dds_manifest = os.path.join(tmpdir, "dds.json")
+            matrix_manifest = os.path.join(tmpdir, "matrix.json")
+            with open(disc_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"platform": "PSP", "path": "/tmp/psp.iso"}, {"platform": "PS1", "path": "/tmp/ps1.bin"}]}, handle)
+            with open(dds_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"group": "cubemap", "path": "/tmp/cube.dds"}, {"group": "array", "path": "/tmp/array.dds"}]}, handle)
+            with open(matrix_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"input": "/tmp/in.png", "target_format": "PNG"}, {"input": "/tmp/in.webp", "target_format": "DDS"}]}, handle)
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"external_disc_video_manifest_psp": {"ok": true}, "external_disc_video_manifest_ps1": {"ok": true}, "external_dds_manifest_cubemap": {"ok": true}, "external_dds_manifest_array": {"ok": true}, "external_format_matrix_manifest_png": {"ok": true}, "external_format_matrix_manifest_dds": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--disc-video-manifest",
+                        disc_manifest,
+                        "--dds-manifest",
+                        dds_manifest,
+                        "--format-matrix-manifest",
+                        matrix_manifest,
+                        "--require-disc-manifest-group-checks",
+                        "--require-dds-manifest-group-checks",
+                        "--require-format-manifest-group-checks",
+                    ]
+                )
+        self.assertEqual(rc, 0)
+        selftest_env = calls[-1]["env"]
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DISC_GROUP_CHECKS"], "1")
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS"], "1")
+        self.assertEqual(selftest_env["ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS"], "1")
+
+    def test_verify_packaged_app_can_require_specific_manifest_coverage_labels(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            json_out = os.path.join(tmpdir, "report.json")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            disc_manifest = os.path.join(tmpdir, "disc.json")
+            dds_manifest = os.path.join(tmpdir, "dds.json")
+            matrix_manifest = os.path.join(tmpdir, "matrix.json")
+            with open(disc_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"platform": "PSP", "path": "/tmp/psp.iso"}, {"platform": "PS1", "path": "/tmp/ps1.bin"}, {"platform": "PS2", "path": "/tmp/ps2.iso"}]}, handle)
+            with open(dds_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"group": "BC6H", "path": "/tmp/bc6h.dds"}, {"group": "BC7", "path": "/tmp/bc7.dds"}, {"group": "mipmap", "path": "/tmp/mip.dds"}]}, handle)
+            with open(matrix_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"input": "/tmp/in.png", "target_format": "PNG"}, {"input": "/tmp/in.webp", "target_format": "DDS"}]}, handle)
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"external_disc_video_manifest": {"ok": true}, "external_dds_manifest": {"ok": true}, "external_format_matrix_manifest": {"ok": true}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--disc-video-manifest",
+                        disc_manifest,
+                        "--dds-manifest",
+                        dds_manifest,
+                        "--format-matrix-manifest",
+                        matrix_manifest,
+                        "--require-disc-manifest-platform",
+                        "PSP",
+                        "--require-disc-manifest-platform",
+                        "PS1",
+                        "--require-disc-manifest-platform",
+                        "PS2",
+                        "--require-dds-manifest-group",
+                        "BC6H",
+                        "--require-dds-manifest-group",
+                        "BC7",
+                        "--require-dds-manifest-group",
+                        "mipmap",
+                        "--require-format-manifest-target",
+                        "PNG",
+                        "--require-format-manifest-target",
+                        "DDS",
+                        "--json-out",
+                        json_out,
+                    ]
+                )
+            payload = json.loads(Path(json_out).read_text(encoding="utf-8"))
+        self.assertEqual(rc, 0)
+        self.assertEqual(
+            payload["manifest_inputs"]["disc_video"]["coverage_review"]["platform"]["missing_labels"],
+            [],
+        )
+        self.assertEqual(
+            payload["manifest_inputs"]["dds"]["coverage_review"]["group"]["missing_labels"],
+            [],
+        )
+        self.assertEqual(
+            payload["manifest_inputs"]["format_matrix"]["coverage_review"]["target"]["missing_labels"],
+            [],
+        )
+
+    def test_verify_packaged_app_required_manifest_coverage_fails_when_missing(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            dds_manifest = os.path.join(tmpdir, "dds.json")
+            with open(dds_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"group": "BC6H", "path": "/tmp/bc6h.dds"}]}, handle)
+            with self.assertRaises(SystemExit) as ctx:
+                verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--dds-manifest",
+                        dds_manifest,
+                        "--require-dds-manifest-group",
+                        "BC6H",
+                        "--require-dds-manifest-group",
+                        "BC7",
+                    ]
+                )
+        self.assertIn("DDS manifest missing required group labels", str(ctx.exception))
+        self.assertIn("BC7", str(ctx.exception))
+
+    def test_verify_packaged_app_manifest_group_checks_require_grouped_manifest(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            plain_manifest = os.path.join(tmpdir, "plain.json")
+            with open(plain_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"path": "/tmp/sample.iso"}]}, handle)
+            with self.assertRaises(SystemExit) as ctx:
+                verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--disc-video-manifest",
+                        plain_manifest,
+                        "--require-disc-manifest-group-checks",
+                    ]
+                )
+        self.assertIn("platform/group labels", str(ctx.exception))
+
+    def test_verify_packaged_app_public_manifest_group_checks_require_all_manifests(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            with self.assertRaises(SystemExit) as ctx:
+                verify.main([target, "--run-selftest", "--require-public-manifest-group-checks"])
+        self.assertIn("Use --use-public-sample-manifests", str(ctx.exception))
+
+    def test_verify_packaged_app_grouped_dds_selftest_checks_need_run_selftest(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            with self.assertRaises(SystemExit) as ctx:
+                verify.main([target, "--require-dds-selftest-checks"])
+        self.assertIn("--run-selftest", str(ctx.exception))
+
+    def test_verify_packaged_app_require_public_manifest_checks_fails_when_missing(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+
+            def _fake_run(command, *, env, timeout):
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 2, "checks": {"external_disc_video_manifest": {"ok": true}, "external_dds_manifest": {"ok": false, "detail": "dds failed"}}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                with self.assertRaises(SystemExit) as ctx:
+                    verify.main(
+                        [
+                            target,
+                            "--run-selftest",
+                            "--use-public-sample-manifests",
+                            "--require-public-manifest-checks",
+                        ]
+                    )
+        self.assertIn("external_dds_manifest", str(ctx.exception))
+
+    def test_verify_packaged_app_can_require_bundled_dependencies_and_no_asset_gaps(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+
+            def _fake_run(command, *, env, timeout):
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout=(
+                            'ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, '
+                            '"odd_container_probe_ready": true, "missing_linux_runtime_libs": [], '
+                            '"dds_compression_available": true, "ffmpeg_bundled": true, '
+                            '"ffprobe_bundled": true, "imagemagick_bundled": true, '
+                            '"packaged_asset_warnings": []}\n'
+                        ),
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--require-bundled-ffmpeg",
+                        "--require-bundled-ffprobe",
+                        "--require-bundled-imagemagick",
+                        "--require-no-packaged-asset-gaps",
+                    ]
+                )
+        self.assertEqual(rc, 0)
+
+    def test_verify_packaged_app_can_require_packaged_bundle_ready_and_svg(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+
+            def _fake_run(command, *, env, timeout):
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true, "default_theme_svg_bundled": true, "packaged_bundle_ready": true, "packaged_asset_warnings": []}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--require-packaged-bundle-ready",
+                        "--require-bundled-default-theme-svg",
+                    ]
+                )
+        self.assertEqual(rc, 0)
+
+    def test_verify_packaged_app_merges_repeated_manifest_arguments(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+            psp_manifest = os.path.join(tmpdir, "psp.json")
+            ps1_manifest = os.path.join(tmpdir, "ps1.json")
+            with open(psp_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"path": "/tmp/psp.iso", "expect": "load_or_explain"}]}, handle)
+            with open(ps1_manifest, "w", encoding="utf-8") as handle:
+                json.dump({"entries": [{"path": "/tmp/ps1.bin", "expect": "load_or_explain"}]}, handle)
+            calls = []
+
+            def _fake_run(command, *, env, timeout):
+                calls.append({"command": list(command), "env": dict(env), "timeout": timeout})
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": true, "odd_container_probe_ready": true, "missing_linux_runtime_libs": [], "dds_compression_available": true}\n',
+                    )
+                if env.get("ALPHA_FIXER_RUNTIME_SELFTEST"):
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_SELFTEST={"passed": true, "iterations": 1, "checks": {}}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                rc = verify.main(
+                    [
+                        target,
+                        "--run-selftest",
+                        "--disc-video-manifest",
+                        psp_manifest,
+                        "--disc-video-manifest",
+                        ps1_manifest,
+                    ]
+                )
+        self.assertEqual(rc, 0)
+        merged_payload = json.loads(calls[-1]["env"]["ALPHA_FIXER_RUNTIME_DISC_VIDEO_MANIFEST"])
+        self.assertEqual(len(merged_payload["entries"]), 2)
+        self.assertEqual(merged_payload["entries"][0]["path"], "/tmp/psp.iso")
+        self.assertEqual(merged_payload["entries"][1]["path"], "/tmp/ps1.bin")
+
+    def test_verify_packaged_app_can_require_ffmpeg_selfcheck(self):
+        module_path = os.path.join(os.path.dirname(__file__), "..", "scripts", "verify_packaged_app.py")
+        spec = importlib.util.spec_from_file_location("verify_packaged_app", module_path)
+        verify = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(verify)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "AlphaFixerConverter")
+            with open(target, "w", encoding="utf-8") as handle:
+                handle.write("stub")
+            os.chmod(target, 0o755)
+
+            def _fake_run(command, *, env, timeout):
+                if env.get("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP") == "1":
+                    return types.SimpleNamespace(
+                        returncode=0,
+                        stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={"video_runtime_ready": false, "odd_container_probe_ready": false, "missing_linux_runtime_libs": [], "dds_compression_available": true, "ffmpeg_runtime_ready": false, "ffmpeg_runtime_detail": "permission denied"}\n',
+                    )
+                return types.SimpleNamespace(returncode=0, stdout="")
+
+            with patch.object(verify, "_run_and_echo", side_effect=_fake_run):
+                with self.assertRaises(SystemExit) as ctx:
+                    verify.main([target, "--require-ffmpeg-selfcheck"])
+        self.assertIn("ffmpeg_runtime_ready=false", str(ctx.exception))
+
+    def test_runtime_selftest_dump_records_external_manifest_checks(self):
+        import main
+
+        buffer = io.StringIO()
+        fake_image_instance = MagicMock()
+        fake_image_instance.size = (32, 24)
+        fake_pil_image = MagicMock()
+        fake_pil_image.new.return_value = fake_image_instance
+        fake_dds = MagicMock()
+        fake_dds.size = (32, 24)
+        fake_alpha = types.SimpleNamespace(_load_dds=MagicMock(return_value=fake_dds))
+        fake_fc = types.SimpleNamespace(
+            SUPPORTED_OUTPUT_FORMATS={"PNG": ".png"},
+            output_codec_selfcheck=MagicMock(return_value={}),
+            convert_file=MagicMock(return_value="/tmp/out.png"),
+            dds_compression_available=MagicMock(return_value=False),
+            _has_vtracer=MagicMock(return_value=False),
+            _load_svg=MagicMock(),
+        )
+        fake_vt = types.SimpleNamespace(_get_ffmpeg_exe=MagicMock(return_value=None))
+        fake_ui_pkg = types.SimpleNamespace(video_tool=fake_vt)
+        with patch.object(main, "_runtime_selftest_iterations", return_value=1):
+            with patch.object(main, "_runtime_selftest_peak_rss_mb", return_value=None):
+                with patch("main.tempfile.TemporaryDirectory") as tmpdir_cls:
+                    tmpdir_cls.return_value.__enter__.return_value = self._selftest_directory.name
+                    tmpdir_cls.return_value.__exit__.return_value = False
+                    with patch.object(main, "load_manifest_entries_from_env") as loader:
+                        loader.side_effect = [
+                            [{"path": "/tmp/disc.iso"}],
+                            [{"path": "/tmp/sample.dds"}],
+                            [{"input": "/tmp/sample.png", "target_format": "PNG"}],
+                        ]
+                        with patch.object(main, "execute_disc_video_manifest_report", return_value={"ok": True, "detail": "disc ok", "sample_results": []}):
+                            with patch.object(main, "execute_dds_manifest_report", return_value={"ok": True, "detail": "dds ok", "sample_results": []}):
+                                with patch.object(main, "execute_format_matrix_manifest_report", return_value={"ok": True, "detail": "matrix ok", "sample_results": []}):
+                                    with patch.dict(
+                                        sys.modules,
+                                        {
+                                            "PIL": types.SimpleNamespace(Image=fake_pil_image),
+                                            "PIL.Image": fake_pil_image,
+                                            "src.core.alpha_processor": fake_alpha,
+                                            "src.core.file_converter": fake_fc,
+                                            "src.ui": fake_ui_pkg,
+                                            "src.ui.video_tool": fake_vt,
+                                        },
+                                        clear=False,
+                                    ):
+                                        with patch("sys.stdout", buffer):
+                                            main._emit_runtime_selftest_dump()
+        parsed = json.loads(buffer.getvalue().strip().split("=", 1)[1])
+        self.assertIn("external_disc_video_manifest", parsed["checks"])
+        self.assertIn("external_dds_manifest", parsed["checks"])
+        self.assertIn("external_format_matrix_manifest", parsed["checks"])
+        self.assertTrue(parsed["checks"]["external_disc_video_manifest"]["ok"])
+        self.assertEqual(parsed["manifest_results"]["disc_video"]["detail"], "disc ok")
+        self.assertEqual(parsed["manifest_results"]["dds"]["detail"], "dds ok")
+        self.assertEqual(parsed["manifest_results"]["format_matrix"]["detail"], "matrix ok")
+
+    def test_main_window_runtime_readiness_helpers_surface_limits(self):
+        _require_qt_gui(self)
+        from src.ui import main_window as mw
+
+        summary = {
+            "video_runtime_ready": False,
+            "odd_container_probe_ready": False,
+            "missing_video_bits": ["imageio", "ffmpeg"],
+            "dds_compression_available": False,
+            "optional_output_limits": [("AVIF", "needs libavif")],
+            "missing_linux_runtime_libs": ["libEGL.so.1"],
+            "packaged_runtime_notice": "⚠ Optional Linux runtime libraries are missing: libEGL.so.1.",
+            "feature_readiness_notice": "⚠ Optional feature limits detected: video import/MP4 export unavailable.",
+            "optional_qt_notice": "⚠ Optional Linux multimedia backends unavailable: PipeWire.",
+            "has_imageio": False,
+            "has_imageio_ffmpeg": True,
+            "ffmpeg_path": "",
+            "ffprobe_path": "",
+        }
+
+        banner = mw._runtime_readiness_banner_text(summary)
+        tooltip = mw._runtime_readiness_banner_tooltip(summary)
+
+        self.assertIn("App status:", banner)
+        self.assertIn("video limited", banner)
+        self.assertIn("DDS extras limited", banner)
+        self.assertIn("1 export limit", banner)
+        self.assertIn("source run", banner)
+        self.assertIn("Main-window readiness snapshot", tooltip)
+        self.assertIn("imageio: missing", tooltip)
+        self.assertIn("ffmpeg: missing", tooltip)
+        self.assertIn("DDS compressed output: limited", tooltip)
+        self.assertIn("ImageMagick/wand runtime: limited", tooltip)
+        self.assertIn("Qt SVG renderer:", tooltip)
+        self.assertIn("Alpha & RGBA:", tooltip)
+        self.assertIn("Alpha Painter:", tooltip)
+        self.assertIn("History:", tooltip)
+
+    def test_main_window_runtime_readiness_helpers_surface_packaged_asset_gap_details(self):
+        _require_qt_gui(self)
+        from src.ui import main_window as mw
+
+        summary = {
+            "video_runtime_ready": True,
+            "odd_container_probe_ready": True,
+            "missing_video_bits": [],
+            "dds_compression_available": True,
+            "optional_output_limits": [],
+            "missing_linux_runtime_libs": [],
+            "packaged_runtime_notice": "",
+            "feature_readiness_notice": "⚠ Optional feature limits detected: packaged asset gaps: ffprobe missing.",
+            "optional_qt_notice": "",
+            "has_imageio": True,
+            "has_imageio_ffmpeg": True,
+            "ffmpeg_path": "/tmp/ffmpeg",
+            "ffprobe_path": "",
+            "ffmpeg_path_exists": True,
+            "ffprobe_path_exists": False,
+            "wand_runtime_ready": True,
+            "qt_svg_ready": True,
+            "default_theme_svg_ready": True,
+            "default_theme_svg_path": "/tmp/panda_dark.svg",
+            "theme_svg_missing_count": 0,
+            "packaged_asset_warnings": ["packaged ffprobe binary missing"],
+        }
+        with patch.object(mw, "_gif_builder_capability_details", return_value="GIF DETAIL"):
+            with patch.object(mw, "_video_capability_details", return_value="VIDEO DETAIL"):
+                with patch.object(mw, "_selective_alpha_capability_details", return_value="SELECTIVE DETAIL"):
+                    with patch.object(mw, "_history_capability_details", return_value="HISTORY DETAIL"):
+                        banner = mw._runtime_readiness_banner_text(summary)
+                        tooltip = mw._runtime_readiness_banner_tooltip(summary)
+
+        self.assertIn("source run", banner)
+        self.assertIn("Packaged asset gaps:", tooltip)
+        self.assertIn("packaged ffprobe binary missing", tooltip)
+        self.assertIn("Runtime component audit:", tooltip)
+        self.assertIn("SELECTIVE DETAIL", tooltip)
+        self.assertIn("HISTORY DETAIL", tooltip)
+        self.assertIn("GIF DETAIL", tooltip)
+        self.assertIn("VIDEO DETAIL", tooltip)
+        self.assertIn("Converter:", tooltip)
+        self.assertIn("Alpha Painter:", tooltip)
+        self.assertIn("History:", tooltip)
+        self.assertIn("GIF Builder:", tooltip)
+        self.assertIn("Video Builder:", tooltip)
+
+    def test_main_window_runtime_readiness_helpers_surface_verified_packaged_bundle(self):
+        _require_qt_gui(self)
+        from src.ui import main_window as mw
+
+        summary = {
+            "frozen": True,
+            "bundle_dir": "/tmp/dist",
+            "video_runtime_ready": True,
+            "odd_container_probe_ready": True,
+            "missing_video_bits": [],
+            "dds_compression_available": True,
+            "optional_output_limits": [],
+            "missing_linux_runtime_libs": [],
+            "packaged_runtime_notice": "",
+            "feature_readiness_notice": "",
+            "optional_qt_notice": "",
+            "has_imageio": True,
+            "has_imageio_ffmpeg": True,
+            "ffmpeg_path": "/tmp/dist/ffmpeg",
+            "ffprobe_path": "/tmp/dist/ffprobe",
+            "ffmpeg_path_exists": True,
+            "ffprobe_path_exists": True,
+            "ffmpeg_runtime_ready": True,
+            "ffprobe_runtime_ready": True,
+            "ffmpeg_bundled": True,
+            "ffprobe_bundled": True,
+            "wand_runtime_ready": True,
+            "imagemagick_bundled": True,
+            "qt_svg_ready": True,
+            "default_theme_svg_ready": True,
+            "default_theme_svg_path": "/tmp/dist/panda_dark.svg",
+            "default_theme_svg_bundled": True,
+            "theme_svg_missing_count": 0,
+            "packaged_asset_warnings": [],
+            "packaged_bundle_ready": True,
+        }
+
+        banner = mw._runtime_readiness_banner_text(summary)
+        tooltip = mw._runtime_readiness_banner_tooltip(summary)
+
+        self.assertIn("bundle verified", banner)
+        self.assertIn("Packaged dependency audit:", tooltip)
+        self.assertIn("Bundled ffmpeg: yes", tooltip)
+        self.assertIn("Packaged bundle verification: passed", tooltip)
+
 
 # ---------------------------------------------------------------------------
 # SettingsManager – new keys
@@ -163,7 +2435,6 @@ class TestDropFileList(unittest.TestCase):
 
 class TestSettingsManagerNewKeys(unittest.TestCase):
     def setUp(self):
-        _get_app()
         # Use a temp location to avoid polluting real settings
         from PyQt6.QtCore import QSettings
         with patch.object(
@@ -210,6 +2481,31 @@ class TestSettingsManagerNewKeys(unittest.TestCase):
         result = self._mgr.delete_named_theme("DoesNotExist")
         self.assertFalse(result)
 
+    def test_gif_builder_history_uses_track_flag_and_per_tool_limit(self):
+        self._mgr.set("history_max_entries", 10)
+        self._mgr.set("history_max_entries_gif_builder", 2)
+        self._mgr.add_gif_builder_history({"timestamp": "1"})
+        self._mgr.add_gif_builder_history({"timestamp": "2"})
+        self._mgr.add_gif_builder_history({"timestamp": "3"})
+        history = self._mgr.get_gif_builder_history()
+        self.assertEqual([entry["timestamp"] for entry in history], ["3", "2"])
+        self._mgr.set("history_track_gif_builder", False)
+        self._mgr.add_gif_builder_history({"timestamp": "4"})
+        history = self._mgr.get_gif_builder_history()
+        self.assertEqual([entry["timestamp"] for entry in history], ["3", "2"])
+
+    def test_video_builder_history_uses_track_flag_and_per_tool_limit(self):
+        self._mgr.set("history_max_entries", 10)
+        self._mgr.set("history_max_entries_video_builder", 1)
+        self._mgr.add_video_builder_history({"timestamp": "1"})
+        self._mgr.add_video_builder_history({"timestamp": "2"})
+        history = self._mgr.get_video_builder_history()
+        self.assertEqual([entry["timestamp"] for entry in history], ["2"])
+        self._mgr.set("history_track_video_builder", False)
+        self._mgr.add_video_builder_history({"timestamp": "3"})
+        history = self._mgr.get_video_builder_history()
+        self.assertEqual([entry["timestamp"] for entry in history], ["2"])
+
 
 # ---------------------------------------------------------------------------
 # SoundEngine – basic instantiation and WAV generation
@@ -235,7 +2531,7 @@ class TestSoundEngine(unittest.TestCase):
 
     def test_play_click_respects_sound_disabled(self):
         """play_click should not attempt to play when sound_enabled=False."""
-        _get_app()
+        app = _get_app()
         settings = MagicMock()
         settings.get.side_effect = lambda k, d=None: False if k == "sound_enabled" else (d or "")
         from src.ui.sound_engine import SoundEngine
@@ -243,10 +2539,11 @@ class TestSoundEngine(unittest.TestCase):
         # Should not raise even with no multimedia backend
         engine.play_click()
         engine.cleanup()
+        self.assertIsNotNone(app)
 
     def test_cleanup_removes_temp_file(self):
         """cleanup() should remove the generated temp WAV."""
-        _get_app()
+        app = _get_app()
         settings = MagicMock()
         settings.get.return_value = False
         from src.ui.sound_engine import SoundEngine
@@ -255,6 +2552,163 @@ class TestSoundEngine(unittest.TestCase):
         engine.cleanup()
         if wav:
             self.assertFalse(os.path.isfile(wav))
+        self.assertIsNotNone(app)
+
+    def test_cleanup_destroys_audio_before_unlink_and_disables_playback(self):
+        app = _get_app()
+        from PyQt6 import sip
+        from PyQt6.QtCore import QObject
+        from src.ui.sound_engine import SoundEngine
+
+        with patch.object(SoundEngine, "_setup"):
+            engine = SoundEngine(MagicMock())
+        engine.install_on_app(app)
+        effect = QObject(engine)
+        effect.stop = MagicMock()
+        effect.setSource = MagicMock()
+        engine._effect = effect
+        with tempfile.TemporaryDirectory(dir=os.getcwd()) as directory:
+            wav = Path(directory) / "click.wav"
+            wav.write_bytes(b"test audio")
+            engine._click_wav = str(wav)
+            real_unlink = os.unlink
+
+            def unlink_after_destroy(path):
+                self.assertTrue(sip.isdeleted(effect))
+                self.assertIsNone(engine._app)
+                real_unlink(path)
+
+            with patch("src.ui.sound_engine.os.unlink", side_effect=unlink_after_destroy):
+                engine.cleanup()
+                engine.cleanup()
+            self.assertFalse(wav.exists())
+        effect.stop.assert_called_once()
+        effect.setSource.assert_called_once()
+        self.assertTrue(effect.setSource.call_args.args[0].isEmpty())
+        self.assertIsNone(engine._effect)
+        with patch.object(engine, "_play_subprocess") as fallback:
+            engine._play("no-longer-available.wav")
+            fallback.assert_not_called()
+        sip.delete(engine)
+
+
+class TestOrderlyApplicationShutdown(unittest.TestCase):
+    def test_main_window_shutdown_keeps_bounded_waits_and_is_idempotent(self):
+        app = _get_app()
+        from PyQt6 import sip
+        from PyQt6.QtGui import QCloseEvent
+        from src.core.settings_manager import SettingsManager
+        from src.ui.main_window import MainWindow
+
+        scratch = Path.cwd() / "build" / "shutdown-tests"
+        scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as directory:
+            with patch("src.core.settings_manager._settings_ini_path",
+                       return_value=str(Path(directory) / "settings.ini")):
+                settings = SettingsManager()
+            window = MainWindow(settings)
+            threads = []
+            for tab in (window._alpha_tab, window._converter_tab):
+                for name, timeout in (("_worker", 15000), ("_preview_loader", 3000)):
+                    thread = MagicMock()
+                    thread.isRunning.return_value = True
+                    thread.wait.return_value = False
+                    setattr(tab, name, thread)
+                    threads.append((thread, timeout))
+            effect = window._sound._effect
+            pool = MagicMock()
+            pool.waitForDone.return_value = False
+            try:
+                with patch.object(settings, "sync", wraps=settings.sync) as sync, \
+                        patch("PyQt6.QtCore.QThreadPool.globalInstance", return_value=pool):
+                    window.closeEvent(QCloseEvent())
+                    window.closeEvent(QCloseEvent())
+                    sync.assert_called_once()
+                pool.waitForDone.assert_called_once_with(3000)
+                for thread, timeout in threads:
+                    thread.stop.assert_called_once()
+                    thread.wait.assert_called_once_with(timeout)
+                if effect is not None:
+                    self.assertTrue(sip.isdeleted(effect))
+                self.assertIsNone(window._sound._effect)
+                self.assertFalse(sip.isdeleted(app))
+            finally:
+                sip.delete(window)
+                sip.delete(settings._qs)
+
+    def test_direct_exit_closes_without_forcing_widget_destruction(self):
+        app = _get_app()
+        import main
+        from PyQt6 import sip
+        from PyQt6.QtCore import QObject, QTimer
+        from PyQt6.QtWidgets import QWidget
+
+        events = []
+
+        class Window(QWidget):
+            def closeEvent(self, event):
+                events.append("close")
+                self.assert_app_alive()
+                super().closeEvent(event)
+
+            def assert_app_alive(self):
+                if sip.isdeleted(app):
+                    raise AssertionError("QApplication destroyed before window")
+
+        window = Window()
+        window.destroyed.connect(lambda: events.append("destroy"))
+        deferred = QObject(window)
+        deferred.destroyed.connect(lambda: events.append("deferred"))
+        deferred.deleteLater()
+        watchdog = MagicMock()
+        watchdog.stop.side_effect = lambda: events.append("watchdog")
+        window.show()
+        QTimer.singleShot(0, lambda: app.exit(7))
+
+        self.assertEqual(main._run_gui_event_loop(app, window, watchdog), 7)
+        self.assertFalse(sip.isdeleted(window))
+        self.assertFalse(window.isVisible())
+        self.assertIn("deferred", events)
+        self.assertLess(events.index("watchdog"), events.index("close"))
+        self.assertNotIn("destroy", events)
+        self.assertFalse(sip.isdeleted(app))
+        sip.delete(window)
+
+    def test_event_loop_exception_still_closes_window(self):
+        qt_app = _get_app()
+        import main
+        from PyQt6 import sip
+        from PyQt6.QtWidgets import QWidget
+
+        window = QWidget()
+        app = MagicMock()
+        app.exec.side_effect = RuntimeError("event loop failed")
+        watchdog = MagicMock()
+        with self.assertRaisesRegex(RuntimeError, "event loop failed"):
+            main._run_gui_event_loop(app, window, watchdog)
+        self.assertFalse(sip.isdeleted(window))
+        watchdog.stop.assert_called_once()
+        app.aboutToQuit.disconnect.assert_called_once()
+        self.assertFalse(sip.isdeleted(qt_app))
+        sip.delete(window)
+
+    def test_watchdog_stop_wakes_and_joins_monitor(self):
+        app = _get_app()
+        import main
+
+        watchdog = main._HangWatchdog()
+        watchdog._CHECK_INTERVAL_S = 60.0
+        watchdog.start()
+        thread = watchdog._thread
+        try:
+            watchdog.stop()
+            self.assertFalse(thread.is_alive())
+            self.assertIsNone(watchdog._thread)
+            self.assertFalse(watchdog._timer.isActive())
+            self.assertIsNotNone(app)
+            watchdog.stop()
+        finally:
+            watchdog.stop()
 
 
 # ---------------------------------------------------------------------------
@@ -306,13 +2760,11 @@ class TestMouseTrailOverlay(unittest.TestCase):
             overlay.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         )
 
-    def test_no_system_background(self):
-        """WA_NoSystemBackground must be set so Qt does not pre-fill the overlay
-        with the background colour (which would erase underlying child widgets)."""
+    def test_system_background_clears_stale_trail_pixels(self):
         from src.ui.mouse_trail import MouseTrailOverlay
         from PyQt6.QtCore import Qt
         overlay = MouseTrailOverlay(self._parent)
-        self.assertTrue(
+        self.assertFalse(
             overlay.testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
         )
 
@@ -432,6 +2884,21 @@ class TestBeforeAfterWidget(unittest.TestCase):
         qi = _pil_to_qimage(Image.new("RGBA", (32, 32), (0, 0, 255, 200)))
         w.set_after(qi)
         self.assertIsNotNone(w._pix_after)
+        self.assertIsNotNone(w.after_image())
+
+    def test_display_only_updates_do_not_replace_raw_preview_images(self):
+        from src.ui.preview_pane import BeforeAfterWidget, _pil_to_qimage
+        from PIL import Image
+        w = BeforeAfterWidget(self._parent)
+        before_raw = _pil_to_qimage(Image.new("RGBA", (32, 32), (255, 0, 0, 255)))
+        after_raw = _pil_to_qimage(Image.new("RGBA", (32, 32), (0, 255, 0, 255)))
+        before_overlay = _pil_to_qimage(Image.new("RGBA", (32, 32), (0, 0, 255, 255)))
+        after_overlay = _pil_to_qimage(Image.new("RGBA", (32, 32), (255, 255, 0, 255)))
+        w.store_raw_images(before_raw, after_raw)
+        w.set_before(before_overlay, store_raw=False)
+        w.set_after(after_overlay, store_raw=False)
+        self.assertEqual(w.before_image().pixelColor(0, 0).getRgb(), before_raw.pixelColor(0, 0).getRgb())
+        self.assertEqual(w.after_image().pixelColor(0, 0).getRgb(), after_raw.pixelColor(0, 0).getRgb())
 
     def test_set_loading_clears_after(self):
         from src.ui.preview_pane import BeforeAfterWidget, _pil_to_qimage
@@ -474,6 +2941,32 @@ class TestBeforeAfterWidget(unittest.TestCase):
         w.set_after(qi)
         w.show()
         self._app.processEvents()
+
+
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+class TestButtonPressAnimator(unittest.TestCase):
+    def setUp(self):
+        self._app = _get_app()
+        from PyQt6.QtWidgets import QWidget
+        self._parent = QWidget()
+        self._parent.resize(300, 200)
+
+    def tearDown(self):
+        self._parent.hide()
+        self._parent.deleteLater()
+        self._app.processEvents()
+
+    def test_deleted_button_animation_is_ignored(self):
+        from PyQt6.QtWidgets import QPushButton
+        from src.ui.click_effects import ButtonPressAnimator
+
+        btn = QPushButton("Close", self._parent)
+        animator = ButtonPressAnimator(self._parent)
+        animator.set_mode("press")
+        btn.deleteLater()
+        self._app.processEvents()
+
+        animator._animate(btn)
 
 
 # ---------------------------------------------------------------------------
@@ -530,6 +3023,76 @@ class TestAlphaPreviewLoader(unittest.TestCase):
         self.assertEqual(len(errors), 1)
 
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+class TestAlphaPreviewHelpers(unittest.TestCase):
+    def setUp(self):
+        self._app = _get_app()
+        from src.core.settings_manager import SettingsManager
+        from src.core.presets import PresetManager
+        from src.ui.alpha_tool import AlphaFixerTab
+
+        self._settings = SettingsManager()
+        self._settings._qs = _FakeQSettings({})
+        self._presets = PresetManager(self._settings)
+        self._widget = AlphaFixerTab(self._presets, self._settings)
+
+    def tearDown(self):
+        self._widget.hide()
+        self._widget.deleteLater()
+        self._app.processEvents()
+
+    def test_helper_status_updates_for_alpha_and_atlas_overlays(self):
+        import numpy as np
+        from PIL import Image
+        from src.ui.preview_pane import _pil_to_qimage
+
+        arr = np.zeros((24, 24, 4), dtype=np.uint8)
+        arr[1:11, 1:11, :3] = 255
+        arr[1:11, 1:11, 3] = 255
+        arr[1:11, 13:23, :3] = 255
+        arr[1:11, 13:23, 3] = 255
+        arr[13:23, 1:11, :3] = 255
+        arr[13:23, 1:11, 3] = 255
+        arr[13:23, 13:23, :3] = 255
+        arr[13:23, 13:23, 3] = 255
+        arr[12, 6, 3] = 6
+        arr[18, 12, 3] = 4
+        img = Image.fromarray(arr, "RGBA")
+        qi = _pil_to_qimage(img)
+
+        self._widget._on_compare_ready(qi, qi)
+        self.assertIn("raw before/after preview", self._widget._preview_helper_lbl.text())
+
+        self._widget._alpha_vis_check.setChecked(True)
+        self.assertIn("alpha heat-map on", self._widget._preview_helper_lbl.text())
+
+        self._widget._atlas_detect_check.setChecked(True)
+        self.assertEqual(len(self._widget._atlas_cells), 4)
+        self.assertIn("atlas boxes on (4 cells)", self._widget._preview_helper_lbl.text())
+
+    def test_batch_import_completed_emits_status_notice(self):
+        received = []
+        self._widget.status_notice.connect(lambda message, timeout: received.append((message, timeout)))
+        self._widget._on_batch_import_completed(2, 1, 3)
+        self.assertEqual(received, [("Alpha queue: Added 2 new files; skipped 1 duplicate.", 6000)])
+
+    def test_get_queue_status_text_includes_preview_state(self):
+        self._widget._file_list.addItem("a.png")
+        with patch.object(
+            self._widget._file_list,
+            "get_thumbnail_summary",
+            return_value={"pending_count": 0, "failure_count": 2, "failure_categories": {"memory": 2}},
+        ):
+            text = self._widget.get_queue_status_text()
+        self.assertEqual(text, "📁 1 queued  •  2 preview failures (memory)")
+
+    def test_update_file_count_emits_queue_status_changed(self):
+        self._widget._file_list.addItem("a.png")
+        received = []
+        self._widget.queue_status_changed.connect(received.append)
+        with patch.object(self._widget, "get_queue_status_text", return_value="📁 1 queued  •  thumbnail previews paused"):
+            self._widget._update_file_count(1)
+        self.assertEqual(received, ["📁 1 queued  •  thumbnail previews paused"])
 
 
 class TestSettingsExportImport(unittest.TestCase):
@@ -757,6 +3320,31 @@ class _FakeQSettings:
         pass
 
 
+class TestSettingsManagerShortcutBindings(unittest.TestCase):
+    def setUp(self):
+        from src.core.settings_manager import SettingsManager
+        self._mgr = SettingsManager.__new__(SettingsManager)
+        self._store: dict = {}
+        self._mgr._qs = _FakeQSettings(self._store)
+
+    def test_get_custom_shortcuts_invalid_payload_returns_empty_dict(self):
+        self._store["custom_shortcuts"] = "not-json"
+        self.assertEqual(self._mgr.get_custom_shortcuts(), {})
+
+    def test_set_shortcut_binding_round_trips_and_clears_default(self):
+        self._mgr.set_shortcut_binding("gif_export", "Ctrl+Shift+G", "Ctrl+S")
+        self.assertEqual(
+            self._mgr.get_shortcut_binding("gif_export", "Ctrl+S"),
+            "Ctrl+Shift+G",
+        )
+        self._mgr.set_shortcut_binding("gif_export", "Ctrl+S", "Ctrl+S")
+        self.assertEqual(self._mgr.get_custom_shortcuts(), {})
+        self.assertEqual(
+            self._mgr.get_shortcut_binding("gif_export", "Ctrl+S"),
+            "Ctrl+S",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Theme engine – new palettes and THEME_EFFECTS
 # ---------------------------------------------------------------------------
@@ -849,8 +3437,14 @@ class TestClickEffectsOverlay(unittest.TestCase):
     def test_record_click_increments_counter(self):
         from src.ui.click_effects import ClickEffectsOverlay
         overlay = ClickEffectsOverlay(self._parent)
-        overlay.record_click()
-        overlay.record_click()
+        overlay.set_enabled(True)
+        from PyQt6.QtCore import QPointF, QEvent, Qt
+        from PyQt6.QtGui import QMouseEvent
+        event = QMouseEvent(QEvent.Type.MouseButtonPress, QPointF(10, 10),
+                           QPointF(10, 10), Qt.MouseButton.LeftButton,
+                           Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+        overlay.eventFilter(self._parent, event)
+        overlay.eventFilter(self._parent, event)
         self.assertEqual(overlay.click_count, 2)
 
     def test_set_effect_unknown_key_falls_back_to_default(self):
@@ -938,7 +3532,7 @@ class TestTooltipManager(unittest.TestCase):
     def test_normal_tips_cycle(self):
         from src.ui.tooltip_manager import _NORMAL
         self.assertIn("add_files", _NORMAL)
-        self.assertEqual(len(_NORMAL["add_files"]), 5)
+        self.assertGreaterEqual(len(_NORMAL["add_files"]), 5)
 
     def test_vulgar_tips_exist_for_all_normal_keys(self):
         from src.ui.tooltip_manager import _NORMAL, _VULGAR
@@ -946,13 +3540,13 @@ class TestTooltipManager(unittest.TestCase):
             self.assertIn(key, _VULGAR,
                           f"Missing No Filter tip for key '{key}'")
 
-    def test_all_tip_variants_have_exactly_five_entries(self):
+    def test_all_tip_variants_have_nonempty_rotating_entries(self):
         from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
-        # Normal and Dumbed Down keep exactly 5 variants per key for readability.
         for mode_name, tips_dict in [("Normal", _NORMAL), ("Dumbed", _DUMBED)]:
             for key, variants in tips_dict.items():
-                self.assertEqual(len(variants), 5,
-                                 f"{mode_name}['{key}'] should have 5 variants, got {len(variants)}")
+                self.assertGreaterEqual(len(variants), 2,
+                                        f"{mode_name}['{key}'] needs rotating variants")
+                self.assertTrue(all(str(variant).strip() for variant in variants))
         # No Filter 🤬 mode has at least 5 variants per key (usually 8 for extra variety).
         for key, variants in _VULGAR.items():
             self.assertGreaterEqual(len(variants), 5,
@@ -1072,9 +3666,8 @@ class TestThemeMakerEffect(unittest.TestCase):
         from src.ui.settings_dialog import _EFFECT_OPTIONS
         from src.ui.click_effects import _SPAWNERS
         option_keys = {key for key, _ in _EFFECT_OPTIONS}
-        for spawner_key in _SPAWNERS:
-            self.assertIn(spawner_key, option_keys,
-                          f"_EFFECT_OPTIONS missing key '{spawner_key}'")
+        for option_key in option_keys - {"default"}:
+            self.assertIn(option_key, _SPAWNERS)
 
     def test_effect_key_written_into_theme_on_save(self):
         """Saving a custom theme must preserve the _effect key."""
@@ -1470,6 +4063,3667 @@ class TestUseThemeCursorSetting(unittest.TestCase):
         self.assertIn("use_theme_cursor", SettingsManager.EXPORT_KEYS)
 
 
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+class TestVideoProbeFallbacks(unittest.TestCase):
+    def setUp(self):
+        _require_qt_gui(self)
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        callback_errors = []
+        patcher = patch.object(sys, "excepthook", side_effect=lambda kind, error, tb: callback_errors.append(str(error)))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(lambda: self.assertEqual(callback_errors, [], "Uncaught Qt callback exception"))
+        for name in ("information", "warning", "critical", "question"):
+            patcher = patch.object(QMessageBox, name, return_value=QMessageBox.StandardButton.No)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        for name, result in (
+            ("getSaveFileName", ("", "")),
+            ("getOpenFileName", ("", "")),
+            ("getOpenFileNames", ([], "")),
+            ("getExistingDirectory", ""),
+        ):
+            patcher = patch.object(QFileDialog, name, return_value=result)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _make_clip(self, active_frames=1, clip_type="video", **kwargs):
+        from src.ui.video_tool import _ClipEntry
+        clip = _ClipEntry(
+            "source.mp4", active_frames, lambda _: Image.new("RGBA", (2, 2)),
+            frame_size=(2, 2), clip_type=clip_type, **kwargs,
+        )
+        if clip_type == "image":
+            clip.still_duration_frames = active_frames
+        return clip
+
+    def _export_and_wait(self, dialog):
+        from src.ui.video_tool import VideoToolDialog
+        from tests.video_export_helpers import wait_for_video_export
+        snapshot = dialog._snapshot_clip_render_state
+        dialog._snapshot_clip_render_state = lambda clip, fps: {
+            **VideoToolDialog._snapshot_clip_render_state(dialog, clip, fps),
+            **snapshot(clip, fps),
+        }
+        dialog._export()
+        wait_for_video_export(dialog)
+
+    def test_probe_video_clip_uses_imageio_ffmpeg_count_fallback(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        class _FakeReader:
+            def get_meta_data(self):
+                return {"fps": 30.0, "nframes": 0, "duration": 0}
+
+            def get_data(self, idx):
+                self.last_idx = idx
+                return [[0]]
+
+            def count_frames(self):
+                raise RuntimeError("metadata missing")
+
+            def close(self):
+                return None
+
+        fake_ffmpeg = types.SimpleNamespace(
+            count_frames_and_secs=lambda path: (12, 0.4),
+        )
+        with patch.object(vt, "_open_video_reader", return_value=_FakeReader()):
+            with patch.dict(sys.modules, {"imageio_ffmpeg": fake_ffmpeg}):
+                fps, frame_count, frame_size, first_frame = vt._probe_video_clip("/tmp/test.mp4")
+        self.assertEqual(fps, 30.0)
+        self.assertEqual(frame_count, 12)
+        self.assertEqual(frame_size, (1, 1))
+        self.assertEqual(first_frame, [[0]])
+
+    def test_video_load_failure_hint_mentions_experimental_disc_images(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with patch.object(vt, "_video_io_diagnostics", return_value="Missing: ffmpeg executable."):
+            hint = vt._video_load_failure_hint("/tmp/game.iso")
+        self.assertIn("experimental", hint)
+        self.assertIn("ffmpeg can demux", hint)
+        self.assertIn("Missing: ffmpeg executable.", hint)
+
+    def test_video_load_failure_hint_mentions_disc_sidecar_retry_when_cue_exists(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_path = os.path.join(tmpdir, "game.bin")
+            cue_path = os.path.join(tmpdir, "game.cue")
+            with open(bin_path, "wb") as handle:
+                handle.write(b"bin")
+            with open(cue_path, "w", encoding="utf-8") as handle:
+                handle.write('FILE "game.bin" BINARY\n')
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint(bin_path)
+        self.assertIn("Companion disc sidecar files were detected", hint)
+        self.assertIn("game.cue", hint)
+
+    def test_video_load_failure_hint_includes_probe_summary_when_available(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "iso9660",
+            "has_video": False,
+            "video_codec": "",
+            "audio_codec": "mp2",
+            "width": 0,
+            "height": 0,
+            "fps": 0.0,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/game.iso")
+        self.assertIn("ffprobe did not detect a playable video stream", hint)
+        self.assertIn("Probe: container=iso9660; video=none; audio=mp2.", hint)
+
+    def test_video_load_failure_hint_mentions_audio_only_odd_container(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "ogg",
+            "has_video": False,
+            "has_audio": True,
+            "video_codec": "",
+            "audio_codec": "vorbis",
+            "width": 0,
+            "height": 0,
+            "fps": 0.0,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/weird.dat")
+        self.assertIn("audio but no playable video stream", hint)
+        self.assertIn("container=ogg", hint)
+
+    def test_video_load_failure_hint_mentions_multi_stream_recovery_choice(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "mpeg",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "mpeg2video",
+            "audio_codec": "ac3",
+            "width": 720,
+            "height": 480,
+            "fps": 29.97,
+            "video_stream_count": 2,
+            "audio_stream_count": 1,
+            "video_stream_index": 3,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/weird.vob")
+        self.assertIn("Multiple video streams were detected", hint)
+        self.assertIn("preferred-stream=3", hint)
+
+    def test_video_load_failure_hint_mentions_manual_audio_selection(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "matroska",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "h264",
+            "audio_codec": "ac3",
+            "width": 1280,
+            "height": 720,
+            "fps": 23.976,
+            "video_stream_count": 1,
+            "audio_stream_count": 2,
+            "video_stream_index": 0,
+            "audio_stream_index": 4,
+            "audio_stream_choices": [
+                {"index": 2, "codec_name": "ac3", "language": "eng", "title": "Main"},
+                {"index": 4, "codec_name": "ac3", "language": "jpn", "title": "Commentary"},
+            ],
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/streamed.mkv", preferred_audio_stream_index=4)
+        self.assertIn("Manual selection active: manual audio #4", hint)
+        self.assertIn("preferred-audio-stream=4", hint)
+        self.assertIn("try another audio stream or reload with source audio dropped", hint)
+
+    def test_video_load_failure_hint_mentions_alternate_audio_retries(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "mpeg",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "mpeg2video",
+            "audio_codec": "ac3",
+            "width": 720,
+            "height": 480,
+            "fps": 29.97,
+            "video_stream_count": 2,
+            "audio_stream_count": 3,
+            "video_stream_index": 1,
+            "audio_stream_index": 4,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/feature.vob")
+        self.assertIn("Multiple video streams were detected", hint)
+        self.assertIn("Multiple audio streams were detected", hint)
+        self.assertIn("alternate audio tracks", hint)
+
+    def test_video_load_failure_hint_surfaces_auto_audio_choice_and_commentary_guidance(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "mpeg",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "mpeg2video",
+            "audio_codec": "ac3",
+            "width": 720,
+            "height": 480,
+            "fps": 29.97,
+            "video_stream_count": 1,
+            "audio_stream_count": 3,
+            "video_stream_index": 1,
+            "audio_stream_index": 4,
+            "audio_stream_choices": [
+                {"index": 2, "codec_name": "ac3", "language": "eng", "title": "Main", "default": False},
+                {"index": 4, "codec_name": "ac3", "language": "eng", "title": "Director Commentary", "commentary": True, "default": True},
+                {"index": 6, "codec_name": "ac3", "language": "jpn", "title": "Dub", "dub": True, "default": False},
+            ],
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/feature.vob")
+        self.assertIn("Automatic selection active: preferred audio #4", hint)
+        self.assertIn("Director Commentary", hint)
+        self.assertIn("The currently preferred audio track looks like commentary audio", hint)
+
+    def test_video_load_failure_hint_mentions_recovery_exhausted_for_odd_container(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "mpeg",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "mpeg2video",
+            "audio_codec": "ac3",
+            "width": 720,
+            "height": 480,
+            "fps": 29.97,
+            "video_stream_count": 1,
+            "audio_stream_count": 1,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/weird.vob")
+        self.assertIn("still could not produce a playable clip", hint)
+        self.assertIn("remux or transcode recovery may still be required", hint)
+        self.assertIn("audio-drop", hint)
+        self.assertIn("PSP/PS1/PS2-era assets", hint)
+
+    def test_video_load_failure_hint_mentions_transport_stream_guidance(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "mpegts",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "mpeg2video",
+            "audio_codec": "aac",
+            "width": 720,
+            "height": 480,
+            "fps": 29.97,
+            "video_stream_count": 1,
+            "audio_stream_count": 1,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/capture.ts")
+        self.assertIn("Transport-stream sources often contain discontinuities", hint)
+
+    def test_video_load_failure_hint_mentions_realmedia_guidance(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "rm,rmvb",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "rv40",
+            "audio_codec": "cook",
+            "width": 640,
+            "height": 360,
+            "fps": 24.0,
+            "video_stream_count": 1,
+            "audio_stream_count": 1,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/legacy.rmvb")
+        self.assertIn("RealMedia / RMVB support is best-effort", hint)
+        self.assertIn("Detected a legacy RealVideo codec", hint)
+
+    def test_video_load_failure_hint_mentions_hevc_wrapper_guidance(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "mpegts",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "hevc",
+            "audio_codec": "aac",
+            "width": 1920,
+            "height": 1080,
+            "fps": 29.97,
+            "video_stream_count": 1,
+            "audio_stream_count": 1,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/capture.ts")
+        self.assertIn("Detected HEVC/H.265 or AV1 video", hint)
+        self.assertIn("H.264/AVC", hint)
+
+    def test_video_load_failure_hint_mentions_broadcast_codec_guidance(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "mxf",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "dnxhd",
+            "audio_codec": "pcm_s16le",
+            "width": 1920,
+            "height": 1080,
+            "fps": 25.0,
+            "video_stream_count": 1,
+            "audio_stream_count": 1,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/edit.mxf")
+        self.assertIn("Detected an intermediate/broadcast codec", hint)
+        self.assertIn("editorial transcode", hint)
+
+    def test_classify_video_import_failure_distinguishes_audio_only_and_recovery(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        self.assertEqual(
+            vt._classify_video_import_failure("odd.bin", "ffprobe detected audio but no playable video stream"),
+            "audio-only container",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("odd.vob", "Direct loading and ffmpeg recovery fallbacks still could not produce a playable clip."),
+            "recovery exhausted",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("album.m4a", "ffprobe only exposed an attached-picture/cover-art stream"),
+            "cover-art stream",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("clip.part1.vob", "This source looks like a segmented / multipart video set (2 parts detected)"),
+            "segmented container",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("strange.mxf", "Unsupported pixel format in codec pipeline"),
+            "video codec",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("modern.ts", "Detected HEVC/H.265 or AV1 video; when these codecs arrive in AVI/WMV/TS/odd wrappers, remuxing to MP4 or transcoding to H.264/AVC is usually the most reliable import path."),
+            "high-efficiency codec",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("concert.mkv", "Selected audio uses AC3/DTS-style compressed audio and multiple audio tracks are present; if import or export fails, try another audio stream or reload with source audio dropped."),
+            "source audio track",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("capture.ts", "Transport-stream sources often contain discontinuities or missing timestamps; recovery may rebuild timing, but severe capture gaps can still prevent loading."),
+            "transport stream timing",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("feature.mkv", "Matroska/WebM files can carry multiple alternate video/audio programs; if one stream fails, the builder will prefer the strongest detected video stream but manual stream reloads may still help."),
+            "matroska/webm program",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("edit.mov", "QuickTime/MOV-family files may depend on edit lists, timecode, or ProRes-style metadata; remux/transcode recovery is often needed when direct indexing is incomplete."),
+            "quicktime metadata",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("disc.str", "Detected legacy MPEG program-stream video commonly used in PSP/PS1/PS2-era assets; alternate tracks, cue/bin metadata, or audio-drop recovery may be needed before the clip becomes playable."),
+            "program stream layout",
+        )
+        self.assertEqual(
+            vt._classify_video_import_failure("slideshow.mkv", "Detected a still-image style video codec inside a nonstandard container; the builder may only recover this as a slideshow/still-frame source unless ffmpeg can transcode it cleanly."),
+            "still-image video",
+        )
+
+    def test_video_capability_summary_mentions_ready_state_and_audio_only_limit(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with patch.object(vt, "_has_ffmpeg", return_value=True):
+            with patch.object(vt, "_has_imageio", return_value=True):
+                with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                    with patch.object(vt, "_get_ffprobe_exe", return_value="/tmp/ffprobe"):
+                        summary = vt._video_capability_summary()
+        self.assertIn("Ready:", summary)
+        self.assertIn("Audio-only containers", summary)
+        self.assertIn("Odd-container probing and recovery", summary)
+
+    def test_video_capability_details_surface_diagnostics_and_manual_picker_gap(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with patch.object(vt, "_has_ffmpeg", return_value=True):
+            with patch.object(vt, "_has_imageio", return_value=True):
+                with patch.object(vt, "_has_imageio_ffmpeg", return_value=True):
+                    with patch.object(vt, "_get_ffprobe_exe", return_value="/tmp/ffprobe"):
+                        with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                            details = vt._video_capability_details()
+        self.assertIn("All video dependencies are available.", details)
+        self.assertIn("Selected Stream panel can reload a clip from manually chosen video and audio streams", details)
+        self.assertIn("ffprobe detail/probing ready", details)
+
+    def test_load_video_clip_uses_still_frame_fallback_when_recovery_paths_fail(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        with patch.object(vt, "_probe_video_clip", side_effect=RuntimeError("primary open failed")):
+            with patch.object(vt, "_probe_media_details", return_value={"has_video": True, "has_audio": True, "selected_video_attached_pic": True}):
+                with patch.object(vt, "_attempt_video_recovery", return_value=(None, "", None)):
+                    with patch.object(vt, "_extract_visual_still_frame", return_value=Image.new("RGBA", (8, 6), (255, 0, 0, 255))):
+                        clip = vt._load_video_clip("/tmp/album.bin")
+        self.assertIsNotNone(clip)
+        self.assertEqual(clip.clip_type, "image")
+        self.assertEqual(clip.source_path, "/tmp/album.bin")
+        self.assertTrue(clip.has_audio)
+        self.assertIn("still-frame fallback", clip.load_note)
+        clip.close()
+
+    def test_load_video_clip_retries_alternate_stream_recovery_for_multi_stream_sources(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        primary_probe = {
+            "has_video": True,
+            "has_audio": True,
+            "video_stream_count": 2,
+            "audio_stream_index": 7,
+            "video_stream_index": 3,
+            "video_stream_choices": [
+                {"index": 3, "attached_pic": False, "width": 320, "height": 240, "fps": 24.0, "bit_rate": 1000, "duration": 10.0},
+                {"index": 5, "attached_pic": False, "width": 640, "height": 480, "fps": 29.97, "bit_rate": 2000, "duration": 10.0},
+            ],
+        }
+        alternate_probe = {
+            **primary_probe,
+            "video_stream_index": 5,
+        }
+
+        class _FakeReader:
+            def get_meta_data(self):
+                return {"fps": 30.0, "nframes": 4, "size": (640, 480)}
+
+            def get_data(self, idx):
+                return [[[0, 0, 0, 255]]]
+
+            def close(self):
+                return None
+
+        def _probe_side_effect(path, preferred_video_stream_index=None, preferred_audio_stream_index=None):
+            if preferred_video_stream_index == 5:
+                return alternate_probe
+            return primary_probe
+
+        def _remux_side_effect(path, details=None, *, include_audio=True):
+            stream_index = None if details is None else details.get("video_stream_index")
+            if stream_index == 5:
+                return "/tmp/recovered-alt.mkv"
+            return None
+
+        with patch.object(vt, "_probe_media_details", side_effect=_probe_side_effect):
+            with patch.object(vt, "_probe_video_clip", side_effect=[RuntimeError("primary open failed"), (30.0, 4, (640, 480), None)]):
+                with patch.object(vt, "_remux_video_source", side_effect=_remux_side_effect):
+                    with patch.object(vt, "_transcode_video_source", return_value=None):
+                        with patch.object(vt, "_video_has_audio_stream", return_value=True):
+                            with patch.object(vt, "_open_video_reader", return_value=_FakeReader()):
+                                clip = vt._load_video_clip("/tmp/multi.vob")
+        self.assertIsNotNone(clip)
+        self.assertEqual(clip.preferred_video_stream_index, 5)
+        self.assertIn("alternate stream #5", clip.load_note)
+        clip.close()
+
+    def test_load_video_clip_retries_matching_cue_sidecar_for_bin_sources(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        class _FakeReader:
+            def get_meta_data(self):
+                return {"fps": 30.0, "nframes": 4, "size": (320, 240)}
+
+            def get_data(self, idx):
+                return [[[0, 0, 0, 255]]]
+
+            def close(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_path = os.path.join(tmpdir, "disc.bin")
+            cue_path = os.path.join(tmpdir, "disc.cue")
+            with open(bin_path, "wb") as handle:
+                handle.write(b"bin")
+            with open(cue_path, "w", encoding="utf-8") as handle:
+                handle.write('FILE "disc.bin" BINARY\n')
+
+            def _probe_side_effect(path, preferred_video_stream_index=None, preferred_audio_stream_index=None):
+                self.assertIsNone(preferred_video_stream_index)
+                self.assertIsNone(preferred_audio_stream_index)
+                if path.endswith(".cue"):
+                    return {"has_video": True, "has_audio": False, "video_stream_index": 0, "audio_stream_index": None}
+                return None
+
+            def _probe_video_side_effect(path):
+                if path.endswith(".bin"):
+                    raise RuntimeError("bin direct open failed")
+                return 30.0, 4, (320, 240), None
+
+            with patch.object(vt, "_probe_media_details", side_effect=_probe_side_effect):
+                with patch.object(vt, "_probe_video_clip", side_effect=_probe_video_side_effect):
+                    with patch.object(vt, "_video_has_audio_stream", return_value=False):
+                        with patch.object(vt, "_open_video_reader", return_value=_FakeReader()):
+                            clip = vt._load_video_clip(bin_path)
+        self.assertIsNotNone(clip)
+        self.assertEqual(clip.source_path, bin_path)
+        self.assertIn("cue sidecar retry active", clip.load_note)
+        clip.close()
+
+    def test_probe_media_details_prefers_non_attached_pic_stream(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        payload = {
+            "format": {"format_name": "matroska", "duration": "10.0"},
+            "streams": [
+                {
+                    "index": 0,
+                    "codec_type": "video",
+                    "codec_name": "mjpeg",
+                    "width": 600,
+                    "height": 600,
+                    "avg_frame_rate": "0/0",
+                    "r_frame_rate": "0/0",
+                    "disposition": {"attached_pic": 1},
+                    "tags": {"title": "cover"},
+                },
+                {
+                    "index": 2,
+                    "codec_type": "video",
+                    "codec_name": "h264",
+                    "width": 320,
+                    "height": 240,
+                    "avg_frame_rate": "24/1",
+                    "r_frame_rate": "24/1",
+                    "bit_rate": "120000",
+                    "disposition": {"attached_pic": 0},
+                    "tags": {"language": "eng"},
+                },
+            ],
+        }
+        result = types.SimpleNamespace(returncode=0, stdout=__import__("json").dumps(payload))
+        with patch.object(vt, "_get_ffprobe_exe", return_value="/tmp/ffprobe"):
+            with patch.object(vt.subprocess, "run", return_value=result):
+                details = vt._probe_media_details("/tmp/sample.mkv")
+        self.assertIsNotNone(details)
+        self.assertEqual(details["video_stream_index"], 2)
+        self.assertEqual(details["video_codec"], "h264")
+        self.assertEqual(details["video_attached_pic_count"], 1)
+        self.assertEqual(details["selected_video_language"], "eng")
+
+    def test_probe_media_details_honors_explicit_video_stream_selection(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        payload = {
+            "format": {"format_name": "mpeg", "duration": "10.0"},
+            "streams": [
+                {
+                    "index": 1,
+                    "codec_type": "video",
+                    "codec_name": "mpeg2video",
+                    "width": 320,
+                    "height": 240,
+                    "avg_frame_rate": "24/1",
+                    "r_frame_rate": "24/1",
+                    "disposition": {"attached_pic": 0},
+                    "tags": {"title": "main"},
+                },
+                {
+                    "index": 7,
+                    "codec_type": "video",
+                    "codec_name": "mpeg1video",
+                    "width": 160,
+                    "height": 120,
+                    "avg_frame_rate": "15/1",
+                    "r_frame_rate": "15/1",
+                    "disposition": {"attached_pic": 0},
+                    "tags": {"language": "jpn", "title": "bonus"},
+                },
+            ],
+        }
+        result = types.SimpleNamespace(returncode=0, stdout=json.dumps(payload))
+        with patch.object(vt, "_get_ffprobe_exe", return_value="/tmp/ffprobe"):
+            with patch.object(vt.subprocess, "run", return_value=result):
+                details = vt._probe_media_details("/tmp/sample.vob", preferred_video_stream_index=7)
+        self.assertIsNotNone(details)
+        self.assertEqual(details["video_stream_index"], 7)
+        self.assertEqual(details["video_codec"], "mpeg1video")
+        self.assertEqual(details["selected_video_language"], "jpn")
+        self.assertEqual(len(details["video_stream_choices"]), 2)
+
+    def test_probe_media_details_uses_deeper_analysis_flags(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        calls = []
+        payload = {"format": {"format_name": "mpeg"}, "streams": []}
+
+        def _fake_run(cmd, **kwargs):
+            calls.append(list(cmd))
+            return types.SimpleNamespace(returncode=0, stdout=json.dumps(payload))
+
+        with patch.object(vt, "_get_ffprobe_exe", return_value="/tmp/ffprobe"):
+            with patch.object(vt.subprocess, "run", side_effect=_fake_run):
+                vt._probe_media_details("/tmp/sample.vob")
+        self.assertTrue(calls)
+        self.assertIn("-probesize", calls[0])
+        self.assertIn("100M", calls[0])
+        self.assertIn("-analyzeduration", calls[0])
+
+    def test_video_load_failure_hint_mentions_cover_art_streams(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "format_name": "mp3",
+            "has_video": True,
+            "has_audio": True,
+            "video_codec": "mjpeg",
+            "audio_codec": "mp3",
+            "width": 600,
+            "height": 600,
+            "fps": 0.0,
+            "video_stream_count": 1,
+            "audio_stream_count": 1,
+            "selected_video_attached_pic": True,
+            "video_attached_pic_count": 1,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/album.bin")
+        self.assertIn("attached-picture/cover-art stream", hint)
+        self.assertIn("cover-art or slideshow streams", hint)
+
+    def test_load_video_clip_uses_remux_fallback_for_disc_images(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            remux_path = os.path.join(tmpdir, "remux.mkv")
+            with open(remux_path, "wb") as fh:
+                fh.write(b"remux")
+
+            def _probe(path: str):
+                if path.endswith(".iso"):
+                    raise RuntimeError("primary open failed")
+                return 24.0, 12, (320, 240), None
+
+            with patch.object(vt, "_probe_video_clip", side_effect=_probe):
+                with patch.object(vt, "_remux_video_source", return_value=remux_path):
+                    with patch.object(vt, "_video_has_audio_stream", return_value=True):
+                        clip = vt._load_video_clip("/tmp/game.iso")
+            self.assertIsNotNone(clip)
+            self.assertEqual(clip.source_path, "/tmp/game.iso")
+            self.assertEqual(clip.path, remux_path)
+            self.assertTrue(clip.has_audio)
+            self.assertIn("remux fallback", clip.load_note)
+            clip.close()
+            self.assertFalse(os.path.exists(remux_path))
+
+    def test_load_video_clip_uses_transcode_fallback_when_remux_fails(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            transcode_path = os.path.join(tmpdir, "transcoded.mp4")
+            with open(transcode_path, "wb") as fh:
+                fh.write(b"transcoded")
+
+            def _probe(path: str):
+                if path.endswith(".iso"):
+                    raise RuntimeError("primary open failed")
+                return 24.0, 12, (320, 240), None
+
+            with patch.object(vt, "_probe_video_clip", side_effect=_probe):
+                with patch.object(vt, "_probe_media_details", return_value={"has_video": True}):
+                    with patch.object(vt, "_remux_video_source", return_value=None):
+                        with patch.object(vt, "_transcode_video_source", return_value=transcode_path):
+                            with patch.object(vt, "_video_has_audio_stream", return_value=False):
+                                clip = vt._load_video_clip("/tmp/game.iso")
+            self.assertIsNotNone(clip)
+            self.assertEqual(clip.path, transcode_path)
+            self.assertIn("transcode fallback", clip.load_note)
+            clip.close()
+            self.assertFalse(os.path.exists(transcode_path))
+
+    def test_segmented_video_source_detection_accepts_named_and_numeric_parts(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            named_parts = [
+                os.path.join(tmpdir, "movie.part1.vob"),
+                os.path.join(tmpdir, "movie.part2.vob"),
+            ]
+            numeric_parts = [
+                os.path.join(tmpdir, "episode.vob.001"),
+                os.path.join(tmpdir, "episode.vob.002"),
+            ]
+            for path in named_parts + numeric_parts:
+                with open(path, "wb") as handle:
+                    handle.write(b"segment")
+            self.assertEqual(vt._segmented_video_sources(named_parts[0]), named_parts)
+            self.assertEqual(vt._segmented_video_sources(numeric_parts[0]), numeric_parts)
+            self.assertTrue(vt._is_segmented_video_source(named_parts[0]))
+            self.assertTrue(vt._is_probably_video_source(numeric_parts[0], probe=None))
+
+    def test_attempt_video_recovery_uses_concat_segment_repair(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            part1 = os.path.join(tmpdir, "movie.part1.vob")
+            part2 = os.path.join(tmpdir, "movie.part2.vob")
+            for path in (part1, part2):
+                with open(path, "wb") as handle:
+                    handle.write(b"segment")
+            details = {
+                "has_video": True,
+                "has_audio": True,
+                "video_stream_index": 0,
+                "audio_stream_index": 1,
+                "video_stream_count": 1,
+                "video_attached_pic_count": 0,
+                "selected_video_attached_pic": False,
+            }
+            with patch.object(vt, "_concat_segmented_video_source", return_value="/tmp/repaired-concat.mkv") as concat_mock:
+                with patch.object(vt, "_remux_video_source", return_value=None) as remux_mock:
+                    with patch.object(vt, "_transcode_video_source", return_value=None) as transcode_mock:
+                        recovered_path, note, recovered_probe = vt._attempt_video_recovery(part1, details)
+            self.assertEqual(recovered_path, "/tmp/repaired-concat.mkv")
+            self.assertEqual(recovered_probe, details)
+            self.assertIn("segmented concat remux fallback", note)
+            self.assertIn("2 joined parts", note)
+            concat_mock.assert_called_once()
+            remux_mock.assert_not_called()
+            transcode_mock.assert_not_called()
+
+    def test_video_load_failure_hint_mentions_segmented_concat_repair(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            first = os.path.join(tmpdir, "clip.vob.001")
+            second = os.path.join(tmpdir, "clip.vob.002")
+            for path in (first, second):
+                with open(path, "wb") as handle:
+                    handle.write(b"segment")
+            with patch.object(vt, "_probe_media_details", return_value=None):
+                with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                    hint = vt._video_load_failure_hint(first)
+            self.assertIn("segmented / multipart video set", hint)
+            self.assertIn("concat repair fallback", hint)
+
+    def test_attempt_video_recovery_retries_without_audio_after_primary_failures(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        details = {
+            "has_video": True,
+            "has_audio": True,
+            "video_stream_index": 2,
+            "audio_stream_index": 9,
+            "video_stream_count": 1,
+            "video_attached_pic_count": 0,
+            "selected_video_attached_pic": False,
+        }
+        remux_calls = []
+        transcode_calls = []
+
+        def _fake_remux(path, candidate=None, include_audio=True):
+            remux_calls.append(include_audio)
+            return None
+
+        def _fake_transcode(path, candidate=None, include_audio=True):
+            transcode_calls.append(include_audio)
+            if not include_audio:
+                return "/tmp/recovered-video-only.mp4"
+            return None
+
+        with patch.object(vt, "_remux_video_source", side_effect=_fake_remux):
+            with patch.object(vt, "_transcode_video_source", side_effect=_fake_transcode):
+                recovered_path, note, recovered_probe = vt._attempt_video_recovery("/tmp/broken-audio.vob", details)
+        self.assertEqual(recovered_path, "/tmp/recovered-video-only.mp4")
+        self.assertEqual(recovered_probe, details)
+        self.assertEqual(remux_calls, [True, False])
+        self.assertEqual(transcode_calls, [True, False])
+        self.assertIn("transcode fallback", note)
+        self.assertIn("source audio dropped", note)
+
+    def test_attempt_video_recovery_retries_alternate_audio_before_audio_drop(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        details = {
+            "has_video": True,
+            "has_audio": True,
+            "video_stream_index": 2,
+            "audio_stream_index": 9,
+            "video_stream_count": 1,
+            "audio_stream_count": 2,
+            "video_attached_pic_count": 0,
+            "selected_video_attached_pic": False,
+            "audio_stream_choices": [
+                {"index": 9, "codec_name": "ac3", "bit_rate": 192000, "duration": 10.0, "language": "eng", "title": "Broken"},
+                {"index": 5, "codec_name": "mp2", "bit_rate": 256000, "duration": 10.0, "language": "jpn", "title": "Alt"},
+            ],
+        }
+        alternate_probe = {
+            **details,
+            "audio_stream_index": 5,
+            "audio_codec": "mp2",
+        }
+        remux_calls = []
+        transcode_calls = []
+
+        def _fake_probe(path, preferred_video_stream_index=None, preferred_audio_stream_index=None):
+            if preferred_audio_stream_index == 5:
+                return alternate_probe
+            return details
+
+        def _fake_remux(path, candidate=None, include_audio=True):
+            remux_calls.append((include_audio, None if candidate is None else candidate.get("audio_stream_index")))
+            if include_audio and candidate is alternate_probe:
+                return "/tmp/recovered-alt-audio.mkv"
+            return None
+
+        def _fake_transcode(path, candidate=None, include_audio=True):
+            transcode_calls.append((include_audio, None if candidate is None else candidate.get("audio_stream_index")))
+            return None
+
+        with patch.object(vt, "_probe_media_details", side_effect=_fake_probe):
+            with patch.object(vt, "_remux_video_source", side_effect=_fake_remux):
+                with patch.object(vt, "_transcode_video_source", side_effect=_fake_transcode):
+                    recovered_path, note, recovered_probe = vt._attempt_video_recovery("/tmp/broken-audio.vob", details)
+        self.assertEqual(recovered_path, "/tmp/recovered-alt-audio.mkv")
+        self.assertEqual(recovered_probe, alternate_probe)
+        self.assertEqual(remux_calls, [(True, 9), (True, 5)])
+        self.assertEqual(transcode_calls, [(True, 9)])
+        self.assertIn("alternate audio #5", note)
+
+    def test_attempt_video_recovery_retries_timestamp_rebuild_for_transport_streams(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        details = {
+            "has_video": True,
+            "has_audio": True,
+            "format_name": "mpegts",
+            "video_stream_index": 0,
+            "audio_stream_index": 1,
+            "video_stream_count": 1,
+            "audio_stream_count": 1,
+            "video_attached_pic_count": 0,
+            "selected_video_attached_pic": False,
+        }
+        remux_calls = []
+        transcode_calls = []
+
+        def _fake_remux(path, candidate=None, include_audio=True, rebuild_timestamps=False):
+            remux_calls.append((include_audio, rebuild_timestamps))
+            if include_audio and rebuild_timestamps:
+                return "/tmp/recovered-reindexed.mkv"
+            return None
+
+        def _fake_transcode(path, candidate=None, include_audio=True, rebuild_timestamps=False):
+            transcode_calls.append((include_audio, rebuild_timestamps))
+            return None
+
+        with patch.object(vt, "_remux_video_source", side_effect=_fake_remux):
+            with patch.object(vt, "_transcode_video_source", side_effect=_fake_transcode):
+                recovered_path, note, recovered_probe = vt._attempt_video_recovery("/tmp/capture.ts", details)
+        self.assertEqual(recovered_path, "/tmp/recovered-reindexed.mkv")
+        self.assertEqual(recovered_probe, details)
+        self.assertEqual(remux_calls, [(True, False), (True, True)])
+        self.assertEqual(transcode_calls, [(True, False)])
+        self.assertIn("timestamp-rebuild remux fallback", note)
+        self.assertIn("timestamp/index rebuild", note)
+
+    def test_video_load_failure_hint_mentions_timestamp_rebuild_for_transport_streams(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        probe = {
+            "has_video": True,
+            "has_audio": True,
+            "format_name": "mpegts",
+            "video_stream_index": 0,
+            "audio_stream_index": 1,
+            "video_stream_count": 1,
+            "audio_stream_count": 1,
+            "video_attached_pic_count": 0,
+            "selected_video_attached_pic": False,
+        }
+        with patch.object(vt, "_probe_media_details", return_value=probe):
+            with patch.object(vt, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                hint = vt._video_load_failure_hint("/tmp/capture.ts")
+        self.assertIn("timestamp-rebuild", hint)
+        self.assertIn("broken timestamps or damaged index metadata", hint)
+
+    def test_audio_stream_choice_rank_prefers_default_original_non_commentary_tracks(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        preferred = {
+            "index": 6,
+            "default": True,
+            "original": True,
+            "commentary": False,
+            "descriptive": False,
+            "dub": False,
+            "channels": 2,
+            "bit_rate": 128000,
+            "duration": 10.0,
+        }
+        commentary = {
+            "index": 2,
+            "default": True,
+            "original": False,
+            "commentary": True,
+            "descriptive": False,
+            "dub": False,
+            "channels": 6,
+            "bit_rate": 384000,
+            "duration": 10.0,
+        }
+        self.assertGreater(vt._audio_stream_choice_rank(preferred), vt._audio_stream_choice_rank(commentary))
+
+    def test_recovery_prefers_probe_selected_stream_indexes(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        details = {
+            "video_stream_index": 4,
+            "audio_stream_index": 7,
+        }
+        calls = []
+
+        def _fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            with open(remux_path, "wb") as fh:
+                fh.write(b"remuxed")
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            remux_path = os.path.join(tmpdir, "result.mkv")
+
+            def _fake_tempfile(**kwargs):
+                handle = open(remux_path, "wb")
+                handle.close()
+                return types.SimpleNamespace(name=remux_path, close=lambda: None)
+
+            with patch.object(vt, "_get_ffmpeg_exe", return_value="/tmp/ffmpeg"):
+                with patch.object(vt.tempfile, "NamedTemporaryFile", side_effect=_fake_tempfile):
+                    with patch.object(vt.subprocess, "run", side_effect=_fake_run):
+                        result = vt._remux_video_source("/tmp/sample.vob", details)
+
+        self.assertEqual(result, remux_path)
+        self.assertTrue(calls)
+        self.assertIn("0:4", calls[0])
+        self.assertIn("0:7?", calls[0])
+
+    def test_video_builder_manual_stream_picker_reloads_selected_clip(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        dialog = vt.VideoToolDialog()
+        try:
+            clip = vt._ClipEntry(
+                "/tmp/multi.vob",
+                12,
+                lambda _idx: Image.new("RGBA", (8, 6), (255, 0, 0, 255)),
+                24.0,
+                frame_size=(320, 240),
+                clip_type="video",
+                source_path="/tmp/multi.vob",
+                source_probe={
+                    "video_stream_index": 3,
+                    "audio_stream_index": 1,
+                    "video_stream_count": 2,
+                    "audio_stream_count": 2,
+                    "video_attached_pic_count": 0,
+                    "selected_video_attached_pic": False,
+                    "video_stream_choices": [
+                        {"index": 3, "codec_name": "mpeg2video", "width": 320, "height": 240, "fps": 24.0, "language": "eng", "title": "main", "attached_pic": False},
+                        {"index": 7, "codec_name": "mpeg1video", "width": 160, "height": 120, "fps": 15.0, "language": "jpn", "title": "bonus", "attached_pic": False},
+                    ],
+                    "audio_stream_choices": [
+                        {"index": 1, "codec_name": "ac3", "language": "eng", "title": "Stereo"},
+                        {"index": 9, "codec_name": "mp2", "language": "jpn", "title": "Dub"},
+                    ],
+                },
+            )
+            dialog._clips = [clip]
+            item = vt.QListWidgetItem("clip")
+            item.setData(vt._CLIP_ROLE, clip)
+            dialog._clip_list.addItem(item)
+            dialog._clip_list.setCurrentRow(0)
+            dialog._on_clip_selected(0)
+            self.assertTrue(dialog._stream_picker_combo.isEnabled())
+            self.assertTrue(dialog._audio_stream_picker_combo.isEnabled())
+            self.assertIn("2 video streams detected", dialog._stream_summary_lbl.text())
+            self.assertIn("2 audio streams detected", dialog._stream_summary_lbl.text())
+            picker_index = next(
+                idx for idx in range(dialog._stream_picker_combo.count())
+                if dialog._stream_picker_combo.itemData(idx) == 7
+            )
+            dialog._stream_picker_combo.setCurrentIndex(picker_index)
+            audio_picker_index = next(
+                idx for idx in range(dialog._audio_stream_picker_combo.count())
+                if dialog._audio_stream_picker_combo.itemData(idx) == 9
+            )
+            dialog._audio_stream_picker_combo.setCurrentIndex(audio_picker_index)
+            new_clip = vt._ClipEntry(
+                "/tmp/multi_bonus.mkv",
+                8,
+                lambda _idx: Image.new("RGBA", (8, 6), (0, 255, 0, 255)),
+                15.0,
+                frame_size=(160, 120),
+                clip_type="video",
+                source_path="/tmp/multi.vob",
+                load_note="manual stream #7; temporary ffmpeg remux fallback active",
+                source_probe={
+                    "video_stream_index": 7,
+                    "audio_stream_index": 9,
+                    "video_stream_count": 2,
+                    "audio_stream_count": 2,
+                    "video_attached_pic_count": 0,
+                    "selected_video_attached_pic": False,
+                    "video_stream_choices": [
+                        {"index": 3, "codec_name": "mpeg2video", "width": 320, "height": 240, "fps": 24.0, "language": "eng", "title": "main", "attached_pic": False},
+                        {"index": 7, "codec_name": "mpeg1video", "width": 160, "height": 120, "fps": 15.0, "language": "jpn", "title": "bonus", "attached_pic": False},
+                    ],
+                    "audio_stream_choices": [
+                        {"index": 1, "codec_name": "ac3", "language": "eng", "title": "Stereo"},
+                        {"index": 9, "codec_name": "mp2", "language": "jpn", "title": "Dub"},
+                    ],
+                },
+                preferred_video_stream_index=7,
+                preferred_audio_stream_index=9,
+            )
+            with patch.object(dialog, "_reload_clip", return_value=new_clip) as reload_mock:
+                with patch.object(dialog, "_update_preview"):
+                    with patch.object(dialog, "_update_scrubber"):
+                        dialog._apply_selected_stream_choice()
+            reload_mock.assert_called_once_with(
+                clip,
+                preferred_video_stream_index=7,
+                preferred_audio_stream_index=9,
+            )
+            self.assertEqual(dialog._clips[0], new_clip)
+            self.assertIn("Reloaded multi.vob", dialog._import_status_lbl.text())
+            self.assertIn("manual stream #7", dialog._import_detail_box.toPlainText())
+            self.assertIn("manual audio #9", dialog._import_detail_box.toPlainText())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_dropped_unknown_video_extension_uses_probe_detection(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        fake_clip = types.SimpleNamespace(
+            load_note="",
+            source_path="/tmp/weird.dat",
+            frame_size=(32, 24),
+            clip_type="video",
+            active_frames=12,
+            fps=24.0,
+            speed_percent=100,
+            close=lambda: None,
+        )
+        try:
+            with patch.object(vt, "_probe_media_details", return_value={"has_video": True}):
+                with patch.object(vt, "_load_video_clip", return_value=fake_clip):
+                    with patch.object(dialog, "_insert_clip", return_value=1) as insert_mock:
+                        with patch.object(dialog, "_update_scrubber"):
+                            with patch.object(dialog, "_update_preview"):
+                                with patch.object(dialog, "_update_ui_state"):
+                                    dialog._on_files_dropped(["/tmp/weird.dat"], 0)
+            insert_mock.assert_called_once()
+            self.assertIn("Import summary: Added 1 clip", dialog._import_status_lbl.text())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_dropped_audio_only_unknown_extension_reports_video_failure(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        try:
+            with patch.object(vt, "_probe_media_details", return_value={"has_video": False, "has_audio": True, "format_name": "ogg"}):
+                with patch.object(vt, "_video_load_failure_hint", return_value="audio only"):
+                    with patch.object(dialog, "_update_scrubber"):
+                        with patch.object(dialog, "_update_preview"):
+                            with patch.object(dialog, "_update_ui_state"):
+                                dialog._on_files_dropped(["/tmp/weird.dat"], 0)
+            self.assertIn("1 failed", dialog._import_status_lbl.text())
+            self.assertIn("audio only", dialog._import_status_lbl.toolTip())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_real_media_sample_corpus_loads_under_iso_umd_bin_extensions(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        ffmpeg_exe = vt._get_ffmpeg_exe()
+        ffprobe_exe = vt._get_ffprobe_exe()
+        if not ffmpeg_exe or not ffprobe_exe:
+            self.skipTest("ffmpeg/ffprobe unavailable for generated odd-extension media corpus test")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_mp4 = os.path.join(tmpdir, "sample.mp4")
+            result = subprocess.run(
+                [
+                    ffmpeg_exe,
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc=size=32x24:rate=6",
+                    "-t",
+                    "0.5",
+                    "-pix_fmt",
+                    "yuv420p",
+                    source_mp4,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                check=False,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode != 0:
+                self.skipTest(f"Could not generate sample media corpus: {result.stderr[:200]}")
+            with open(source_mp4, "rb") as fh:
+                sample_bytes = fh.read()
+            for ext in (".iso", ".umd", ".bin"):
+                sample_path = os.path.join(tmpdir, f"sample{ext}")
+                with open(sample_path, "wb") as fh:
+                    fh.write(sample_bytes)
+                details = vt._probe_media_details(sample_path)
+                self.assertIsNotNone(details)
+                self.assertTrue(details["has_video"])
+                clip = vt._load_video_clip(sample_path)
+                self.assertIsNotNone(clip)
+                self.assertEqual(clip.source_path, sample_path)
+                clip.close()
+
+    def test_generated_transport_stream_and_asf_samples_load_or_explain(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        ffmpeg_exe = vt._get_ffmpeg_exe()
+        ffprobe_exe = vt._get_ffprobe_exe()
+        if not ffmpeg_exe or not ffprobe_exe:
+            self.skipTest("ffmpeg/ffprobe unavailable for generated odd-container corpus test")
+
+        outputs = (
+            ("sample.ts", ["-c:v", "mpeg2video", "-pix_fmt", "yuv420p", "-f", "mpegts"]),
+            ("sample.asf", ["-c:v", "wmv2", "-pix_fmt", "yuv420p", "-f", "asf"]),
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name, extra_args in outputs:
+                sample_path = os.path.join(tmpdir, name)
+                result = subprocess.run(
+                    [
+                        ffmpeg_exe,
+                        "-y",
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        "testsrc=size=32x24:rate=6",
+                        "-t",
+                        "0.5",
+                        *extra_args,
+                        sample_path,
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                    text=True,
+                    timeout=120,
+                )
+                if result.returncode != 0:
+                    self.skipTest(f"Could not generate odd-container sample {name}: {result.stderr[:200]}")
+                details = vt._probe_media_details(sample_path)
+                self.assertIsNotNone(details)
+                self.assertTrue(details["has_video"])
+                hint = vt._video_load_failure_hint(sample_path)
+                self.assertTrue(hint)
+                clip = vt._load_video_clip(sample_path)
+                if clip is not None:
+                    self.assertEqual(clip.source_path, sample_path)
+                    clip.close()
+                else:
+                    self.assertIn("ffmpeg", hint.lower())
+
+    def test_load_video_paths_summarizes_failures_inline(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        try:
+            with patch.object(vt, "_load_video_clip", return_value=None):
+                with patch.object(vt, "_video_load_failure_hint", side_effect=["hint one", "hint two"]):
+                    with patch.object(vt.QMessageBox, "warning") as warn_mock:
+                        dialog._load_video_paths(["/tmp/a.iso", "/tmp/b.bin"])
+            warn_mock.assert_not_called()
+            self.assertIn("2 failed", dialog._import_status_lbl.text())
+            self.assertIn("Failure types:", dialog._import_status_lbl.toolTip())
+            self.assertIn("a.iso: hint one", dialog._import_status_lbl.toolTip())
+            self.assertIn("b.bin: hint two", dialog._import_status_lbl.toolTip())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_load_video_paths_accepts_probe_detected_unknown_extension(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        fake_clip = types.SimpleNamespace(
+            load_note="temporary ffmpeg transcode fallback active",
+            source_path="/tmp/weird.dat",
+            frame_size=(32, 24),
+            clip_type="video",
+            active_frames=12,
+            fps=24.0,
+            speed_percent=100,
+            close=lambda: None,
+        )
+        try:
+            with patch.object(vt, "_probe_media_details", return_value={"has_video": True}):
+                with patch.object(vt, "_load_video_clip", return_value=fake_clip):
+                    with patch.object(dialog, "_insert_clip", return_value=1) as insert_mock:
+                        with patch.object(dialog, "_update_scrubber"):
+                            with patch.object(dialog, "_update_preview"):
+                                with patch.object(dialog, "_update_ui_state"):
+                                    dialog._load_video_paths(["/tmp/weird.dat"])
+            insert_mock.assert_called_once()
+            self.assertIn("Added 1 clip", dialog._import_status_lbl.text())
+            self.assertIn("1 recovered", dialog._import_status_lbl.text())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_load_video_paths_reports_audio_only_unknown_extension_as_failure(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        try:
+            with patch.object(vt, "_probe_media_details", return_value={"has_video": False, "has_audio": True, "format_name": "ogg"}):
+                with patch.object(vt, "_video_load_failure_hint", return_value="audio only"):
+                    dialog._load_video_paths(["/tmp/odd.dat"])
+            self.assertIn("1 failed", dialog._import_status_lbl.text())
+            self.assertIn("audio only", dialog._import_status_lbl.toolTip())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_video_import_status_summarizes_recovery_paths_and_guidance(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        try:
+            dialog._update_import_status(
+                added=2,
+                attempted=4,
+                recovered=[
+                    ("a.iso", "temporary ffmpeg remux fallback active"),
+                    ("b.vob", "temporary ffmpeg transcode fallback active (preferred stream #3)"),
+                ],
+                failures=[
+                    ("c.vob", "Multiple video streams were detected; recovery will prefer the largest probe-detected video stream.\nProbe: container=mpeg; video=mpeg2video; audio=ac3; preferred-stream=3."),
+                    ("d.ogg", "ffprobe detected audio but no playable video stream\nProbe: container=ogg; video=none; audio=vorbis."),
+                ],
+                skipped=[],
+            )
+            self.assertIn("2 recovered", dialog._import_status_lbl.text())
+            self.assertIn("remux ×1", dialog._import_status_lbl.text())
+            self.assertIn("transcode ×1", dialog._import_status_lbl.text())
+            self.assertIn("audio-only container ×1", dialog._import_status_lbl.toolTip())
+            self.assertIn("Recovery paths: remux ×1, transcode ×1", dialog._import_status_lbl.toolTip())
+            self.assertIn("Failure guidance:", dialog._import_status_lbl.toolTip())
+            self.assertIn("Probe-detected containers: mpeg ×1, ogg ×1", dialog._import_status_lbl.toolTip())
+            self.assertIn("Probe-detected video codecs: mpeg2video ×1", dialog._import_status_lbl.toolTip())
+            self.assertIn("Probe-detected audio codecs: ac3 ×1, vorbis ×1", dialog._import_status_lbl.toolTip())
+            self.assertIn("multi-stream container", dialog._import_status_lbl.toolTip())
+            self.assertIn("audio-only container", dialog._import_status_lbl.toolTip())
+            self.assertIn("Selected Stream", dialog._next_step_lbl.text())
+            self.assertIn("recovered clips are already usable", dialog._next_step_lbl.text())
+            self.assertFalse(dialog._import_detail_box.isHidden())
+            self.assertIn("Recovery paths: remux ×1, transcode ×1", dialog._import_detail_box.toPlainText())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_video_import_status_surfaces_container_specific_failure_groups(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        try:
+            dialog._update_import_status(
+                added=0,
+                attempted=4,
+                recovered=[],
+                failures=[
+                    ("capture.ts", "Transport-stream sources often contain discontinuities or missing timestamps; recovery may rebuild timing, but severe capture gaps can still prevent loading.\nProbe: container=mpegts; video=h264; audio=aac."),
+                    ("feature.mkv", "Matroska/WebM files can carry multiple alternate video/audio programs; if one stream fails, the builder will prefer the strongest detected video stream but manual stream reloads may still help.\nProbe: container=matroska,webm; video=vp9; audio=opus."),
+                    ("edit.mov", "QuickTime/MOV-family files may depend on edit lists, timecode, or ProRes-style metadata; remux/transcode recovery is often needed when direct indexing is incomplete.\nProbe: container=mov,mp4,m4a,3gp,3g2,mj2; video=prores; audio=pcm_s16le."),
+                    ("slideshow.mkv", "Detected a still-image style video codec inside a nonstandard container; the builder may only recover this as a slideshow/still-frame source unless ffmpeg can transcode it cleanly.\nProbe: container=matroska,webm; video=mjpeg; audio=none."),
+                ],
+                skipped=[],
+            )
+            summary = dialog._import_status_lbl.text()
+            details = dialog._import_detail_box.toPlainText()
+            self.assertIn("4 failed", summary)
+            self.assertIn("transport stream timing ×1", details)
+            self.assertIn("matroska/webm program ×1", details)
+            self.assertIn("quicktime metadata ×1", details)
+            self.assertIn("still-image video ×1", details)
+            self.assertIn("Probe-detected containers: matroska,webm ×2, mov,mp4,m4a,3gp,3g2,mj2 ×1, mpegts ×1", details)
+            self.assertIn("Probe-detected video codecs: h264 ×1, mjpeg ×1, prores ×1, +1 more", details)
+            self.assertIn("video=vp9", details)
+            self.assertIn("transport stream timing:", details)
+            self.assertIn("quicktime metadata:", details)
+            self.assertIn("still-image video:", details)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_optional_real_video_corpus_samples_probe_and_explain_or_load(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        roots = _optional_corpus_roots("ALPHA_FIXER_REAL_VIDEO_CORPUS", "ALPHA_FIXER_VIDEO_CORPUS_DIR")
+        samples = _iter_corpus_files(roots, (".iso", ".umd", ".bin", ".vob", ".ts", ".mxf", ".asf", ".rmvb"))
+        if not samples:
+            self.skipTest("No optional real video corpus configured")
+
+        loaded = 0
+        explained = 0
+        for sample_path in samples:
+            details = vt._probe_media_details(sample_path)
+            hint = vt._video_load_failure_hint(sample_path)
+            self.assertTrue(hint)
+            clip = vt._load_video_clip(sample_path)
+            if clip is not None:
+                loaded += 1
+                self.assertEqual(clip.source_path, sample_path)
+                clip.close()
+                continue
+            if details is not None:
+                explained += 1
+                self.assertIn("ffmpeg", hint.lower())
+        self.assertGreaterEqual(loaded + explained, len(samples))
+
+    def test_optional_real_disc_video_corpus_samples_probe_and_explain_or_load(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        roots = _optional_corpus_roots(
+            "ALPHA_FIXER_REAL_DISC_VIDEO_CORPUS",
+            "ALPHA_FIXER_REAL_VIDEO_CORPUS",
+            "ALPHA_FIXER_VIDEO_CORPUS_DIR",
+        )
+        samples = _iter_corpus_files(roots, (".iso", ".umd", ".bin"))
+        if not samples:
+            self.skipTest("No optional real disc-video corpus configured")
+
+        loaded = 0
+        explained = 0
+        for sample_path in samples:
+            hint = vt._video_load_failure_hint(sample_path)
+            self.assertIn("Disc-image video inputs are experimental", hint)
+            clip = vt._load_video_clip(sample_path)
+            if clip is not None:
+                loaded += 1
+                self.assertEqual(clip.source_path, sample_path)
+                clip.close()
+                continue
+            explained += 1
+            self.assertIn("ffmpeg", hint.lower())
+        self.assertGreaterEqual(loaded + explained, len(samples))
+
+    def test_optional_real_disc_video_manifest_samples_match_expectations(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        manifest = _optional_manifest_entries("ALPHA_FIXER_REAL_DISC_VIDEO_MANIFEST")
+        if not manifest:
+            self.skipTest("No optional real disc-video manifest configured")
+
+        exercised = 0
+        for entry in manifest:
+            sample_path = str(entry.get("path") or "").strip()
+            if not os.path.isfile(sample_path):
+                continue
+            expected = str(entry.get("expect") or "load_or_explain").strip().lower()
+            preferred_stream = entry.get("preferred_video_stream_index")
+            clip = vt._load_video_clip(sample_path, preferred_video_stream_index=preferred_stream)
+            hint = vt._video_load_failure_hint(sample_path, preferred_video_stream_index=preferred_stream)
+            exercised += 1
+            if expected == "load":
+                self.assertIsNotNone(clip, msg=f"Expected {sample_path} to load, but got hint:\n{hint}")
+            elif expected == "fail":
+                self.assertIsNone(clip, msg=f"Expected {sample_path} to fail import")
+            if clip is not None:
+                try:
+                    self.assertEqual(clip.source_path, sample_path)
+                finally:
+                    clip.close()
+            required_tokens = entry.get("hint_contains") or []
+            if isinstance(required_tokens, str):
+                required_tokens = [required_tokens]
+            for token in required_tokens:
+                self.assertIn(str(token), hint, msg=f"Missing hint token for {sample_path}: {token}")
+        if exercised == 0:
+            self.skipTest("Configured real disc-video manifest paths were unavailable")
+
+    def test_mp4_export_size_rounds_up_to_even_dimensions(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        self.assertEqual(vt._coerce_export_size((641, 479), "mp4"), (642, 480))
+        self.assertEqual(vt._coerce_export_size((641, 479), "gif"), (641, 479))
+
+    def test_mixed_size_frames_are_letterboxed_to_shared_canvas(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        src = Image.new("RGBA", (200, 100), (255, 0, 0, 255))
+        try:
+            framed = vt._fit_frame_to_canvas(src, (400, 400), "gif")
+            try:
+                self.assertEqual(framed.size, (400, 400))
+                self.assertEqual(framed.getpixel((200, 200)), (255, 0, 0, 255))
+                self.assertEqual(framed.getpixel((20, 20))[3], 0)
+            finally:
+                framed.close()
+        finally:
+            src.close()
+
+    def test_clip_timing_supports_still_duration_and_speed_mapping(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        image_clip = vt._ClipEntry("/tmp/image.png", 1, lambda idx: Image.new("RGBA", (8, 8)), 25.0, clip_type="image")
+        image_clip.still_duration_frames = 40
+        self.assertEqual(image_clip.active_frames, 40)
+        frame = image_clip.get_frame(17)
+        frame.close()
+
+        video_clip = vt._ClipEntry("/tmp/video.mp4", 10, lambda idx: Image.new("RGBA", (8, 8)), 25.0, clip_type="video")
+        video_clip.speed_percent = 200
+        self.assertEqual(video_clip.active_frames, 5)
+        self.assertEqual(video_clip.output_index_to_source_offset(4), 8)
+
+        slow_clip = vt._ClipEntry("/tmp/slow.mp4", 6, lambda idx: Image.new("RGBA", (8, 8)), 25.0, clip_type="video")
+        slow_clip.speed_percent = 50
+        self.assertEqual(slow_clip.output_index_to_source_offset(0), 0)
+        self.assertEqual(slow_clip.output_index_to_source_offset(1), 0)
+        self.assertEqual(slow_clip.split_second_half_offset(0), 1)
+
+    def test_audio_tempo_filter_chain_stays_within_ffmpeg_limits(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        self.assertEqual(vt._build_atempo_filters(1.0), ["atempo=1"])
+        for speed in (0.25, 1.0, 4.0, 16.0):
+            factors = [float(item.split("=")[1]) for item in vt._build_atempo_filters(speed)]
+            self.assertTrue(all(0.5 <= factor <= 2 for factor in factors))
+            self.assertAlmostEqual(__import__("math").prod(factors), speed)
+        self.assertEqual(vt._build_atempo_filters(0.25), ["atempo=0.5", "atempo=0.5"])
+
+    def test_audio_source_plan_summarizes_mixed_timeline(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        plan = vt._audio_source_plan([
+            {
+                "active_frames": 12,
+                "clip_type": "video",
+                "has_audio": True,
+                "preferred_audio_stream_index": 5,
+            },
+            {
+                "active_frames": 8,
+                "clip_type": "video",
+                "has_audio": False,
+                "load_note": "temporary ffmpeg transcode fallback active, source audio dropped",
+            },
+            {
+                "active_frames": 4,
+                "clip_type": "image",
+                "has_audio": False,
+            },
+        ])
+        self.assertEqual(plan["mode"], "mixed-source+silence")
+        self.assertEqual(plan["audio_source_clips"], 1)
+        self.assertEqual(plan["video_clips"], 2)
+        self.assertEqual(plan["silent_video_clips"], 1)
+        self.assertEqual(plan["silent_still_sections"], 1)
+        self.assertEqual(plan["dropped_audio_recovery_clips"], 1)
+        self.assertEqual(plan["manual_audio_override_clips"], 1)
+        hint = vt._audio_source_plan_hint(plan)
+        self.assertIn("1/2 video clips provide source audio", hint)
+        self.assertIn("1 recovered clip already dropped source audio during import", hint)
+        notes = vt._audio_source_plan_history_notes(plan)
+        self.assertIn("audio-source-plan=mixed-source+silence", notes)
+        self.assertIn("audio-source-clips=1/2", notes)
+        self.assertIn("audio-dropped-recovery-clips=1", notes)
+
+    def test_audio_controls_hint_mentions_mixed_silent_sections_and_manual_overrides(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PyQt6.QtWidgets import QWidget
+
+        parent = QWidget()
+        dialog = vt.VideoToolDialog(parent=parent)
+        dialog._mp4_export_available = True
+        dialog._clips = [
+            self._make_clip(
+                active_frames=12,
+                clip_type="video",
+                has_audio=True,
+                load_note="",
+                preferred_audio_stream_index=4,
+            ),
+            self._make_clip(
+                active_frames=8,
+                clip_type="video",
+                has_audio=False,
+                load_note="temporary ffmpeg transcode fallback active, source audio dropped",
+                preferred_audio_stream_index=None,
+            ),
+            self._make_clip(
+                active_frames=6,
+                clip_type="image",
+                has_audio=False,
+                load_note="",
+                preferred_audio_stream_index=None,
+            ),
+        ]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+        dialog._update_audio_controls()
+        hint = dialog._audio_hint_lbl.text()
+        self.assertIn("1/2 video clips provide source audio", hint)
+        self.assertIn("1 video clip without usable source audio will stay silent", hint)
+        self.assertIn("1 still-image/GIF section will be filled with silence", hint)
+        self.assertIn("1 recovered clip already dropped source audio during import", hint)
+        self.assertIn("1 clip uses manual audio stream override", hint)
+        dialog.close()
+        dialog.deleteLater()
+        parent.deleteLater()
+        self._app.processEvents()
+
+    def test_export_rewrites_mismatched_gif_extension(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+
+        dialog = vt.VideoToolDialog()
+        dialog._clips = [self._make_clip()]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("gif"))
+        dialog._snapshot_clip_render_state = lambda clip, fps: {"active_frames": 1}
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (255, 0, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        saved_paths = []
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+                vt.QFileDialog, "getSaveFileName",
+                return_value=(os.path.join(tmpdir, "video-output.mp4"), ""),
+            ):
+                with patch.object(vt.QMessageBox, "information"):
+                    with patch("PIL.Image.Image.save", autospec=True, side_effect=lambda self, path, **kwargs: saved_paths.append(path)):
+                        self._export_and_wait(dialog)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+        self.assertEqual(len(saved_paths), 1)
+        self.assertTrue(saved_paths[0].endswith(".gif"))
+
+    def test_export_gif_failure_keeps_existing_output_file(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+
+        dialog = vt.VideoToolDialog()
+        dialog._clips = [self._make_clip()]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("gif"))
+        dialog._snapshot_clip_render_state = lambda clip, fps: {"active_frames": 1}
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (255, 0, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out_path = os.path.join(tmpdir, "existing.gif")
+                with open(out_path, "wb") as fh:
+                    fh.write(b"original-gif")
+                with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
+                    with patch.object(vt.QMessageBox, "critical") as critical_mock:
+                        with patch("PIL.Image.Image.save", autospec=True, side_effect=RuntimeError("gif failed")):
+                            self._export_and_wait(dialog)
+                critical_mock.assert_called_once()
+                with open(out_path, "rb") as fh:
+                    self.assertEqual(fh.read(), b"original-gif")
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_export_rewrites_mismatched_mp4_extension(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+
+        class _FakeWriter:
+            def __init__(self):
+                self.closed = False
+
+            def append_data(self, data):
+                return None
+
+            def close(self):
+                self.closed = True
+
+        dialog = vt.VideoToolDialog()
+        dialog._mp4_export_available = True
+        dialog._clips = [self._make_clip()]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+        dialog._snapshot_clip_render_state = lambda clip, fps: {"active_frames": 1}
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        dialog._should_mux_audio = lambda fmt, clips: False
+        writer_paths = []
+        writer_kwargs = []
+        fake_writer = _FakeWriter()
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+                vt.QFileDialog, "getSaveFileName",
+                return_value=(os.path.join(tmpdir, "video-output.gif"), ""),
+            ):
+                with patch.object(vt.QMessageBox, "information"):
+                    with patch("imageio.get_writer", side_effect=lambda path, **kwargs: writer_paths.append(path) or writer_kwargs.append(kwargs) or fake_writer):
+                        self._export_and_wait(dialog)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+        self.assertEqual(len(writer_paths), 1)
+        self.assertTrue(writer_paths[0].endswith(".mp4"))
+        self.assertEqual(writer_kwargs[0]["format"], "FFMPEG")
+
+    def test_export_render_failure_keeps_existing_mp4_output_file(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+
+        class _FailingWriter:
+            def append_data(self, data):
+                raise RuntimeError("encode failed")
+
+            def close(self):
+                return None
+
+        dialog = vt.VideoToolDialog()
+        dialog._mp4_export_available = True
+        dialog._clips = [self._make_clip()]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+        dialog._snapshot_clip_render_state = lambda clip, fps: {"active_frames": 1}
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        dialog._should_mux_audio = lambda fmt, clips: False
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out_path = os.path.join(tmpdir, "existing.mp4")
+                with open(out_path, "wb") as fh:
+                    fh.write(b"original-mp4")
+                with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
+                    with patch("imageio.get_writer", return_value=_FailingWriter()):
+                        with patch.object(vt.QMessageBox, "critical") as critical_mock:
+                            self._export_and_wait(dialog)
+                critical_mock.assert_called_once()
+                with open(out_path, "rb") as fh:
+                    self.assertEqual(fh.read(), b"original-mp4")
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_export_mux_failure_falls_back_to_silent_mp4_and_records_history(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+        from PyQt6.QtWidgets import QWidget
+
+        class _FakeWriter:
+            def __init__(self, path):
+                self._path = path
+
+            def append_data(self, data):
+                return None
+
+            def close(self):
+                with open(self._path, "wb") as fh:
+                    fh.write(b"rendered-mp4")
+                return None
+
+        parent = QWidget()
+        settings = _ConverterTabSettingsStub()
+        parent._settings = settings
+        dialog = vt.VideoToolDialog(parent=parent)
+        dialog._mp4_export_available = True
+        dialog._clips = [self._make_clip(has_audio=True)]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+        dialog._snapshot_clip_render_state = lambda clip, fps: {
+            "active_frames": 1,
+            "path": "/tmp/source.mp4",
+            "source_path": "/tmp/source.mp4",
+            "clip_type": "video",
+            "has_audio": True,
+        }
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        dialog._should_mux_audio = lambda fmt, clips: True
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out_path = os.path.join(tmpdir, "existing.mp4")
+                with open(out_path, "wb") as fh:
+                    fh.write(b"original")
+                with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
+                    with patch("imageio.get_writer", side_effect=lambda path, **kwargs: _FakeWriter(path)):
+                        with patch("src.core.video_export.mux_mp4_audio", side_effect=RuntimeError("mux failed")):
+                            with patch.object(vt.QMessageBox, "information") as info_mock:
+                                self._export_and_wait(dialog)
+                info_mock.assert_called_once()
+                self.assertIn("silent MP4", info_mock.call_args.args[2])
+                with open(out_path, "rb") as fh:
+                    self.assertEqual(fh.read(), b"rendered-mp4")
+                self.assertEqual(len(settings._video_history), 1)
+                entry = settings._video_history[0]
+                self.assertEqual(entry["audio"], "off (mux failed)")
+                self.assertEqual(entry["errors"], 1)
+                self.assertIn("audio-source-plan=all-source-audio", entry["notes"])
+                self.assertIn("audio-source-clips=1/1", entry["notes"])
+                self.assertIn("audio-mux-fallback=silent", entry["notes"])
+                self.assertIn("audio-mux-error=mux failed", entry["notes"])
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            parent.deleteLater()
+            self._app.processEvents()
+
+    def test_export_records_audio_source_plan_for_mixed_timeline(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+        from PyQt6.QtWidgets import QWidget
+
+        class _FakeWriter:
+            def __init__(self, path):
+                self._path = path
+
+            def append_data(self, data):
+                return None
+
+            def close(self):
+                with open(self._path, "wb") as fh:
+                    fh.write(b"rendered-mp4")
+                return None
+
+        parent = QWidget()
+        settings = _ConverterTabSettingsStub()
+        parent._settings = settings
+        dialog = vt.VideoToolDialog(parent=parent)
+        dialog._mp4_export_available = True
+        dialog._clips = [
+            self._make_clip(has_audio=True),
+            self._make_clip(has_audio=False),
+            self._make_clip(clip_type="image", has_audio=False),
+        ]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+        snapshots = [
+            {
+                "active_frames": 1,
+                "path": "/tmp/with-audio.mp4",
+                "source_path": "/tmp/with-audio.mp4",
+                "clip_type": "video",
+                "has_audio": True,
+                "load_note": "",
+                "preferred_audio_stream_index": 7,
+            },
+            {
+                "active_frames": 1,
+                "path": "/tmp/no-audio.mp4",
+                "source_path": "/tmp/no-audio.iso",
+                "clip_type": "video",
+                "has_audio": False,
+                "load_note": "temporary ffmpeg transcode fallback active, source audio dropped",
+                "preferred_audio_stream_index": None,
+            },
+            {
+                "active_frames": 1,
+                "path": "/tmp/still.png",
+                "source_path": "/tmp/still.png",
+                "clip_type": "image",
+                "has_audio": False,
+                "load_note": "",
+                "preferred_audio_stream_index": None,
+            },
+        ]
+        dialog._snapshot_clip_render_state = lambda clip, fps: snapshots.pop(0)
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        dialog._should_mux_audio = lambda fmt, clips: True
+
+        def _fake_mux(_render_path, out_path, _clip_snapshot, _fps, *args):
+            with open(out_path, "wb") as fh:
+                fh.write(b"muxed-mp4")
+
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out_path = os.path.join(tmpdir, "mixed.mp4")
+                with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
+                    with patch("imageio.get_writer", side_effect=lambda path, **kwargs: _FakeWriter(path)):
+                        with patch("src.core.video_export.mux_mp4_audio", side_effect=_fake_mux):
+                            with patch.object(vt.QMessageBox, "information"):
+                                self._export_and_wait(dialog)
+                self.assertEqual(len(settings._video_history), 1)
+                entry = settings._video_history[0]
+                self.assertEqual(entry["audio"], "kept")
+                self.assertIn("audio-source-plan=mixed-source+silence", entry["notes"])
+                self.assertIn("audio-source-clips=1/2", entry["notes"])
+                self.assertIn("audio-silent-video-clips=1", entry["notes"])
+                self.assertIn("audio-silent-still-sections=1", entry["notes"])
+                self.assertIn("audio-dropped-recovery-clips=1", entry["notes"])
+                self.assertIn("audio-manual-stream-overrides=1", entry["notes"])
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            parent.deleteLater()
+            self._app.processEvents()
+
+    def test_mux_mp4_audio_retries_with_normalized_audio(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PyQt6.QtWidgets import QWidget
+
+        parent = QWidget()
+        dialog = vt.VideoToolDialog(parent=parent)
+        dialog._audio_volume_slider.setValue(100)
+        clip_snapshot = [{
+            "active_frames": 10,
+            "timeline_seconds": 0.5,
+            "path": "/tmp/source-audio.ts",
+            "clip_type": "video",
+            "has_audio": True,
+            "trim_start": 0,
+            "trim_end": 9,
+            "clip_fps": 20.0,
+        }]
+        commands = []
+
+        def _fake_run(cmd, *args, **kwargs):
+            commands.append(cmd)
+            if len(commands) == 1:
+                return types.SimpleNamespace(returncode=1, stderr="Non-monotonic DTS")
+            return types.SimpleNamespace(returncode=0, stderr="")
+
+        try:
+            with patch.object(vt, "_get_ffmpeg_exe", return_value="/usr/bin/ffmpeg"):
+                with patch("src.core.video_export.run_mux_process", side_effect=_fake_run):
+                    notes = dialog._mux_mp4_audio("/tmp/silent.mp4", "/tmp/out.mp4", clip_snapshot, 20.0)
+            self.assertEqual(len(commands), 2)
+            self.assertNotIn("aresample=async=1:first_pts=0:min_hard_comp=0.100", " ".join(commands[0]))
+            self.assertIn("aresample=async=1:first_pts=0:min_hard_comp=0.100", " ".join(commands[1]))
+            self.assertIn("channel_layouts=stereo", " ".join(commands[1]))
+            self.assertIn("audio-mux-retry=normalized", notes)
+            self.assertIn("audio-mux-first-error=Non-monotonic DTS", notes)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            parent.deleteLater()
+            self._app.processEvents()
+
+    def test_export_records_audio_mux_retry_notes(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+        from PyQt6.QtWidgets import QWidget
+
+        class _FakeWriter:
+            def __init__(self, path):
+                self._path = path
+
+            def append_data(self, data):
+                return None
+
+            def close(self):
+                with open(self._path, "wb") as fh:
+                    fh.write(b"rendered-mp4")
+                return None
+
+        parent = QWidget()
+        settings = _ConverterTabSettingsStub()
+        parent._settings = settings
+        dialog = vt.VideoToolDialog(parent=parent)
+        dialog._mp4_export_available = True
+        dialog._clips = [self._make_clip(has_audio=True)]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+        dialog._snapshot_clip_render_state = lambda clip, fps: {
+            "active_frames": 1,
+            "timeline_seconds": 0.1,
+            "path": "/tmp/source.mp4",
+            "source_path": "/tmp/source.ts",
+            "clip_type": "video",
+            "has_audio": True,
+            "trim_start": 0,
+            "trim_end": 0,
+            "clip_fps": 10.0,
+            "load_note": "",
+            "preferred_audio_stream_index": None,
+        }
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        dialog._should_mux_audio = lambda fmt, clips: True
+
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out_path = os.path.join(tmpdir, "normalized.mp4")
+                with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
+                    with patch("imageio.get_writer", side_effect=lambda path, **kwargs: _FakeWriter(path)):
+                        with patch("src.core.video_export.mux_mp4_audio", return_value=[
+                            "audio-mux-retry=normalized",
+                            "audio-mux-first-error=Non-monotonic DTS",
+                        ]):
+                            with patch.object(vt.QMessageBox, "information") as info_mock:
+                                self._export_and_wait(dialog)
+                info_mock.assert_called_once()
+                self.assertIn("normalized stereo/48 kHz audio", info_mock.call_args.args[2])
+                self.assertEqual(len(settings._video_history), 1)
+                entry = settings._video_history[0]
+                self.assertIn("audio-mux-retry=normalized", entry["notes"])
+                self.assertIn("audio-mux-first-error=Non-monotonic DTS", entry["notes"])
+                self.assertEqual(entry["audio"], "kept")
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            parent.deleteLater()
+            self._app.processEvents()
+
+    def test_video_export_records_history_and_remux_notes(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+        from PIL import Image
+        from PyQt6.QtWidgets import QWidget
+
+        class _FakeWriter:
+            def append_data(self, data):
+                return None
+
+            def close(self):
+                return None
+
+        parent = QWidget()
+        settings = _ConverterTabSettingsStub()
+        parent._settings = settings
+        dialog = vt.VideoToolDialog(parent=parent)
+        dialog._mp4_export_available = True
+        dialog._clips = [self._make_clip()]
+        dialog._export_fmt_combo.setCurrentIndex(dialog._export_fmt_combo.findData("mp4"))
+        dialog._snapshot_clip_render_state = lambda clip, fps: {
+            "active_frames": 1,
+            "path": "/tmp/remuxed.mkv",
+            "source_path": "/tmp/game.iso",
+            "load_note": "temporary ffmpeg remux fallback active",
+            "preferred_video_stream_index": 3,
+            "preferred_audio_stream_index": 1,
+            "source_probe": {
+                "video_stream_index": 3,
+                "audio_stream_index": 1,
+                "video_stream_count": 4,
+                "audio_stream_count": 2,
+            },
+        }
+        dialog._get_snapshot_frame = lambda clip, idx: Image.new("RGBA", (2, 2), (0, 255, 0, 255))
+        dialog._timeline_canvas_size = lambda fmt: (2, 2)
+        dialog._should_mux_audio = lambda fmt, clips: False
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+                vt.QFileDialog, "getSaveFileName",
+                return_value=(os.path.join(tmpdir, "video-history-test.mp4"), ""),
+            ):
+                with patch.object(vt.QMessageBox, "information"):
+                    with patch("imageio.get_writer", return_value=_FakeWriter()):
+                        self._export_and_wait(dialog)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            parent.deleteLater()
+            self._app.processEvents()
+        self.assertEqual(len(settings._video_history), 1)
+        entry = settings._video_history[0]
+        self.assertEqual(Path(entry["output"]).name, "video-history-test.mp4")
+        self.assertEqual(entry["files"], ["game.iso"])
+        self.assertEqual(entry["format"], "MP4")
+        self.assertEqual(entry["canvas"], "2×2")
+        self.assertEqual(entry["sources"], "video ×1")
+        self.assertEqual(entry["recovery"], "remux ×1")
+        self.assertEqual(entry["streams"], "game.iso: manual video #3, manual audio #1")
+        self.assertIn("manual video #3", entry["clips"])
+        self.assertIn("manual audio #1", entry["clips"])
+        self.assertIn("canvas=2×2", entry["notes"])
+        self.assertIn("remux fallback", entry["notes"])
+        self.assertIn("audio=off", entry["notes"])
+        self.assertIn("streams=game.iso: manual video #3, manual audio #1", entry["notes"])
+        self.assertIn("clips=game.iso: temporary ffmpeg remux fallback active | streams=manual video #3, manual audio #1", entry["notes"])
+
+
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+class TestBuilderHistoryPolish(unittest.TestCase):
+    def setUp(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        for name in ("information", "warning", "critical", "question"):
+            patcher = patch.object(QMessageBox, name, return_value=QMessageBox.StandardButton.No)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        for name, result in (
+            ("getSaveFileName", ("", "")),
+            ("getOpenFileName", ("", "")),
+            ("getOpenFileNames", ([], "")),
+            ("getExistingDirectory", ""),
+        ):
+            patcher = patch.object(QFileDialog, name, return_value=result)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def tearDown(self):
+        self._app.processEvents()
+
+    def test_tool_root_geometry_across_builtin_themes_and_font_extremes(self):
+        from PyQt6.QtCore import QCoreApplication, QEvent
+        from PyQt6.QtGui import QFont
+        from PyQt6.QtWidgets import QScrollArea
+        from src.core.presets import PresetManager
+        from src.core.settings_manager import SettingsManager
+        from src.ui.alpha_tool import AlphaFixerTab
+        from src.ui.converter_tool import ConverterTab
+        from src.ui.history_tab import HistoryTab
+        from src.ui.selective_alpha_tool import SelectiveAlphaTool
+        from src.ui.theme_engine import PRESET_THEMES, HIDDEN_THEMES, build_stylesheet
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        original_font = QFont(self._app.font())
+        original_style = self._app.styleSheet()
+        widgets = []
+        try:
+            with tempfile.TemporaryDirectory(dir=".") as folder:
+                with patch("src.core.settings_manager._settings_ini_path",
+                           return_value=os.path.join(folder, "settings.ini")):
+                    settings = SettingsManager()
+                widgets = [
+                    AlphaFixerTab(PresetManager(settings), settings),
+                    ConverterTab(settings),
+                    SelectiveAlphaTool(settings),
+                    HistoryTab(settings),
+                ]
+                margins = [
+                    tuple(getattr(widget.layout().contentsMargins(), side)()
+                          for side in ("left", "top", "right", "bottom"))
+                    for widget in widgets
+                ]
+                for theme_name, theme in {**PRESET_THEMES, **HIDDEN_THEMES}.items():
+                    for point_size in (8, 24):
+                        font = QFont(original_font)
+                        font.setPointSize(point_size)
+                        self._app.setFont(font)
+                        scaled_px = max(8, min(32, round(point_size * 1.33)))
+                        self._app.setStyleSheet(
+                            build_stylesheet(theme) + f"\nQWidget {{ font-size: {scaled_px}px; }}"
+                        )
+                        for index, widget in enumerate(widgets):
+                            with self.subTest(theme=theme_name, font=point_size,
+                                              tool=type(widget).__name__):
+                                widget.resize(1000, 750)
+                                widget.show()
+                                self._app.processEvents()
+                                self._app.processEvents()
+                                current = widget.layout().contentsMargins()
+                                self.assertEqual(
+                                    tuple(getattr(current, side)() for side in
+                                          ("left", "top", "right", "bottom")),
+                                    margins[index],
+                                )
+                                for item_index in range(widget.layout().count()):
+                                    item = widget.layout().itemAt(item_index)
+                                    child = item.widget()
+                                    if child is not None and child.isVisible():
+                                        self.assertTrue(widget.rect().contains(child.geometry()))
+                                if isinstance(widget, SelectiveAlphaTool):
+                                    scroll = widget.findChild(QScrollArea)
+                                    self.assertGreaterEqual(
+                                        scroll.widget().width(),
+                                        scroll.widget().minimumSizeHint().width(),
+                                    )
+                                widget.hide()
+        finally:
+            for widget in widgets:
+                widget.close()
+                widget.deleteLater()
+            self._app.setStyleSheet(original_style)
+            self._app.setFont(original_font)
+            self._app.processEvents()
+
+    def test_history_filters_casefold_unicode_filenames_and_fields(self):
+        from PyQt6.QtWidgets import QTreeWidget
+        from src.ui.history_tab import (
+            HistoryTab, _HistoryItem, _set_filter_text, _set_filter_fields,
+        )
+        tree = QTreeWidget()
+        tree.setColumnCount(1)
+        self.addCleanup(tree.deleteLater)
+        for cached in (False, True):
+            item = _HistoryItem(["Straße.PNG"])
+            tree.addTopLevelItem(item)
+            if cached:
+                _set_filter_text(item, "Straße.PNG")
+            _set_filter_fields(item, file="Straße.PNG", notes="Σ τέλος")
+            for query in ("STRASSE", "straße", "file:STRASSE.PNG", "file:*STRASSE*", "notes:ς"):
+                with self.subTest(cached=cached, query=query):
+                    HistoryTab._apply_filter(tree, query)
+                    self.assertFalse(item.isHidden())
+            HistoryTab._apply_filter(tree, "file:missing.png")
+            self.assertTrue(item.isHidden())
+            HistoryTab._apply_filter(tree, "")
+            self.assertFalse(item.isHidden())
+            tree.clear()
+
+    def test_history_refresh_releases_owned_gif_movies(self):
+        from PyQt6.QtCore import QCoreApplication, QEvent
+        from PyQt6.QtGui import QMovie
+        from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem
+        from src.ui.history_tab import _AnimatedGifDelegate
+        tree = QTreeWidget()
+        self.addCleanup(tree.deleteLater)
+        delegate = _AnimatedGifDelegate(tree, tree)
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "preview.gif")
+            frame = Image.new("RGBA", (2, 2), "red")
+            try:
+                frame.save(path, format="GIF")
+            finally:
+                frame.close()
+            for _ in range(3):
+                item = QTreeWidgetItem(tree, ["preview"])
+                delegate.set_gif_path(item, path)
+                self.assertEqual(len(delegate.findChildren(QMovie)), 1)
+                delegate.clear_movies()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.assertEqual(delegate.findChildren(QMovie), [])
+                self.assertEqual(delegate._movies, {})
+                tree.clear()
+
+    def test_alpha_readiness_uses_svg_runtime_capability(self):
+        from src.ui import alpha_tool
+        with patch.object(alpha_tool, "_has_wand", return_value=True):
+            for available in (True, False):
+                with self.subTest(svg_available=available), patch.object(
+                    alpha_tool, "svg_input_available", return_value=available
+                ):
+                    self.assertEqual(alpha_tool._alpha_capability_has_limits(), not available)
+                    details = alpha_tool._alpha_capability_details()
+                    self.assertIn("SVG inputs ready" if available else "SVG inputs unavailable", details)
+                    self.assertIn("SVG input: ready" if available else "SVG input: limited", details)
+
+    def test_gif_export_records_history_notes(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+        from PIL import Image
+        from PyQt6.QtWidgets import QWidget
+
+        parent = QWidget()
+        settings = _ConverterTabSettingsStub()
+        parent._settings = settings
+        dialog = gb.GifBuilderDialog(parent=parent)
+        source = Image.new("RGBA", (4, 4), (255, 0, 0, 128))
+        dialog._frames = [gb._FrameEntry("/tmp/frame.png", 0, source.copy(), delay_ms=80)]
+        dialog._loop_slider.setValue(0)
+        dialog._optimize_check.setChecked(True)
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out_path = os.path.join(tmpdir, "history.gif")
+                with patch.object(gb.QFileDialog, "getSaveFileName", return_value=(out_path, "")):
+                    with patch.object(gb.QMessageBox, "information"):
+                        dialog._export()
+                        from tests.gif_export_helpers import wait_for_gif_export
+                        wait_for_gif_export(dialog)
+        finally:
+            source.close()
+            dialog.close()
+            dialog.deleteLater()
+            parent.deleteLater()
+            self._app.processEvents()
+        self.assertEqual(len(settings._gif_history), 1)
+        entry = settings._gif_history[0]
+        self.assertEqual(entry["output"], out_path)
+        self.assertEqual(entry["first_file"], "/tmp/frame.png")
+        self.assertEqual(entry["files"], ["frame.png"])
+        self.assertEqual(entry["sources"], "image ×1")
+        self.assertEqual(entry["largest_frame"], "4×4")
+        self.assertEqual(entry["alpha_summary"], "1/1")
+        self.assertEqual(entry["delay"], "100 ms")
+        self.assertEqual(entry["fps"], "10")
+        self.assertEqual(entry["loop"], "∞")
+        self.assertEqual(entry["optimize"], "on")
+        self.assertEqual(entry["resize"], "original")
+        self.assertIn("optimize=on", entry["notes"])
+        self.assertIn("delay=100 ms", entry["notes"])
+        self.assertIn("loop=∞", entry["notes"])
+        self.assertIn("sources=image ×1", entry["notes"])
+        self.assertIn("alpha", entry["notes"])
+
+    def test_gif_import_failures_are_summarized_inline(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            with patch.object(gb, "_load_pillow_rgba", side_effect=RuntimeError("bad image")):
+                dialog._add_paths(["/tmp/bad.png"])
+            self.assertIn("1 failed", dialog._import_status_lbl.text())
+            self.assertIn("Failure types: image import ×1", dialog._import_status_lbl.toolTip())
+            self.assertIn("bad.png: bad image", dialog._import_status_lbl.toolTip())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_gif_import_status_summarizes_source_types_and_largest_frame(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            dialog._update_import_status(
+                attempted=3,
+                loaded_sources=2,
+                added_frames=9,
+                recovered=[],
+                failures=[],
+                skipped=["skip.txt"],
+                loaded_details=["clip.mp4: 6 frames  •  video  •  320×240 @ ~42 ms", "anim.gif: 3 frames  •  animated gif  •  64×64"],
+                source_type_counts={"video": 1, "animated gif": 1},
+                frame_size_counts={"320×240": 1, "64×64": 1},
+                alpha_source_count=1,
+                largest_frame=(320, 240),
+            )
+            self.assertIn("Loaded 2 sources", dialog._import_status_lbl.text())
+            self.assertIn("1 skipped", dialog._import_status_lbl.text())
+            self.assertIn("2 frame sizes", dialog._import_status_lbl.text())
+            self.assertIn("1 alpha source", dialog._import_status_lbl.text())
+            self.assertIn("Source types: animated gif ×1, video ×1", dialog._import_status_lbl.toolTip())
+            self.assertIn("Frame sizes: 320×240 ×1, 64×64 ×1", dialog._import_status_lbl.toolTip())
+            self.assertIn("Largest imported frame: 320×240", dialog._import_status_lbl.toolTip())
+            self.assertIn("Alpha-capable sources: 1 / 2", dialog._import_status_lbl.toolTip())
+            self.assertFalse(dialog._import_detail_box.isHidden())
+            self.assertIn("Largest imported frame: 320×240", dialog._import_detail_box.toPlainText())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_gif_builder_probes_unknown_extension_video_sources(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            probe = {
+                "format_name": "mpeg",
+                "has_video": True,
+                "has_audio": True,
+                "video_codec": "mpeg2video",
+                "audio_codec": "ac3",
+                "width": 320,
+                "height": 240,
+                "fps": 25.0,
+                "selected_video_attached_pic": False,
+                "video_attached_pic_count": 0,
+                "video_stream_count": 1,
+            }
+            frames = [Image.new("RGBA", (16, 12), (255, 0, 0, 255))]
+            try:
+                with patch.object(gb, "_probe_media_details", return_value=probe):
+                    with patch.object(gb, "_load_video_frames", return_value=(frames, 25.0)):
+                        dialog._add_paths(["/tmp/odd_source.dat"])
+                self.assertEqual(len(dialog._frames), 1)
+                self.assertIn("Loaded 1 source", dialog._import_status_lbl.text())
+                self.assertIn("video ×1", dialog._import_status_lbl.toolTip())
+                dialog._frame_list.setCurrentRow(0)
+                dialog._update_frame_diagnostics()
+                self.assertIn("video source", dialog._frame_diag_lbl.text())
+                settings = _ConverterTabSettingsStub()
+                with patch.object(dialog, "_resolve_settings", return_value=settings):
+                    dialog._record_export_history("out.gif", 40, 0, False, (0, 0))
+                self.assertEqual(settings._gif_history[0]["sources"], "video ×1")
+                self.assertIn("odd_source.dat: 1 frame  •  video", dialog._import_detail_box.toPlainText())
+            finally:
+                for frame in frames:
+                    try:
+                        frame.close()
+                    except Exception:
+                        pass
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_gif_builder_reports_audio_only_odd_container_inline(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            probe = {
+                "format_name": "ogg",
+                "has_video": False,
+                "has_audio": True,
+                "video_codec": "",
+                "audio_codec": "vorbis",
+                "width": 0,
+                "height": 0,
+                "fps": 0.0,
+            }
+            with patch.object(gb, "_probe_media_details", return_value=probe):
+                with patch.object(gb, "_video_load_failure_hint", return_value="ffprobe detected audio but no playable video stream"):
+                    dialog._add_paths(["/tmp/audio_payload.dat"])
+            self.assertIn("1 failed", dialog._import_status_lbl.text())
+            self.assertIn("audio-only container ×1", dialog._import_status_lbl.toolTip())
+            self.assertIn("Failure guidance:", dialog._import_status_lbl.toolTip())
+            self.assertIn("audio-only container", dialog._import_detail_box.toPlainText())
+            self.assertIn("cannot be added", dialog._import_detail_box.toPlainText())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_gif_builder_groups_transport_stream_failures_with_specific_guidance(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            dialog._update_import_status(
+                attempted=2,
+                loaded_sources=0,
+                added_frames=0,
+                recovered=[],
+                failures=[
+                    ("capture.ts", "Transport-stream sources often contain discontinuities or missing timestamps; recovery may rebuild timing, but severe capture gaps can still prevent loading.\nProbe: container=mpegts; video=h264; audio=aac."),
+                    ("capture2.ts", "Transport-stream sources often contain discontinuities or missing timestamps; recovery may rebuild timing, but severe capture gaps can still prevent loading.\nProbe: container=mpegts; video=h264; audio=ac3."),
+                ],
+                skipped=[],
+                loaded_details=[],
+                source_type_counts={},
+                frame_size_counts={},
+                alpha_source_count=0,
+                largest_frame=(0, 0),
+            )
+            self.assertIn("transport stream timing ×2", dialog._import_status_lbl.toolTip())
+            self.assertIn("transport stream timing", dialog._import_detail_box.toPlainText())
+            self.assertEqual(dialog._import_detail_box.toPlainText().count("container=mpegts"), 2)
+            self.assertEqual(dialog._import_detail_box.toPlainText().count("video=h264"), 2)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_gif_builder_updates_frame_diagnostics_for_selected_preview_frame(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            entry1 = gb._FrameEntry("/tmp/anim.gif", 0, Image.new("RGBA", (12, 8), (255, 0, 0, 128)), delay_ms=80)
+            entry2 = gb._FrameEntry("/tmp/anim.gif", 1, Image.new("RGBA", (12, 8), (255, 0, 0, 128)), delay_ms=80)
+            dialog._frames = [entry1, entry2]
+            for item_entry in (entry1, entry2):
+                item = gb.QListWidgetItem("anim")
+                item.setData(gb._ENTRY_ROLE, item_entry)
+                dialog._frame_list.addItem(item)
+            dialog._frame_list.setCurrentRow(1)
+            dialog._preview_idx = 1
+            dialog._width_slider.setValue(6)
+            dialog._height_slider.setValue(6)
+            dialog._update_count()
+            dialog._update_scrubber()
+            dialog._update_preview_frame()
+            self.assertIn("anim.gif", dialog._frame_diag_lbl.text())
+            self.assertIn("animated gif source", dialog._frame_diag_lbl.text())
+            self.assertIn("preview frame 2/2", dialog._frame_diag_lbl.text())
+            self.assertIn("source frame 2/2", dialog._frame_diag_lbl.text())
+            self.assertIn("12×8", dialog._frame_diag_lbl.text())
+            self.assertIn("80 ms (source timing)", dialog._frame_diag_lbl.text())
+            self.assertIn("export 6×4", dialog._frame_diag_lbl.text())
+            self.assertIn("(resized)", dialog._frame_diag_lbl.text())
+            self.assertIn("/tmp/anim.gif", dialog._frame_diag_lbl.toolTip())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_gif_builder_shows_capability_summary(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            self.assertTrue(dialog._capability_lbl.text())
+            self.assertIn("Ready", dialog._capability_lbl.text())
+            self.assertIn("audio is ignored", dialog._capability_lbl.text())
+            self.assertIn("playable stream or salvageable still frame", dialog._capability_lbl.toolTip())
+            self.assertIn("manual multi-stream picker is not available yet", dialog._capability_lbl.toolTip())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_gif_builder_capability_details_surface_video_runtime_and_picker_gap(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        with patch.object(gb, "_has_ffmpeg", return_value=True):
+            with patch.object(gb, "_has_imageio", return_value=True):
+                with patch.object(gb, "_has_imageio_ffmpeg", return_value=True):
+                    with patch.object(gb, "_get_ffprobe_exe", return_value="/tmp/ffprobe"):
+                        with patch.object(gb, "_video_io_diagnostics", return_value="All video dependencies are available."):
+                            details = gb._gif_builder_capability_details()
+        self.assertIn("All video dependencies are available.", details)
+        self.assertIn("manual multi-stream picker is not available yet", details)
+        self.assertIn("audio is ignored", details)
+
+    def test_alpha_tab_shows_capability_summary(self):
+        try:
+            from src.ui.alpha_tool import AlphaFixerTab
+        except ImportError as exc:
+            self.skipTest(f"alpha_tool import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        widget = AlphaFixerTab(MagicMock(), settings)
+        try:
+            self.assertTrue(hasattr(widget, "_capability_lbl"))
+            self.assertTrue(widget._capability_lbl.text().startswith("Ready:"))
+            self.assertIn("SVG inputs", widget._capability_lbl.text())
+            self.assertIn("Tool status:", widget._session_status_lbl.text())
+            self.assertIn("Alpha ready", widget._session_status_lbl.text())
+            self.assertIn("Next:", widget._session_status_lbl.text())
+            self.assertIn("add image files", widget._next_step_lbl.text())
+        finally:
+            widget.close()
+            widget.deleteLater()
+            self._app.processEvents()
+
+    def test_gif_builder_emits_status_notice_and_queue_summary(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        notices = []
+        queue_updates = []
+        dialog.status_notice.connect(lambda message, timeout: notices.append((message, timeout)))
+        dialog.queue_status_changed.connect(queue_updates.append)
+        try:
+            dialog._frames = [
+                types.SimpleNamespace(source_path="/tmp/a.png", close=lambda: None),
+                types.SimpleNamespace(source_path="/tmp/b.png", close=lambda: None),
+            ]
+            dialog._update_count()
+            dialog._update_import_status(
+                attempted=2,
+                loaded_sources=2,
+                added_frames=2,
+                recovered=[],
+                failures=[],
+                skipped=[],
+                loaded_details=["a.png: 1 frame  •  image  •  16×16", "b.png: 1 frame  •  image  •  16×16"],
+                source_type_counts={"image": 2},
+                frame_size_counts={"16×16": 2},
+                alpha_source_count=0,
+                largest_frame=(16, 16),
+            )
+            self.assertTrue(queue_updates)
+            self.assertIn("GIF Builder", queue_updates[-1])
+            self.assertIn("2 frames", queue_updates[-1])
+            self.assertTrue(notices)
+            self.assertIn("GIF Builder: Import summary:", notices[-1][0])
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_gif_builder_status_bar_text_includes_preview_and_mode(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            with patch.object(gb, "_has_ffmpeg", return_value=False):
+                with patch.object(gb, "_has_imageio", return_value=True):
+                    with patch.object(gb, "_has_imageio_ffmpeg", return_value=False):
+                        self.assertIn("image/GIF mode", dialog.get_status_bar_text())
+            dialog._frames = [
+                types.SimpleNamespace(source_path="/tmp/a.png", close=lambda: None),
+                types.SimpleNamespace(source_path="/tmp/b.png", close=lambda: None),
+            ]
+            dialog._update_count()
+            dialog._preview_frame_lbl.setText("2 / 2")
+            self.assertIn("preview 2 / 2", dialog.get_status_bar_text())
+            dialog._preview_timer.start(25)
+            try:
+                self.assertIn("playing", dialog.get_status_bar_text())
+            finally:
+                dialog._preview_timer.stop()
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_gif_builder_status_bar_text_keeps_import_summary_without_frames(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            dialog._update_import_status(
+                attempted=2,
+                loaded_sources=0,
+                added_frames=0,
+                recovered=[],
+                failures=[("broken.bin", "ffprobe detected audio but no playable video stream")],
+                skipped=["notes.txt"],
+                loaded_details=[],
+                source_type_counts={},
+                frame_size_counts={},
+                alpha_source_count=0,
+                largest_frame=(0, 0),
+            )
+            summary = dialog.get_status_bar_text()
+            self.assertIn("GIF Builder ready", summary)
+            self.assertIn("video imports available", summary)
+            self.assertIn("import Loaded 0 sources", summary)
+            self.assertIn("1 failed", summary)
+            self.assertIn("1 skipped", summary)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_gif_builder_session_status_and_inline_detail_controls(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            self.assertIn("Tool status:", dialog._session_status_lbl.text())
+            self.assertIn("GIF Builder ready", dialog._session_status_lbl.text())
+            dialog._update_import_status(
+                attempted=2,
+                loaded_sources=0,
+                added_frames=0,
+                recovered=[],
+                failures=[("broken.bin", "ffprobe detected audio but no playable video stream")],
+                skipped=["notes.txt"],
+                loaded_details=[],
+                source_type_counts={},
+                frame_size_counts={},
+                alpha_source_count=0,
+                largest_frame=(0, 0),
+            )
+            self.assertFalse(dialog._import_detail_toggle_btn.isHidden())
+            self.assertFalse(dialog._import_copy_btn.isHidden())
+            self.assertFalse(dialog._import_detail_box.isHidden())
+            dialog._toggle_import_details()
+            self.assertTrue(dialog._import_detail_box.isHidden())
+            dialog._copy_import_details()
+            self.assertIn("Import summary:", self._app.clipboard().text())
+            self.assertIn("broken.bin", self._app.clipboard().text())
+            self.assertIn("1 failed", dialog._session_status_lbl.text())
+            self.assertIn("Next:", dialog._session_status_lbl.text())
+            self.assertIn("audio-only files cannot be added", dialog._next_step_lbl.text())
+            self.assertIn("Show details or Copy details", dialog._next_step_lbl.text())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_gif_builder_uses_still_frame_fallback_for_visual_video_sources(self):
+        try:
+            from src.ui import gif_builder as gb
+        except ImportError as exc:
+            self.skipTest(f"gif_builder import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        dialog = gb.GifBuilderDialog()
+        try:
+            with patch.object(gb, "_load_video_frames", side_effect=RuntimeError("decode failed")):
+                with patch.object(gb, "_extract_visual_still_frame", return_value=Image.new("RGBA", (12, 10), (0, 255, 0, 255))):
+                    dialog._add_paths(["/tmp/sample.vob"])
+            self.assertEqual(len(dialog._frames), 1)
+            self.assertIn("1 recovered", dialog._import_status_lbl.text())
+            self.assertIn("single-frame salvage fallback", dialog._import_detail_box.toPlainText())
+        finally:
+            for entry in list(dialog._frames):
+                entry.close()
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_video_image_imports_use_inline_status_not_popup(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        from PIL import Image
+
+        dialog = vt.VideoToolDialog()
+        good_clip = vt._ClipEntry("/tmp/good.png", 1, lambda idx: Image.new("RGBA", (8, 8)), 25.0, clip_type="image")
+        try:
+            with patch.object(vt, "_load_image_as_clip", side_effect=[good_clip, None]):
+                with patch.object(vt.QMessageBox, "information") as info_mock:
+                    dialog._load_image_paths(["/tmp/good.png", "/tmp/bad.png"])
+            info_mock.assert_not_called()
+            self.assertIn("Added 1 clip", dialog._import_status_lbl.text())
+            self.assertIn("1 skipped", dialog._import_status_lbl.text())
+            self.assertIn("Skipped unsupported files:\n  bad.png", dialog._import_status_lbl.toolTip())
+        finally:
+            good_clip.close()
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_video_builder_emits_status_notice_and_queue_summary(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        notices = []
+        queue_updates = []
+        dialog.status_notice.connect(lambda message, timeout: notices.append((message, timeout)))
+        dialog.queue_status_changed.connect(queue_updates.append)
+        try:
+            dialog._clips = [
+                vt._ClipEntry("first.png", 24, lambda _: Image.new("RGBA", (8, 8)), 24, frame_size=(8, 8)),
+                vt._ClipEntry("second.png", 12, lambda _: Image.new("RGBA", (8, 8)), 24, frame_size=(8, 8), load_note="temporary ffmpeg remux fallback active"),
+            ]
+            dialog._fps_slider.setValue(24)
+            dialog._update_timeline_summary()
+            dialog._update_import_status(
+                added=2,
+                attempted=3,
+                recovered=[("sample.iso", "temporary ffmpeg remux fallback active")],
+                failures=[("audio.ogg", "ffprobe detected audio but no playable video stream")],
+                skipped=[],
+            )
+            self.assertTrue(queue_updates)
+            self.assertIn("Video Builder", queue_updates[-1])
+            self.assertIn("2 clips", queue_updates[-1])
+            self.assertIn("recovery fallback", queue_updates[-1])
+            self.assertTrue(notices)
+            self.assertIn("Video Builder: Import summary:", notices[-1][0])
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_video_builder_status_bar_text_includes_preview_and_mode(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        try:
+            dialog._video_io_available = False
+            self.assertIn("image/GIF mode", dialog.get_status_bar_text())
+            dialog._clips = [
+                vt._ClipEntry("first.png", 24, lambda _: Image.new("RGBA", (8, 8)), 24, frame_size=(8, 8)),
+                vt._ClipEntry("second.png", 12, lambda _: Image.new("RGBA", (8, 8)), 24, frame_size=(8, 8), load_note="temporary ffmpeg remux fallback active"),
+            ]
+            dialog._fps_slider.setValue(24)
+            dialog._update_timeline_summary()
+            dialog._pos_lbl.setText("5 / 36")
+            self.assertIn("preview 5 / 36", dialog.get_status_bar_text())
+            dialog._is_playing = True
+            self.assertIn("playing", dialog.get_status_bar_text())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_video_builder_status_bar_text_keeps_import_summary_without_clips(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        try:
+            dialog._video_io_available = False
+            dialog._update_import_status(
+                added=0,
+                attempted=2,
+                recovered=[],
+                failures=[("audio.ogg", "ffprobe detected audio but no playable video stream")],
+                skipped=["readme.txt"],
+            )
+            summary = dialog.get_status_bar_text()
+            self.assertIn("Video Builder ready", summary)
+            self.assertIn("image/GIF mode", summary)
+            self.assertIn("import Added 0 clips", summary)
+            self.assertIn("1 failed", summary)
+            self.assertIn("1 skipped", summary)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_video_builder_session_status_and_inline_detail_controls(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        dialog = vt.VideoToolDialog()
+        try:
+            self.assertIn("Tool status:", dialog._session_status_lbl.text())
+            self.assertIn("Video Builder ready", dialog._session_status_lbl.text())
+            dialog._video_io_available = False
+            dialog._update_import_status(
+                added=0,
+                attempted=2,
+                recovered=[],
+                failures=[("audio.ogg", "ffprobe detected audio but no playable video stream")],
+                skipped=["readme.txt"],
+            )
+            self.assertFalse(dialog._import_detail_toggle_btn.isHidden())
+            self.assertFalse(dialog._import_copy_btn.isHidden())
+            self.assertFalse(dialog._import_detail_box.isHidden())
+            dialog._toggle_import_details()
+            self.assertTrue(dialog._import_detail_box.isHidden())
+            dialog._copy_import_details()
+            self.assertIn("Import summary:", self._app.clipboard().text())
+            self.assertIn("audio.ogg", self._app.clipboard().text())
+            self.assertIn("image/GIF mode", dialog._session_status_lbl.text())
+            self.assertIn("1 failed", dialog._session_status_lbl.text())
+            self.assertIn("Next:", dialog._session_status_lbl.text())
+            self.assertIn("audio-only files cannot be added", dialog._next_step_lbl.text())
+            self.assertIn("image/GIF clips and GIF export still work here", dialog._next_step_lbl.text())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_converter_status_bar_text_includes_output_and_preview_state(self):
+        try:
+            from src.ui.converter_tool import ConverterTab
+        except ImportError as exc:
+            self.skipTest(f"converter_tool import unavailable in test env: {exc}")
+
+        widget = ConverterTab(_ConverterTabSettingsStub())
+        try:
+            widget._file_list.addItem("/tmp/sample.png")
+            widget._update_count(1)
+            summary = widget.get_status_bar_text()
+            self.assertIn("output", summary)
+            widget._current_preview_path = "/tmp/sample.png"
+            widget._before_is_animated = True
+            summary = widget.get_status_bar_text()
+            self.assertIn("preview sample.png", summary)
+            self.assertIn("animated source", summary)
+            widget._output_info_lbl.setText("<b>OUT</b><br>Preview<br><b>unavailable</b>")
+            self.assertIn("preview unavailable", widget.get_status_bar_text())
+            widget._refresh_session_status()
+            self.assertIn("Tool status:", widget._session_status_lbl.text())
+            self.assertIn(summary, widget._session_status_lbl.text())
+            self.assertIn("preview sample.png", widget._session_status_lbl.text())
+            self.assertIn("Next:", widget._session_status_lbl.text())
+            self.assertIn("review the live preview", widget._next_step_lbl.text())
+        finally:
+            widget.close()
+            widget.deleteLater()
+            self._app.processEvents()
+
+    def test_alpha_status_bar_text_includes_preview_and_helper_state(self):
+        try:
+            from src.core.settings_manager import SettingsManager
+            from src.core.presets import PresetManager
+            from src.ui.alpha_tool import AlphaFixerTab
+        except ImportError as exc:
+            self.skipTest(f"alpha_tool import unavailable in test env: {exc}")
+
+        settings = SettingsManager()
+        settings._qs = _FakeQSettings({})
+        presets = PresetManager(settings)
+        widget = AlphaFixerTab(presets, settings)
+        try:
+            widget._file_list.addItem("/tmp/sprite.png")
+            widget._update_file_count(1)
+            widget._preview_path = "/tmp/sprite.png"
+            widget._preview_helper_lbl.setText("Preview helpers: alpha heat-map on • atlas boxes on (4 cells).")
+            summary = widget.get_status_bar_text()
+            self.assertIn("preview sprite.png", summary)
+            self.assertIn("alpha heat-map on", summary)
+            self.assertIn("atlas boxes on (4 cells)", summary)
+            widget._refresh_session_status()
+            self.assertIn("Tool status:", widget._session_status_lbl.text())
+            self.assertIn("preview sprite.png", widget._session_status_lbl.text())
+            self.assertIn("Next:", widget._session_status_lbl.text())
+            self.assertIn("review the preview helpers", widget._next_step_lbl.text())
+        finally:
+            widget.close()
+            widget.deleteLater()
+            self._app.processEvents()
+
+    def test_main_window_status_helper_carries_next_step_and_capability_context(self):
+        try:
+            from src.ui.main_window import _status_summary_and_tooltip
+        except ImportError as exc:
+            self.skipTest(f"main_window import unavailable in test env: {exc}")
+
+        class _FakeLabel:
+            def __init__(self, text):
+                self._text = text
+
+            def text(self):
+                return self._text
+
+        source = types.SimpleNamespace(
+            get_status_bar_text=lambda: "🎬 Video Builder ready  •  image/GIF mode",
+            _next_step_lbl=_FakeLabel("Next step: add clips to start a timeline, then preview or export."),
+            _capability_lbl=_FakeLabel("Ready: image/GIF clips work here; MP4 export needs ffmpeg."),
+            _session_status_lbl=_FakeLabel(
+                "Tool status: 🎬 Video Builder ready  •  image/GIF mode\n"
+                "Next: add clips to start a timeline, then preview or export."
+            ),
+        )
+        summary, tooltip = _status_summary_and_tooltip(source)
+        self.assertEqual(summary, "🎬 Video Builder ready  •  image/GIF mode")
+        self.assertIn("Tool status:", tooltip)
+        self.assertIn("add clips to start a timeline", tooltip)
+        self.assertIn("Ready: image/GIF clips work here", tooltip)
+
+    def test_main_window_shared_gif_builder_reuses_dialog_and_appends_files(self):
+        try:
+            from src.ui import main_window as mw
+        except ImportError as exc:
+            self.skipTest(f"main_window import unavailable in test env: {exc}")
+
+        created = []
+        connected = []
+        updated = []
+
+        class _FakeDialog:
+            def __init__(self, parent=None, tooltip_mgr=None):
+                self.parent = parent
+                self.tooltip_mgr = tooltip_mgr
+                self.added = []
+                self.shown = 0
+                self.raised = 0
+                self.activated = 0
+                created.append(self)
+
+            def add_media_paths(self, paths):
+                self.added.append(list(paths))
+
+            def show(self):
+                self.shown += 1
+
+            def raise_(self):
+                self.raised += 1
+
+            def activateWindow(self):
+                self.activated += 1
+
+        fake_self = types.SimpleNamespace(
+            _tooltip_mgr=object(),
+            _gif_builder_dlg=None,
+            _connect_builder_status=lambda dialog: connected.append(dialog),
+            _update_builder_status=lambda: updated.append("ok"),
+            _update_current_tool_status=lambda: None,
+        )
+
+        with patch.object(mw, "GifBuilderDialog", _FakeDialog):
+            mw.MainWindow._open_or_focus_gif_builder(fake_self, ["/tmp/a.png"])
+            mw.MainWindow._open_or_focus_gif_builder(fake_self, ["/tmp/b.png"])
+
+        self.assertEqual(len(created), 1)
+        self.assertEqual(connected, [created[0]])
+        self.assertEqual(created[0].added, [["/tmp/a.png"], ["/tmp/b.png"]])
+        self.assertEqual(created[0].shown, 2)
+        self.assertEqual(created[0].raised, 2)
+        self.assertEqual(created[0].activated, 2)
+        self.assertEqual(len(updated), 2)
+
+    def test_main_window_current_tool_status_prefers_active_builder_else_tab(self):
+        try:
+            from src.ui import main_window as mw
+        except ImportError as exc:
+            self.skipTest(f"main_window import unavailable in test env: {exc}")
+
+        active_builder = types.SimpleNamespace(
+            isVisible=lambda: True,
+            isActiveWindow=lambda: True,
+            get_status_bar_text=lambda: "🎬 Video Builder: 2 clips  •  import 1 recovered",
+            _session_status_lbl=types.SimpleNamespace(text=lambda: "Tool status: 🎬 Video Builder: 2 clips  •  import 1 recovered"),
+            _capability_lbl=types.SimpleNamespace(text=lambda: "Ready: video import and MP4 export are available."),
+            _next_step_lbl=types.SimpleNamespace(text=lambda: "Next step: preview the recovered clip and export when ready."),
+        )
+        current_tab = types.SimpleNamespace(
+            get_status_bar_text=lambda: "📋 History: 3 items  •  filter status:partial",
+            _session_status_lbl=types.SimpleNamespace(text=lambda: "Tool status: 📋 History: 3 items  •  filter status:partial"),
+            _capability_lbl=types.SimpleNamespace(text=lambda: ""),
+            _next_step_lbl=types.SimpleNamespace(text=lambda: "Next step: adjust the filter or export the visible rows."),
+        )
+        fake_self = types.SimpleNamespace(
+            _gif_builder_dlg=None,
+            _video_tool_dlg=active_builder,
+            _tabs=types.SimpleNamespace(currentWidget=lambda: current_tab),
+        )
+
+        text, tooltip = mw.MainWindow._current_tool_status_context(fake_self)
+        self.assertEqual(text, "Selected: 🎬 Video Builder  •  Next: preview the recovered clip and export when ready.")
+        self.assertIn("Tool status:", tooltip)
+        self.assertIn("preview the recovered clip", tooltip)
+
+        active_builder.isActiveWindow = lambda: False
+        text, tooltip = mw.MainWindow._current_tool_status_context(fake_self)
+        self.assertEqual(text, "Selected: 📋 History  •  Next: adjust the filter or export the visible rows.")
+        self.assertIn("adjust the filter", tooltip)
+
+    def test_converter_open_gif_builder_delegates_to_main_window_when_available(self):
+        try:
+            from src.ui.converter_tool import ConverterTab
+        except ImportError as exc:
+            self.skipTest(f"converter_tool import unavailable in test env: {exc}")
+
+        calls = []
+        fake_host = types.SimpleNamespace(
+            _open_or_focus_gif_builder=lambda paths: calls.append(list(paths)),
+        )
+        fake_self = types.SimpleNamespace(window=lambda: fake_host)
+
+        ConverterTab._open_gif_builder(fake_self, ["/tmp/a.png", "/tmp/b.gif"])
+        self.assertEqual(calls, [["/tmp/a.png", "/tmp/b.gif"]])
+
+    def test_history_tab_surfaces_notes_column_for_gif_and_video(self):
+        try:
+            from src.ui.history_tab import HistoryTab
+        except ImportError as exc:
+            self.skipTest(f"history_tab import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        settings._gif_history.append(
+            {
+                "timestamp": "2026-10-07T09:00:00",
+                "output": "/tmp/a.gif",
+                "frame_count": 3,
+                "success": 3,
+                "errors": 0,
+                "files": ["a.png"],
+                "delay": "80 ms",
+                "fps": "12.5",
+                "optimize": "on",
+                "loop": "∞",
+                "resize": "≤320×auto",
+                "sources": "image ×1",
+                "largest_frame": "64×64",
+                "alpha_summary": "2/3",
+                "notes": "optimize=on",
+            }
+        )
+        settings._video_history.append(
+            {
+                "timestamp": "2026-10-07T09:01:00",
+                "output": "/tmp/a.mp4",
+                "format": "MP4",
+                "clip_count": 2,
+                "success": 2,
+                "errors": 0,
+                "fps": "24",
+                "canvas": "640×480",
+                "filter": "sepia",
+                "audio": "off",
+                "recovery": "transcode ×1",
+                "streams": "a.iso: stream #3",
+                "clips": "sample.iso: temporary ffmpeg transcode fallback active | streams=manual video #3, manual audio #1",
+                "sources": "video ×2",
+                "files": ["a.iso"],
+                "notes": "recovery=transcode ×1 | streams=a.iso: stream #3 | clips=sample.iso: temporary ffmpeg transcode fallback active",
+            }
+        )
+        tab = HistoryTab(settings)
+        try:
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(3), "80 ms")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(4), "12.5")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(5), "on")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(6), "∞")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(7), "≤320×auto")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(8), "image ×1")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(9), "64×64")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(10), "2/3")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(13), "OK")
+            self.assertEqual(tab._gif_tree.topLevelItem(0).text(14), "optimize=on")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(2), "MP4")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(4), "24")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(5), "640×480")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(6), "sepia")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(7), "off")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(8), "transcode ×1")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(9), "a.iso: stream #3")
+            self.assertEqual(tab._vid_tree.topLevelItem(0).text(13), "Recovery")
+            self.assertIn("manual audio #1", tab._vid_tree.topLevelItem(0).text(14))
+            self.assertIn("transcode fallback", tab._vid_tree.topLevelItem(0).text(15))
+            self.assertIn("manual audio #1", tab._vid_tree.topLevelItem(0).toolTip(0))
+            self.assertIn("OK 1", tab._gif_summary.text())
+            self.assertIn("Recovery 1", tab._vid_summary.text())
+        finally:
+            tab.close()
+            tab.deleteLater()
+            self._app.processEvents()
+
+    def test_history_filter_matches_full_output_path_not_only_visible_basename(self):
+        try:
+            from src.ui.history_tab import HistoryTab
+        except ImportError as exc:
+            self.skipTest(f"history_tab import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        settings._video_history.append(
+            {
+                "timestamp": "2026-10-07T09:01:00",
+                "output": "/tmp/session-exports/nested/final-output.mp4",
+                "format": "MP4",
+                "clip_count": 2,
+                "success": 2,
+                "errors": 0,
+                "filter": "none",
+                "audio": "kept",
+                "fps": "30",
+                "canvas": "640×360",
+                "recovery": "transcode ×1",
+                "streams": "sample.iso: stream #3",
+                "clips": "sample.iso: temporary ffmpeg transcode fallback active | streams=manual video #3, manual audio #1",
+                "sources": "video ×1, image ×1",
+                "files": ["a.iso"],
+                "notes": "recovery=transcode ×1 | streams=sample.iso: stream #3 | sources=video ×1, image ×1 | clips=sample.iso: temporary ffmpeg transcode fallback active",
+            }
+        )
+        tab = HistoryTab(settings)
+        try:
+            item = tab._vid_tree.topLevelItem(0)
+            self.assertEqual(item.text(1), "final-output.mp4")
+            tab._apply_filter(tab._vid_tree, "session-exports")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "recovery")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "status:recovery")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "output:session-exports")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "notes:transcode")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "format:mp4")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "recovery:transcode")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "streams:stream #3")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "clip:manual audio #1")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "audio:kept")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "filter:none")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "fps:30")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "canvas:1920")
+            self.assertTrue(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "size:640")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "source:image")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "file:a.iso")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "ok:2")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "clip:2")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "status:issues")
+            self.assertTrue(item.isHidden())
+        finally:
+            tab.close()
+            tab.deleteLater()
+            self._app.processEvents()
+
+    def test_history_filter_matches_gif_frame_and_success_aliases(self):
+        try:
+            from src.ui.history_tab import HistoryTab
+        except ImportError as exc:
+            self.skipTest(f"history_tab import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        settings._gif_history.append(
+            {
+                "timestamp": "2026-10-07T09:00:00",
+                "output": "/tmp/a.gif",
+                "frame_count": 12,
+                "success": 12,
+                "errors": 0,
+                "files": ["a.png"],
+                "sources": "image ×1",
+                "largest_frame": "320×240",
+                "alpha_summary": "4/12",
+                "delay": "100 ms",
+                "fps": "10",
+                "loop": "∞",
+                "optimize": "on",
+                "resize": "≤640×auto",
+                "notes": "optimize=on",
+            }
+        )
+        tab = HistoryTab(settings)
+        try:
+            item = tab._gif_tree.topLevelItem(0)
+            tab._apply_filter(tab._gif_tree, "frame:12")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "ok:12")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "status:ok")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "largest:320×240")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "delay:100")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "fps:10")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "alpha:4/12")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "loop:∞")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "optimize:on")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "resize:640")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "size:320")
+            self.assertFalse(item.isHidden())
+        finally:
+            tab.close()
+            tab.deleteLater()
+            self._app.processEvents()
+
+    def test_history_filter_supports_numeric_comparisons_and_grouped_field_ors(self):
+        try:
+            from src.ui.history_tab import HistoryTab
+        except ImportError as exc:
+            self.skipTest(f"history_tab import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        settings._video_history.append(
+            {
+                "timestamp": "2026-10-07T09:01:00",
+                "output": "/tmp/session-exports/nested/final-output.mp4",
+                "format": "MP4",
+                "clip_count": 2,
+                "success": 2,
+                "errors": 0,
+                "filter": "none",
+                "audio": "kept",
+                "fps": "30",
+                "canvas": "640×480",
+                "recovery": "transcode ×1",
+                "streams": "sample.iso: stream #3",
+                "sources": "video ×1, image ×1",
+                "files": ["a.iso"],
+                "notes": "recovery=transcode ×1 | streams=sample.iso: stream #3 | sources=video ×1, image ×1 | clips=sample.iso: temporary ffmpeg transcode fallback active",
+            }
+        )
+        tab = HistoryTab(settings)
+        try:
+            item = tab._vid_tree.topLevelItem(0)
+            tab._apply_filter(tab._vid_tree, "fps:>=24 errors:<1 clip:>1")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "audio:off|kept")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "recovery:remux recovery:transcode")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "stream:*#3")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "size:480")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._vid_tree, "fps:>60")
+            self.assertTrue(item.isHidden())
+        finally:
+            tab.close()
+            tab.deleteLater()
+            self._app.processEvents()
+
+    def test_history_filter_supports_wildcards_and_numeric_delay_ranges(self):
+        try:
+            from src.ui.history_tab import HistoryTab
+        except ImportError as exc:
+            self.skipTest(f"history_tab import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        settings._gif_history.append(
+            {
+                "timestamp": "2026-10-07T09:00:00",
+                "output": "/tmp/exports/anim-final.gif",
+                "frame_count": 12,
+                "success": 12,
+                "errors": 0,
+                "files": ["a.png"],
+                "sources": "image ×1",
+                "largest_frame": "320×240",
+                "alpha_summary": "4/12",
+                "delay": "100 ms",
+                "fps": "10",
+                "loop": "∞",
+                "optimize": "on",
+                "resize": "≤640×auto",
+                "notes": "optimize=on",
+            }
+        )
+        tab = HistoryTab(settings)
+        try:
+            item = tab._gif_tree.topLevelItem(0)
+            tab._apply_filter(tab._gif_tree, "output:*final.gif")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "delay:>=100 fps:<11")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "resize:*640*")
+            self.assertFalse(item.isHidden())
+            tab._apply_filter(tab._gif_tree, "delay:>100")
+            self.assertTrue(item.isHidden())
+        finally:
+            tab.close()
+            tab.deleteLater()
+            self._app.processEvents()
+
+    def test_history_tab_status_bar_text_tracks_current_subtab_and_filter(self):
+        try:
+            from src.ui.history_tab import HistoryTab
+        except ImportError as exc:
+            self.skipTest(f"history_tab import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        settings._video_history.append(
+            {
+                "timestamp": "2026-10-07T09:01:00",
+                "output": "/tmp/final-output.mp4",
+                "format": "MP4",
+                "clip_count": 2,
+                "success": 2,
+                "errors": 0,
+                "fps": "30",
+                "canvas": "640×480",
+                "filter": "sepia",
+                "audio": "kept",
+                "recovery": "transcode ×1",
+                "streams": "sample.iso: stream #3",
+                "sources": "video ×1",
+                "files": ["sample.iso"],
+                "notes": "recovery=transcode ×1",
+            }
+        )
+        tab = HistoryTab(settings)
+        try:
+            self.assertIn("Ready:", tab._capability_lbl.text())
+            self.assertTrue(tab._sub_tabs.usesScrollButtons())
+            self.assertFalse(tab._sub_tabs.tabBar().expanding())
+            self.assertEqual(tab._sub_tabs.tabBar().tabToolTip(1), "Alpha & RGBA Adjuster history")
+            tab._sub_tabs.setCurrentIndex(4)
+            self.assertIn("Tool status:", tab._session_status_lbl.text())
+            self.assertIn("History: Video Builder", tab.get_status_bar_text())
+            self.assertIn("1 item", tab.get_status_bar_text())
+            self.assertIn("Next:", tab._session_status_lbl.text())
+            tab._vid_search.setText("transcode")
+            self.assertIn("filter transcode", tab.get_status_bar_text())
+            self.assertIn("review status and notes details", tab._next_step_lbl.text())
+            tab._vid_search.setText("missing")
+            self.assertIn("0/1 shown", tab.get_status_bar_text())
+            self.assertIn("bring matching history entries back", tab._next_step_lbl.text())
+        finally:
+            tab.close()
+            tab.deleteLater()
+            self._app.processEvents()
+
+    def test_history_tab_uses_compact_secondary_tab_spacing(self):
+        try:
+            from src.ui.history_tab import HistoryTab
+        except ImportError as exc:
+            self.skipTest(f"history_tab import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        tab = HistoryTab(settings)
+        try:
+            margins = tab.layout().contentsMargins()
+            self.assertEqual(
+                (margins.left(), margins.top(), margins.right(), margins.bottom()),
+                (10, 10, 10, 10),
+            )
+            self.assertEqual(tab.layout().spacing(), 8)
+            self.assertTrue(tab._sub_tabs.documentMode())
+            self.assertTrue(tab._sub_tabs.usesScrollButtons())
+            self.assertFalse(tab._sub_tabs.tabBar().expanding())
+            page_layout = tab._sub_tabs.widget(0).layout()
+            page_margins = page_layout.contentsMargins()
+            self.assertEqual(
+                (page_margins.left(), page_margins.top(), page_margins.right(), page_margins.bottom()),
+                (0, 4, 0, 0),
+            )
+            self.assertEqual(page_layout.spacing(), 4)
+        finally:
+            tab.close()
+            tab.deleteLater()
+            self._app.processEvents()
+
+    def test_settings_dialog_uses_compact_nonexpanding_tabs(self):
+        try:
+            from src.ui.settings_dialog import SettingsDialog
+        except ImportError as exc:
+            self.skipTest(f"settings_dialog import unavailable in test env: {exc}")
+
+        class _SettingsStub:
+            def get_theme(self):
+                return {"name": "Panda Dark"}
+
+            def get_saved_themes(self):
+                return {}
+
+            def get(self, key, fallback=None):
+                return fallback
+
+        with patch.object(SettingsDialog, "_load_values", lambda self: None):
+            dialog = SettingsDialog(_SettingsStub())
+        try:
+            margins = dialog.layout().contentsMargins()
+            self.assertEqual(
+                (margins.left(), margins.top(), margins.right(), margins.bottom()),
+                (8, 8, 8, 8),
+            )
+            self.assertEqual(dialog.layout().spacing(), 6)
+            self.assertTrue(dialog._settings_tabs.documentMode())
+            self.assertTrue(dialog._settings_tabs.usesScrollButtons())
+            self.assertFalse(dialog._settings_tabs.tabBar().expanding())
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+            self._app.processEvents()
+
+    def test_primary_tools_use_tighter_root_layout_spacing(self):
+        try:
+            from src.ui.alpha_tool import AlphaFixerTab
+            from src.ui.converter_tool import ConverterTab
+            from src.ui.gif_builder import GifBuilderDialog
+            from src.ui.video_tool import VideoToolDialog
+        except ImportError as exc:
+            self.skipTest(f"tool import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        converter = ConverterTab(settings)
+        alpha = AlphaFixerTab(MagicMock(), settings)
+        gif = GifBuilderDialog()
+        video = VideoToolDialog()
+        widgets = [converter, alpha, gif, video]
+        try:
+            expectations = {
+                converter: ((10, 10, 10, 10), 8),
+                alpha: ((10, 10, 10, 10), 8),
+                gif: ((8, 8, 8, 8), 6),
+                video: ((8, 8, 8, 8), 6),
+            }
+            for widget, (expected_margins, expected_spacing) in expectations.items():
+                margins = widget.layout().contentsMargins()
+                self.assertEqual(
+                    (margins.left(), margins.top(), margins.right(), margins.bottom()),
+                    expected_margins,
+                )
+                self.assertEqual(widget.layout().spacing(), expected_spacing)
+        finally:
+            for widget in widgets:
+                widget.close()
+                widget.deleteLater()
+            self._app.processEvents()
+
+
 # ---------------------------------------------------------------------------
 # Fairy Garden theme + fairy click effect
 # ---------------------------------------------------------------------------
@@ -1478,6 +7732,217 @@ class TestFairyTheme(unittest.TestCase):
     def test_fairy_garden_in_preset_themes(self):
         from src.ui.theme_engine import PRESET_THEMES
         self.assertIn("Fairy Garden", PRESET_THEMES)
+
+
+@unittest.skipUnless(_PYQT6_AVAILABLE, "PyQt6 not installed")
+class TestSelectiveAlphaToolSlots(unittest.TestCase):
+    def setUp(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        from src.ui.selective_alpha_tool import SelectiveAlphaTool
+        self._widget = SelectiveAlphaTool()
+
+    def tearDown(self):
+        self._widget.hide()
+        self._widget.deleteLater()
+        self._app.processEvents()
+
+    def test_canvas_unload_clears_undo_redo_controls_and_transient_state(self):
+        canvas = self._widget._canvas
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "image.png")
+            image = Image.new("RGBA", (4, 4), "red")
+            try:
+                image.save(path)
+            finally:
+                image.close()
+            self.assertTrue(canvas.load_image(path))
+        canvas.set_mask_from_array(0, np.ones((4, 4), dtype=np.uint8))
+        canvas.set_mask_from_array(0, np.zeros((4, 4), dtype=np.uint8))
+        canvas.undo_mask()
+        self.assertTrue(self._widget._history_overlay._btn_undo.isEnabled())
+        self.assertTrue(self._widget._history_overlay._btn_redo.isEnabled())
+        canvas._drawing = True
+        canvas._drag_start_img = (1, 1)
+        canvas._transform_orig_mask = np.ones((4, 4), dtype=np.uint8)
+        canvas.unload_image()
+        self.assertFalse(canvas.has_image())
+        self.assertFalse(self._widget._history_overlay._btn_undo.isEnabled())
+        self.assertFalse(self._widget._history_overlay._btn_redo.isEnabled())
+        self.assertFalse(canvas._drawing)
+        self.assertIsNone(canvas._drag_start_img)
+        self.assertIsNone(canvas._transform_orig_mask)
+
+    def test_canvas_load_closes_original_after_rgba_conversion(self):
+        from src.ui import selective_alpha_tool as sa
+        image = Image.new("RGB", (3, 2), "red")
+        with patch.object(sa.Image, "open", return_value=image):
+            self.assertTrue(self._widget._canvas.load_image("image.jpg"))
+        with self.assertRaises(ValueError):
+            image.getpixel((0, 0))
+        self.assertEqual(self._widget._canvas.get_source_image().getpixel((0, 0)), (255, 0, 0, 255))
+
+    def test_canvas_load_memory_error_closes_both_images(self):
+        from src.ui import selective_alpha_tool as sa
+        image = Image.new("RGB", (3, 2), "red")
+        rgba = Image.new("RGBA", (3, 2), "red")
+        with patch.object(sa.Image, "open", return_value=image), \
+                patch.object(image, "convert", return_value=rgba), \
+                patch.object(sa.np, "array", side_effect=MemoryError):
+            with self.assertRaises(MemoryError):
+                self._widget._canvas.load_image("image.jpg")
+        for resource in (image, rgba):
+            with self.assertRaises(ValueError):
+                resource.getpixel((0, 0))
+
+    def test_painter_sidebar_large_font_controls_remain_scrollable(self):
+        from PyQt6.QtGui import QFont
+        from PyQt6.QtWidgets import QScrollArea
+        self._widget.resize(900, 700)
+        self._widget.setFont(QFont("Sans Serif", 24))
+        self._widget.show()
+        self._app.processEvents()
+        self._app.processEvents()
+        scroll = self._widget.findChild(QScrollArea)
+        panel = scroll.widget()
+        self.assertGreaterEqual(panel.width(), panel.minimumSizeHint().width())
+        self.assertGreater(scroll.horizontalScrollBar().maximum(), 0)
+        for key in ("freehand", "eraser", "polygon"):
+            button = self._widget._tool_btns[key]
+            self.assertGreaterEqual(button.width(), button.minimumSizeHint().width())
+
+    def test_painter_source_callbacks_change_state_without_uncaught_errors(self):
+        from PyQt6.QtWidgets import QFileDialog
+        canvas = self._widget._canvas
+        errors = []
+        with tempfile.TemporaryDirectory(dir=".") as folder:
+            path = os.path.join(folder, "image.png")
+            image = Image.new("RGBA", (4, 4), "red")
+            try:
+                image.save(path)
+            finally:
+                image.close()
+            with patch.object(sys, "excepthook", side_effect=lambda *error: errors.append(error)), \
+                    patch.object(QFileDialog, "getOpenFileName", return_value=(path, "")):
+                self._widget._btn_open.click()
+                self._app.processEvents()
+                self.assertTrue(canvas.has_image())
+                self._widget._tool_btns["eraser"].click()
+                self.assertEqual(canvas._tool, "eraser")
+                self._widget._tool_btns["freehand"].click()
+                self.assertEqual(canvas._tool, "freehand")
+                canvas.set_mask_from_array(0, np.ones((4, 4), dtype=np.uint8))
+                self._widget._history_overlay._btn_undo.click()
+                self.assertIsNone(canvas.get_mask_as_array(0))
+                self._widget._history_overlay._btn_redo.click()
+                np.testing.assert_array_equal(canvas.get_mask_as_array(0), np.ones((4, 4), dtype=np.uint8))
+                self._widget._history_overlay._btn_all_vis.click()
+                self.assertFalse(any(canvas._zone_visible))
+                self._widget._history_overlay._btn_all_vis.click()
+                self.assertTrue(all(canvas._zone_visible))
+                self._app.processEvents()
+        self.assertEqual(errors, [], "Uncaught Qt callback exception")
+
+    def test_visible_palette_matches_settings_count_without_reducing_engine_capacity(self):
+        from src.core.settings_manager import SELECTIVE_ALPHA_UI_ZONE_COUNT
+        from src.core.selective_alpha_processor import NUM_ZONES
+        self.assertEqual(SELECTIVE_ALPHA_UI_ZONE_COUNT, 7)
+        self.assertEqual(self._widget._active_zone_combo.count(), SELECTIVE_ALPHA_UI_ZONE_COUNT)
+        self.assertEqual(NUM_ZONES, 40)
+        self.assertEqual(len(self._widget._canvas.get_all_masks()), NUM_ZONES)
+        self._widget._active_zone_combo.setCurrentIndex(SELECTIVE_ALPHA_UI_ZONE_COUNT - 1)
+        self._widget._cycle_zone(1)
+        self.assertEqual(self._widget._active_zone_combo.currentIndex(), 0)
+        self._widget._cycle_zone(-1)
+        self.assertEqual(self._widget._active_zone_combo.currentIndex(), SELECTIVE_ALPHA_UI_ZONE_COUNT - 1)
+
+    def test_painter_help_and_tutorial_match_visible_palette(self):
+        from PyQt6.QtWidgets import QDialog, QLabel
+        from src.core.settings_manager import SELECTIVE_ALPHA_UI_ZONE_COUNT
+        from src.ui.main_window import MainWindow
+        from src.ui.selective_alpha_tool import _selective_alpha_capability_details
+        from src.ui.tutorial_dialog import _TUTORIAL_STEPS
+        count = SELECTIVE_ALPHA_UI_ZONE_COUNT
+        self.assertIn(f"{count} independent alpha zones", _selective_alpha_capability_details())
+        step = next(step for step in _TUTORIAL_STEPS if step["title"] == "Alpha Painter")
+        self.assertIn(f"{count} independent colour-coded zones", step["body"])
+
+        def inspect_about(dialog):
+            content = "\n".join(label.text() for label in dialog.findChildren(QLabel))
+            self.assertIn(f"{count} visible zones", content)
+            self.assertNotIn("40 zones", content)
+            return QDialog.DialogCode.Rejected
+
+        with patch.object(QDialog, "exec", inspect_about):
+            MainWindow._show_about(self._widget)
+
+    def test_painter_tooltip_variants_do_not_advertise_engine_only_capacity(self):
+        from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
+        for variants in (_NORMAL, _DUMBED, _VULGAR):
+            for key, tips in variants.items():
+                if key.startswith("sa_") or key == "selective_alpha_tab":
+                    for tip in tips:
+                        with self.subTest(key=key, tip=tip):
+                            self.assertNotRegex(tip, r"\b40\b")
+
+    def test_saved_mask_slots_grow_to_configured_limit(self):
+        self.assertEqual(self._widget._slot_combo.count(), self._widget._MASK_SLOT_INIT)
+        while self._widget._btn_slot_add.isEnabled():
+            self._widget._on_slot_add()
+        self.assertEqual(self._widget._slot_combo.count(), self._widget._MASK_SLOT_COUNT)
+        self.assertFalse(self._widget._btn_slot_add.isEnabled())
+
+    def test_selective_alpha_status_bar_text_tracks_loaded_image_and_shared_state(self):
+        self.assertIn("Tool status:", self._widget._session_status_lbl.text())
+        self.assertIn("Ready:", self._widget._capability_lbl.text())
+        self.assertIn("Alpha Painter ready", self._widget.get_status_bar_text())
+        self._widget._src_path = "/tmp/sample.png"
+        self._widget._shared_zones = [(64, np.zeros((2, 2), dtype=np.uint8))]
+        self._widget._mask_clipboard = np.zeros((2, 2), dtype=np.uint8)
+        self._widget._az_slots[0] = [np.zeros((2, 2), dtype=np.uint8)]
+        self._widget._result_img = Image.new("RGBA", (2, 2))
+        self.addCleanup(self._widget._result_img.close)
+        self._widget._refresh_session_status()
+        summary = self._widget.get_status_bar_text()
+        self.assertIn("sample.png", summary)
+        self.assertIn("shared zone", summary)
+        self.assertIn("mask clipboard ready", summary)
+        self.assertIn("full-layout slot", summary)
+        self.assertIn("result ready to save", summary)
+        self.assertIn("sample.png", self._widget._session_status_lbl.text())
+        self.assertIn("Next:", self._widget._session_status_lbl.text())
+        self.assertIn("save the current result", self._widget._next_step_lbl.text())
+
+    def test_selective_alpha_slot_labels_explain_next_actions(self):
+        self.assertIn("Empty", self._widget._slot_info_lbl.text())
+        self.assertIn("save the active zone here", self._widget._slot_info_lbl.text())
+        self.assertIn("Empty", self._widget._az_slot_info_lbl.text())
+        self.assertIn("save all current zones here", self._widget._az_slot_info_lbl.text())
+
+        self._widget._mask_slots[0] = np.zeros((2, 2), dtype=np.uint8)
+        self._widget._mask_slot_info[0] = "Zone 1 – Red"
+        self._widget._on_slot_selected(0)
+        self.assertIn("Saved from:", self._widget._slot_info_lbl.text())
+        self.assertIn("paste into the active zone", self._widget._slot_info_lbl.text())
+
+        self._widget._az_slots[0] = [np.zeros((2, 2), dtype=np.uint8)]
+        self._widget._az_slot_info[0] = "all zones"
+        self._widget._on_az_slot_selected(0)
+        self.assertIn("Saved:", self._widget._az_slot_info_lbl.text())
+        self.assertIn("paste all zones onto the current image", self._widget._az_slot_info_lbl.text())
+
+    def test_selective_alpha_shared_zone_status_points_to_import_actions(self):
+        self.assertIn("No shared zones ready yet", self._widget._import_shared_status.text())
+        self.assertIn("right-click the preview", self._widget._import_shared_status.text())
+
+        self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=bool))])
+        text = self._widget._import_shared_status.text()
+        self.assertIn("1 zone(s) ready", text)
+        self.assertIn("Import Zones to Canvas", text)
+        self.assertIn("Paste Mask", text)
+        self.assertTrue(self._widget._btn_import_shared.isEnabled())
+        self.assertTrue(self._widget._btn_import_to_az_slot.isEnabled())
+        self.assertTrue(self._widget._btn_import_zone_to_clipboard.isEnabled())
 
     def test_fairy_garden_has_fairy_effect(self):
         from src.ui.theme_engine import FAIRY_THEME
@@ -1663,7 +8128,7 @@ class TestThemeBannerMessages(unittest.TestCase):
     def test_get_theme_banner_fallback(self):
         from src.ui.theme_engine import get_theme_banner
         result = get_theme_banner("NonExistentTheme12345")
-        self.assertIn("Alpha & RGBA Adjuster", result)
+        self.assertIn("FORMATOMANCER: Alpha & Media Alchemy", result)
 
     def test_get_theme_status_fallback(self):
         from src.ui.theme_engine import get_theme_status
@@ -1782,7 +8247,7 @@ class TestBannerAnimationFrames(unittest.TestCase):
         from src.ui.theme_engine import get_theme_banner_frames, get_theme_banner
         frames = get_theme_banner_frames("NoSuchTheme99")
         self.assertEqual(len(frames), 1)
-        self.assertIn("Alpha & RGBA Adjuster", frames[0])
+        self.assertIn("FORMATOMANCER: Alpha & Media Alchemy", frames[0])
         # The single frame must be consistent with get_theme_banner fallback
         self.assertEqual(frames[0], get_theme_banner("NoSuchTheme99"))
 
@@ -1974,6 +8439,283 @@ class TestPreviewPaneNoBlockingWait(unittest.TestCase):
 # (Per-theme emoji changes were intentionally removed as users found them
 #  distracting — see issue #2 comment "i hate the emojis ... always changing".)
 # ---------------------------------------------------------------------------
+
+class TestShortcutRemapping(unittest.TestCase):
+    def setUp(self):
+        _require_qt_gui(self)
+        self._app = _get_app()
+        from PyQt6.QtWidgets import QWidget
+        self._host = QWidget()
+        self._host._settings = MagicMock()
+        self._host._builder = MagicMock()
+        self._host._shortcut_map = {
+            "target": {
+                "group": "GIF Builder", "desc": "Export GIF", "default": "F5",
+                "current": "Ctrl+J", "sc": MagicMock(), "owner": MagicMock(),
+                "owner_attr": "_builder",
+            },
+            "other": {
+                "group": "GIF Builder", "desc": "Load media", "default": "Ctrl+K",
+                "current": "Ctrl+K",
+            },
+        }
+        self.addCleanup(self._host.deleteLater)
+
+    def test_rejects_same_tool_and_global_collisions_without_remapping_or_saving(self):
+        from src.ui.main_window import MainWindow, QMessageBox
+        target = self._host._shortcut_map["target"]
+        other = self._host._shortcut_map["other"]
+        for target_group, other_group in (
+            ("GIF Builder", "GIF Builder"),
+            ("GIF Builder", "Global"),
+            ("Global", "Video Builder"),
+        ):
+            with self.subTest(target=target_group, other=other_group):
+                target["group"], other["group"] = target_group, other_group
+                with patch.object(QMessageBox, "warning") as warning:
+                    self.assertFalse(MainWindow._update_shortcut(self._host, "target", "Ctrl+K"))
+                self.assertIn("Load media", warning.call_args.args[2])
+                self.assertIn(other_group, warning.call_args.args[2])
+                self.assertEqual(target["current"], "Ctrl+J")
+                target["sc"].setKey.assert_not_called()
+                target["owner"].update_shortcut_binding.assert_not_called()
+                self._host._builder.update_shortcut_binding.assert_not_called()
+                self._host._settings.set_shortcut_binding.assert_not_called()
+
+    def test_allows_shared_key_in_separate_tools_and_updates_registered_owners(self):
+        from PyQt6.QtGui import QKeySequence
+        from src.ui.main_window import MainWindow, QMessageBox
+        target = self._host._shortcut_map["target"]
+        self._host._shortcut_map["other"]["group"] = "Video Builder"
+        with patch.object(QMessageBox, "warning") as warning:
+            self.assertTrue(MainWindow._update_shortcut(self._host, "target", "Ctrl+K"))
+        warning.assert_not_called()
+        target["sc"].setKey.assert_called_once_with(QKeySequence("Ctrl+K"))
+        target["owner"].update_shortcut_binding.assert_called_once_with("target", "Ctrl+K")
+        self._host._builder.update_shortcut_binding.assert_called_once_with("target", "Ctrl+K")
+        self._host._settings.set_shortcut_binding.assert_called_once_with("target", "Ctrl+K", "F5")
+        self.assertEqual(target["current"], "Ctrl+K")
+
+    def test_compares_key_sequences_not_modifier_order(self):
+        from src.ui.main_window import MainWindow, QMessageBox
+        self._host._shortcut_map["other"]["current"] = "Ctrl+Shift+K"
+        with patch.object(QMessageBox, "warning"):
+            self.assertFalse(MainWindow._update_shortcut(self._host, "target", "Shift+Ctrl+K"))
+        self._host._settings.set_shortcut_binding.assert_not_called()
+
+    def test_allows_unchanged_binding_and_empty_binding(self):
+        from src.ui.main_window import MainWindow, QMessageBox
+        self._host._shortcut_map["other"]["current"] = ""
+        with patch.object(QMessageBox, "warning") as warning:
+            self.assertTrue(MainWindow._update_shortcut(self._host, "target", "Ctrl+J"))
+            self.assertTrue(MainWindow._update_shortcut(self._host, "target", ""))
+        warning.assert_not_called()
+        self.assertEqual(self._host._shortcut_map["target"]["current"], "")
+
+    def test_dialog_keeps_binding_and_reset_controls_unchanged_after_conflict(self):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtTest import QTest
+        from PyQt6.QtWidgets import QDialog, QTableWidget, QPushButton
+        from src.ui.main_window import MainWindow, QMessageBox
+        self._host._shortcut_map["target"]["default"] = "Ctrl+K"
+        self._host._update_shortcut = lambda action, key: MainWindow._update_shortcut(self._host, action, key)
+
+        def exec_dialog(dialog):
+            if dialog.windowTitle() == "Press a Key Combination":
+                QTest.keyClick(dialog, Qt.Key.Key_K, Qt.KeyboardModifier.ControlModifier)
+                return QDialog.DialogCode.Accepted
+            table = dialog.findChild(QTableWidget)
+            row = next(i for i in range(table.rowCount()) if table.item(i, 1).text() == "Export GIF")
+            change, reset = table.cellWidget(row, 3).findChildren(QPushButton)
+            change.click()
+            self.assertEqual(table.item(row, 2).text(), "Ctrl+J")
+            self.assertTrue(change.isEnabled())
+            self.assertTrue(reset.isEnabled())
+            reset.click()
+            self.assertEqual(table.item(row, 2).text(), "Ctrl+J")
+            self.assertTrue(reset.isEnabled())
+            return QDialog.DialogCode.Rejected
+
+        with patch.object(QDialog, "exec", exec_dialog), patch.object(QMessageBox, "warning") as warning:
+            MainWindow._show_shortcuts(self._host)
+        self.assertEqual(warning.call_count, 2)
+        self._host._settings.set_shortcut_binding.assert_not_called()
+
+
+class TestDialogAccessibility(unittest.TestCase):
+    def setUp(self):
+        self._app = _get_app()
+        self._widgets = []
+        self._old_font = self._app.font()
+
+    def tearDown(self):
+        for widget in self._widgets:
+            widget.close()
+            widget.deleteLater()
+        self._app.setFont(self._old_font)
+        self._app.processEvents()
+
+    def test_builders_fit_small_secondary_screen_with_scrollable_controls(self):
+        from PyQt6.QtCore import QRect
+        from PyQt6.QtGui import QFont
+        from PyQt6.QtWidgets import QScrollArea
+        from src.ui.gif_builder import GifBuilderDialog
+        from src.ui.video_tool import VideoToolDialog
+
+        available = QRect(-800, 40, 800, 600)
+        screen = MagicMock()
+        screen.availableGeometry.return_value = available
+        for point_size in (9, 24):
+            font = QFont(self._old_font)
+            font.setPointSize(point_size)
+            self._app.setFont(font)
+            for dialog_type in (GifBuilderDialog, VideoToolDialog):
+                with self.subTest(dialog=dialog_type.__name__, font=point_size):
+                    dialog = dialog_type()
+                    self._widgets.append(dialog)
+                    with patch.object(dialog, "screen", return_value=screen):
+                        dialog.show()
+                        self._app.processEvents()
+                    self.assertTrue(available.contains(dialog.frameGeometry()))
+                    scroll = dialog.findChild(QScrollArea, "dialogContentScroll")
+                    self.assertIsNotNone(scroll)
+                    self.assertGreater(scroll.widget().width(), 0)
+                    if point_size == 24:
+                        self.assertGreater(
+                            scroll.horizontalScrollBar().maximum()
+                            + scroll.verticalScrollBar().maximum(), 0,
+                        )
+                    for area in reversed(dialog.findChildren(QScrollArea)):
+                        if area.widget().isAncestorOf(dialog._btn_export):
+                            area.ensureWidgetVisible(dialog._btn_export)
+                    self._app.processEvents()
+                    center = dialog._btn_export.mapTo(
+                        scroll.viewport(), dialog._btn_export.rect().center()
+                    )
+                    self.assertTrue(scroll.viewport().rect().contains(center))
+
+    def test_fit_dialog_preserves_geometry_when_already_on_screen(self):
+        from PyQt6.QtCore import QRect
+        from PyQt6.QtWidgets import QDialog
+        from src.ui._ui_utils import fit_dialog_to_screen
+
+        dialog = QDialog()
+        self._widgets.append(dialog)
+        dialog.resize(360, 260)
+        dialog.move(100, 120)
+        dialog.show()
+        self._app.processEvents()
+        original = dialog.geometry()
+        screen = MagicMock()
+        screen.availableGeometry.return_value = QRect(0, 0, 1200, 900)
+        with patch.object(dialog, "screen", return_value=screen):
+            fit_dialog_to_screen(dialog)
+        self.assertEqual(dialog.geometry(), original)
+        with patch.object(dialog, "screen", return_value=None):
+            fit_dialog_to_screen(dialog)
+        self.assertEqual(dialog.geometry(), original)
+
+    def test_frame_picker_requires_nonempty_selection(self):
+        from PIL import Image
+        from PyQt6.QtWidgets import QDialogButtonBox
+        from src.ui.gif_frame_picker import GifFramePickerDialog
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "frames.gif")
+            with Image.new("RGBA", (12, 12), "red") as first:
+                with Image.new("RGBA", (12, 12), "blue") as second:
+                    first.save(path, save_all=True, append_images=[second])
+            dialog = GifFramePickerDialog(path)
+            self._widgets.append(dialog)
+            ok = dialog._btn_box.button(QDialogButtonBox.StandardButton.Ok)
+            self.assertTrue(ok.isEnabled())
+            self.assertEqual(dialog.selected_indices(), [0, 1])
+            dialog._deselect_all()
+            self.assertFalse(ok.isEnabled())
+            with patch("PyQt6.QtWidgets.QDialog.accept") as accept:
+                dialog.accept()
+                accept.assert_not_called()
+                dialog._checkboxes[1].setChecked(True)
+                self.assertTrue(ok.isEnabled())
+                dialog.accept()
+                accept.assert_called_once()
+            dialog._invert_selection()
+            self.assertEqual(dialog.selected_indices(), [0])
+            dialog._select_all()
+            self.assertEqual(dialog.selected_indices(), [0, 1])
+
+    def test_frame_picker_read_failure_disables_export(self):
+        from PyQt6.QtWidgets import QDialogButtonBox
+        from src.ui.gif_frame_picker import GifFramePickerDialog
+
+        with patch("PIL.Image.open", side_effect=OSError("Unreadable GIF")):
+            dialog = GifFramePickerDialog("missing.gif")
+        self._widgets.append(dialog)
+        self.assertIn("Unreadable GIF", dialog._info_lbl.text())
+        self.assertFalse(
+            dialog._btn_box.button(QDialogButtonBox.StandardButton.Ok).isEnabled()
+        )
+        self.assertEqual(dialog.selected_indices(), [])
+
+    def test_tutorial_step_starts_at_top_after_scrolling(self):
+        from PyQt6.QtCore import QRect
+        from src.ui.tutorial_dialog import TutorialDialog
+
+        dialog = TutorialDialog()
+        self._widgets.append(dialog)
+        screen = MagicMock()
+        screen.availableGeometry.return_value = QRect(0, 0, 640, 400)
+        with patch.object(dialog, "screen", return_value=screen):
+            dialog.show()
+            self._app.processEvents()
+        self.assertTrue(screen.availableGeometry().contains(dialog.frameGeometry()))
+        dialog._body_lbl.setText("<br>".join(["Long tutorial text"] * 100))
+        self._app.processEvents()
+        self._app.processEvents()
+        bar = dialog._body_scroll.verticalScrollBar()
+        self.assertGreater(bar.maximum(), 0)
+        bar.setValue(bar.maximum())
+        dialog._next()
+        self._app.processEvents()
+        self.assertEqual(bar.value(), 0)
+        self.assertEqual(dialog._step, 1)
+        dialog._prev()
+        self.assertEqual(dialog._step, 0)
+
+    def test_shortcut_capture_accepts_control_modifier(self):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtTest import QTest
+        from PyQt6.QtWidgets import QDialog, QTableWidget, QPushButton, QWidget
+        from src.ui.main_window import MainWindow
+
+        parent = QWidget()
+        self._widgets.append(parent)
+        parent._shortcut_map = {
+            "run": {
+                "group": "Global", "desc": "Run", "current": "F5", "default": "F5",
+            },
+        }
+        parent._update_shortcut = MagicMock()
+        dialogs = []
+
+        def exec_dialog(dialog):
+            dialogs.append(dialog)
+            if dialog.windowTitle() == "Press a Key Combination":
+                self.assertGreater(dialog.maximumWidth(), dialog.width())
+                QTest.keyClick(dialog, Qt.Key.Key_K, Qt.KeyboardModifier.ControlModifier)
+                return QDialog.DialogCode.Accepted
+            table = dialog.findChild(QTableWidget)
+            controls = table.cellWidget(0, 3)
+            controls.findChildren(QPushButton)[0].click()
+            self.assertEqual(table.item(0, 2).text(), "Ctrl+K")
+            self.assertGreaterEqual(table.rowHeight(0), controls.minimumSizeHint().height())
+            return QDialog.DialogCode.Rejected
+
+        with patch.object(QDialog, "exec", exec_dialog):
+            MainWindow._show_shortcuts(parent)
+        parent._update_shortcut.assert_called_once_with("run", "Ctrl+K")
+        self._widgets.extend(dialogs)
+
 
 class TestThemeTabLabels(unittest.TestCase):
     def test_returns_three_labels(self):

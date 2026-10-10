@@ -13,7 +13,12 @@ from typing import Optional
 from PyQt6.QtCore import Qt, QTimer, QRect
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QFont, QRadialGradient, QLinearGradient, QPen
 from PyQt6.QtWidgets import QSplashScreen, QApplication
-from PyQt6.QtSvgWidgets import QSvgWidget
+from ..version import APP_NAME
+
+try:
+    from PyQt6.QtSvgWidgets import QSvgWidget as _QSvgWidget
+except Exception:
+    _QSvgWidget = None  # type: ignore[assignment,misc]
 
 PATREON_URL = "https://www.patreon.com/c/DeadOnTheInside"
 
@@ -71,7 +76,7 @@ class ThemeSplashScreen(QSplashScreen):
         self._banner = self._banner_frames[0]
 
         # Try to load the theme's SVG
-        self._svg_widget: Optional[QSvgWidget] = None
+        self._svg_widget: "Optional[_QSvgWidget]" = None
         self._load_svg(theme)
 
         # Progress timer
@@ -100,12 +105,14 @@ class ThemeSplashScreen(QSplashScreen):
     # ------------------------------------------------------------------
 
     def _load_svg(self, theme: dict) -> None:
+        if _QSvgWidget is None:
+            return
         from .theme_engine import get_theme_svg_path
         path = get_theme_svg_path(self._theme_name)
         if not path:
             return
         try:
-            self._svg_widget = QSvgWidget(path, self)
+            self._svg_widget = _QSvgWidget(path, self)
             self._svg_widget.setGeometry(self.WIDTH - 200, 10, 190, 190)
             self._svg_widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
             self._svg_widget.show()
@@ -168,7 +175,7 @@ class ThemeSplashScreen(QSplashScreen):
         title_font = QFont("Segoe UI", 22, QFont.Weight.Bold)
         p.setFont(title_font)
         p.setPen(self._text)
-        p.drawText(QRect(30, 28, W - 240, 40), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "Alpha & RGBA Adjuster  |  File Converter")
+        p.drawText(QRect(30, 28, W - 240, 40), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, APP_NAME)
 
         # Theme banner / subtitle
         sub_font = QFont("Segoe UI", 11)
