@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from PIL import Image
 from PyQt6 import sip
-from PyQt6.QtCore import QCoreApplication, QEvent, QPoint, Qt
+from PyQt6.QtCore import QCoreApplication, QEvent, QPoint, QRect, Qt
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
@@ -64,6 +64,72 @@ def assert_masks_equal(left, right):
     assert len(left) == len(right)
     for before, after in zip(left, right):
         np.testing.assert_array_equal(before, after)
+
+
+@pytest.mark.parametrize("pixels", [13, 24, 32])
+@pytest.mark.parametrize("size", [(480, 400), (640, 480)])
+def test_compact_controls_scroll_and_resize_preserve_canvas_and_history(painter, app, tmp_path, pixels, size):
+    open_image(painter, tmp_path)
+    canvas = painter._canvas
+    canvas.set_mask_from_array(0, np.ones((24, 32), dtype=np.uint8))
+    canvas.set_mask_from_array(1, np.ones((24, 32), dtype=np.uint8))
+    canvas.undo_mask()
+    masks = canvas.get_all_masks()
+    steps = len(canvas._undo_stack), len(canvas._redo_stack)
+    painter.setStyleSheet(f"QWidget {{ font-size: {pixels}px; }}")
+    painter.resize(*size)
+    painter.show()
+    app.processEvents()
+    scroll = painter._controls_scroll
+    assert (painter.width(), painter.height()) == size
+    assert 100 <= scroll.width() < painter.width() // 2
+    assert canvas.width() >= 250 and canvas.height() >= 200
+    assert scroll.horizontalScrollBar().maximum() > 0
+    assert scroll.verticalScrollBar().maximum() > 0
+    assert scroll.accessibleName() == "Alpha Painter controls"
+    assert painter._ze_alpha_spin.accessibleName() == "Active zone alpha (0–255)"
+    assert painter._ze_alpha_spin.font().pixelSize() == pixels
+
+    # Real Tab traversal must reveal off-screen numeric editors and bottom slots.
+    painter._btn_open.setFocus()
+    app.processEvents()
+    seen = set()
+    for _ in range(150):
+        focused = app.focusWidget()
+        if focused in (painter._ze_alpha_spin, painter._slot_combo,
+                       painter._btn_az_slot_clear):
+            rect = QRect(focused.mapTo(scroll.viewport(), QPoint()), focused.size())
+            assert scroll.viewport().rect().intersects(rect)
+            if focused.width() <= scroll.viewport().width():
+                assert scroll.viewport().rect().contains(rect)
+            seen.add(focused)
+        if len(seen) == 3:
+            break
+        QTest.keyClick(focused, Qt.Key.Key_Tab)
+        app.processEvents()
+    assert seen == {painter._ze_alpha_spin, painter._slot_combo, painter._btn_az_slot_clear}
+    assert scroll.verticalScrollBar().value() > 0
+    painter._btn_slot_add.setFocus()
+    app.processEvents()
+    slot_count = painter._slot_combo.count()
+    QTest.keyClick(painter._btn_slot_add, Qt.Key.Key_Space)
+    app.processEvents()
+    assert painter._slot_combo.count() == slot_count + 1
+
+    # Widening and shrinking must not rebuild controls or discard undo/redo.
+    painter.resize(1100, 800)
+    app.processEvents()
+    assert scroll.width() == 360
+    painter.resize(*size)
+    app.processEvents()
+    app.processEvents()
+    assert (painter.width(), painter.height()) == size
+    focused_rect = QRect(painter._btn_slot_add.mapTo(scroll.viewport(), QPoint()),
+                         painter._btn_slot_add.size())
+    assert scroll.viewport().rect().intersects(focused_rect)
+    assert painter._canvas is canvas
+    assert_masks_equal(canvas.get_all_masks(), masks)
+    assert (len(canvas._undo_stack), len(canvas._redo_stack)) == steps
 
 
 def test_real_draw_edit_clipboards_slots_save_reopen(painter, app, tmp_path):

@@ -36,7 +36,7 @@ from PIL import Image, ImageDraw
 from ..core.settings_manager import SELECTIVE_ALPHA_UI_ZONE_COUNT
 
 from PyQt6.QtCore import (
-    Qt, QEvent, QPointF, QRectF, QTimer, pyqtSignal,
+    Qt, QEvent, QPoint, QPointF, QRectF, QTimer, pyqtSignal,
 )
 from PyQt6.QtGui import (
     QColor, QFont, QImage, QPainter, QPen,
@@ -47,7 +47,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QSpinBox, QCheckBox, QGroupBox,
     QFileDialog, QMessageBox, QScrollArea, QSizePolicy,
     QButtonGroup, QFrame, QColorDialog, QMenu, QComboBox,
-    QAbstractSpinBox, QInputDialog, QSlider, QLineEdit, QStyle,
+    QAbstractSpinBox, QInputDialog, QSlider, QLineEdit, QStyle, QApplication,
 )
 
 from ..core.selective_alpha_processor import (
@@ -2456,8 +2456,17 @@ class SelectiveAlphaTool(QWidget):
         left_scroll.setWidget(left_panel)
         left_scroll.setWidgetResizable(True)
         left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        left_scroll.setFixedWidth(360)  # panel 340 + scroll bar ~20
-        root.addWidget(left_scroll)
+        left_scroll.setObjectName("painterControlsScroll")
+        left_scroll.setAccessibleName("Alpha Painter controls")
+        left_scroll.setAccessibleDescription(
+            "Scroll to reach painting, zone, mask slot and import controls."
+        )
+        left_scroll.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
+        left_scroll.setMaximumWidth(360)
+        self._controls_scroll = left_scroll
+        for control in left_panel.findChildren(QWidget):
+            control.installEventFilter(self)
+        root.addWidget(left_scroll, 9)
 
         # ── Canvas ───────────────────────────────────────────────────────
         self._canvas = SelectiveAlphaCanvas()
@@ -2539,7 +2548,7 @@ class SelectiveAlphaTool(QWidget):
         self._canvas.cursor_moved.connect(
             lambda x, y: self._coord_lbl.setText(f"x:{x}  y:{y}")
         )
-        root.addWidget(right_widget, 1)
+        root.addWidget(right_widget, 11)
 
         # ── Floating zoom overlay pinned to the top-right of the canvas ───
         self._zoom_overlay = _FloatingZoomOverlay(
@@ -2591,6 +2600,16 @@ class SelectiveAlphaTool(QWidget):
         self._refresh_zone_combo_icons()
         self._setup_shortcuts()
         self._refresh_session_status()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        # Preserve canvas space; oversized controls remain reachable in both
+        # directions through QScrollArea's native keyboard focus scrolling.
+        margins = self.layout().contentsMargins()
+        available = max(1, self.width() - margins.left() - margins.right()
+                        - self.layout().spacing())
+        self._controls_scroll.setMaximumWidth(min(360, max(1, int(available * 0.45))))
+        QTimer.singleShot(0, self._reveal_focused_control)
 
     def _setup_shortcuts(self) -> None:
         """Bind common keyboard shortcuts for the Alpha Painter editor."""
@@ -4015,10 +4034,33 @@ class SelectiveAlphaTool(QWidget):
         self._canvas.zoom_reset()
 
     def eventFilter(self, obj, event) -> bool:
-        """Reposition the floating overlays when the canvas is resized."""
-        if obj is self._canvas and event.type() == QEvent.Type.Resize:
+        """Keep canvas overlays pinned and focused sidebar controls reachable."""
+        if event.type() == QEvent.Type.FocusIn and self._controls_scroll.widget().isAncestorOf(obj):
+            QTimer.singleShot(0, self._reveal_focused_control)
+        if obj is getattr(self, "_canvas", None) and event.type() == QEvent.Type.Resize:
             self._zoom_overlay.reposition(event.size())
             self._zoom_overlay.raise_()
             self._history_overlay.reposition(event.size())
             self._history_overlay.raise_()
         return False
+
+    def _reveal_focused_control(self) -> None:
+        control = QApplication.focusWidget()
+        if control is None or not self._controls_scroll.widget().isAncestorOf(control):
+            return
+        # Run after Qt's focus scrolling, which reveals only a spin box's
+        # internal editor and can leave the increment/decrement arrows clipped.
+        if isinstance(control.parentWidget(), QAbstractSpinBox):
+            control = control.parentWidget()
+        self._controls_scroll.ensureWidgetVisible(control, 0, 0)
+        viewport = self._controls_scroll.viewport()
+        pos = control.mapTo(viewport, QPoint())
+        for bar, start, length, extent in (
+            (self._controls_scroll.horizontalScrollBar(), pos.x(), control.width(), viewport.width()),
+            (self._controls_scroll.verticalScrollBar(), pos.y(), control.height(), viewport.height()),
+        ):
+            if length <= extent:
+                if start < 0:
+                    bar.setValue(bar.value() + start)
+                elif start + length > extent:
+                    bar.setValue(bar.value() + start + length - extent)

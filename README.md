@@ -402,6 +402,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Painter's controls shrink proportionally on compact windows rather than forcing
+the window beyond the available width, preserving usable canvas space. Oversized
+controls remain scrollable in both directions; keyboard focus reveals complete
+spin boxes, including their arrows. Compact/font regressions also verify mask
+slots, edits and undo history are preserved. Physical display and screen-reader
+qualification remain separate from these offscreen checks.
+
 Settings custom-sound buttons use natural font-scaled sizes and explicit
 accessible names. Sound controls follow visual keyboard order; focused controls
 are revealed through nested scroll areas. Settings tabs allow horizontal scrolling
