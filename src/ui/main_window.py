@@ -4002,8 +4002,11 @@ class MainWindow(QMainWindow):
         defs = getattr(provider, "shortcut_definitions", None)
         if not callable(defs):
             return
+        resolver = getattr(provider, "resolved_shortcut_bindings", None)
+        resolved = resolver(self._settings, self._shortcut_map) if callable(resolver) else {}
         for sc_id, default_key, desc, group in defs():
-            key_str = self._settings.get_shortcut_binding(sc_id, default_key)
+            key_str = (resolved[sc_id] if sc_id in resolved else
+                       self._settings.get_shortcut_binding(sc_id, default_key))
             if owner_attr is None and hasattr(provider, "update_shortcut_binding"):
                 try:
                     provider.update_shortcut_binding(sc_id, key_str)
@@ -4064,8 +4067,11 @@ class MainWindow(QMainWindow):
 
     def _apply_shortcut_settings(self) -> None:
         """Refresh existing bindings after import/reset without rewriting preferences."""
+        video_bindings = VideoToolDialog.resolved_shortcut_bindings(
+            self._settings, self._shortcut_map)
         for sc_id, info in self._shortcut_map.items():
-            key = self._settings.get_shortcut_binding(sc_id, info["default"])
+            key = (video_bindings[sc_id] if sc_id in video_bindings else
+                   self._settings.get_shortcut_binding(sc_id, info["default"]))
             if key == info["current"]:
                 continue
             shortcut = info.get("sc")

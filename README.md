@@ -451,6 +451,15 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Video Builder provides Undo/Redo for timeline edits and editor settings, including
+imports, removal, reordering, splitting, trims, speed and still duration. Slider
+gestures form one edit; no-ops preserve redo. History retains media references
+rather than copying decoded frames and is bounded by edit/resource budgets.
+Opening a project resets edit history. Undo/Redo defaults yield to existing saved
+shortcut assignments and remain customizable. Generated-media regressions cover
+timing, resource cleanup, projects and shortcuts; native and sustained-stress
+acceptance, including synchronized audible preview, remains outstanding.
+
 GIF Builder provides Undo/Redo for adding, removing, clearing and reordering
 frames and editing per-frame delay overrides. Buttons and configurable Ctrl+Z /
 Ctrl+Shift+Z shortcuts restore frame selection and timing; text fields retain
@@ -458,7 +467,7 @@ their own undo behavior. History retains references rather than copying pixels
 and is capped at 50 edits and 32 million history-only pixels. Older edits may be
 released. Global export settings are not part of this history. Generated-frame
 regressions cover history branching, resource cleanup and project replacement;
-Video Builder undo/redo and native workflow acceptance remain outstanding.
+Native workflow acceptance remains outstanding.
 
 Converter metadata checks now cover EXIF dimensions after resize, nested
 interoperability tags, TIFF metadata/storage-tag separation, AVIF ICC copying

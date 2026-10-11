@@ -31,7 +31,8 @@ from __future__ import annotations
 import datetime
 import copy
 from collections import deque
-from functools import lru_cache
+from functools import lru_cache, wraps
+from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
@@ -49,7 +50,7 @@ from src.core.video_export import (
 )
 
 from PyQt6.QtCore import (
-    Qt, QTimer, QSize, QEvent, pyqtSignal,
+    Qt, QTimer, QSize, QEvent, QItemSelectionModel, pyqtSignal,
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QKeySequence, QShortcut, QIcon,
@@ -60,7 +61,8 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QFileDialog, QSlider,
     QCheckBox, QComboBox, QGroupBox, QGridLayout, QSpinBox,
     QMessageBox, QProgressDialog, QSplitter, QWidget, QApplication,
-    QFrame, QPlainTextEdit, QScrollArea, QSizePolicy, QLayout, QBoxLayout,
+    QFrame, QPlainTextEdit, QTextEdit, QLineEdit, QAbstractSpinBox,
+    QScrollArea, QSizePolicy, QLayout, QBoxLayout,
 )
 
 _VIDEO_EXTS = {
@@ -89,6 +91,50 @@ _IMAGE_EXTS = {
     ".jfif", ".jpe", ".xnb", ".tim",
 }
 _KNOWN_MEDIA_SUFFIXES = _VIDEO_EXTS | _IMAGE_EXTS | {".gif", ".mp4"}
+_HISTORY_LIMIT = 50
+_HISTORY_PIXEL_LIMIT = 8 * 1024 * 1024
+_HISTORY_RESOURCE_LIMIT = 128
+_HISTORY_TEMP_BYTES_LIMIT = 256 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class _VideoState:
+    clips: tuple
+    timing: tuple
+    controls: tuple
+    selected: tuple
+    current: object
+    playhead: int
+
+
+@dataclass(frozen=True)
+class _VideoEdit:
+    label: str
+    before: _VideoState
+    after: _VideoState
+
+
+def _video_edit(label):
+    """Record metadata only, once per operation (or held slider gesture)."""
+    def decorate(method):
+        @wraps(method)
+        def edit(self, *args, **kwargs):
+            if self._editing_busy() or self._history_depth:
+                return
+            if label not in ("Trim start", "Trim end", "Clip speed", "Still duration"):
+                self._finish_history_gesture()
+            before = self._capture_video_state()
+            self._history_depth += 1
+            self._update_history_controls()
+            try:
+                return method(self, *args, **kwargs)
+            finally:
+                self._history_depth -= 1
+                if self._history_gesture is None:
+                    self._record_video_edit(label, before)
+                self._update_history_controls()
+        return edit
+    return decorate
 _EXPERIMENTAL_DISC_VIDEO_EXTS = {".cue", ".iso", ".umd", ".bin"}
 _ODD_CONTAINER_RECOVERY_EXTS = _EXPERIMENTAL_DISC_VIDEO_EXTS | {
     ".asf", ".divx", ".dv", ".flv", ".mov", ".rm", ".rmvb", ".ts", ".vob", ".yuv",
@@ -2978,6 +3024,8 @@ class VideoToolDialog(QDialog):
         ("video_toggle_play", "Space", "Play or pause preview", "Video Builder"),
         ("video_export", "Ctrl+S", "Export video or GIF", "Video Builder"),
         ("video_split_clip", "Ctrl+E", "Split clip at playhead", "Video Builder"),
+        ("video_undo", "Ctrl+Z", "Undo timeline edit", "Video Builder"),
+        ("video_redo", "Ctrl+Shift+Z", "Redo timeline edit", "Video Builder"),
     )
 
     def __init__(self, parent=None, tooltip_mgr=None):
@@ -2989,6 +3037,12 @@ class VideoToolDialog(QDialog):
         self._tooltip_mgr = tooltip_mgr
         _configure_imageio_ffmpeg()
         self._clips: list[_ClipEntry] = []
+        self._undo_stack = []
+        self._redo_stack = []
+        self._history_entries = set()
+        self._history_restoring = False
+        self._history_depth = 0
+        self._history_gesture = None
         self._preview_video_getter = None
         self._export_worker = None
         self._export_selecting = False
@@ -3022,6 +3076,18 @@ class VideoToolDialog(QDialog):
         self._refresh_session_status()
         from .editor_project import EditorProjectController
         self._project = EditorProjectController(self, "video")
+        self._history_controls = tuple(self._project.controls().items())
+        for name in self._project.rules:
+            control = getattr(self, name)
+            signal = (control.toggled if isinstance(control, QCheckBox) else
+                      control.currentIndexChanged if isinstance(control, QComboBox) else
+                      control.valueChanged)
+            signal.connect(self._on_history_control_changed)
+        for control in self.findChildren(QSlider):
+            if control is not self._scrubber:
+                control.sliderPressed.connect(self._begin_history_gesture)
+                control.sliderReleased.connect(self._finish_history_gesture)
+        self._update_history_controls()
 
     # ------------------------------------------------------------------
     # UI construction
@@ -3093,6 +3159,15 @@ class VideoToolDialog(QDialog):
         self._btn_split.clicked.connect(self._split_clip_at_playhead)
         tb.addWidget(self._btn_split)
         left_layout.addLayout(tb)
+        history_row = QHBoxLayout()
+        self._btn_undo = QPushButton("Undo")
+        self._btn_redo = QPushButton("Redo")
+        self._btn_clear = QPushButton("Clear Timeline")
+        for button, slot in ((self._btn_undo, self._undo), (self._btn_redo, self._redo),
+                             (self._btn_clear, self._clear_all)):
+            button.clicked.connect(slot)
+            history_row.addWidget(button)
+        left_layout.addLayout(history_row)
 
         insert_row = QHBoxLayout()
         insert_row.addWidget(QLabel("Insert new clips:"))
@@ -3655,6 +3730,39 @@ class VideoToolDialog(QDialog):
     def shortcut_definitions(cls) -> tuple[tuple[str, str, str, str], ...]:
         return cls.SHORTCUT_DEFS
 
+    @classmethod
+    def resolved_shortcut_bindings(cls, settings, registry=None) -> dict[str, str]:
+        bindings = {
+            shortcut_id: (settings.get_shortcut_binding(shortcut_id, default)
+                          if settings is not None else default)
+            for shortcut_id, default, _description, _group in cls.SHORTCUT_DEFS
+        }
+        history_ids = {"video_undo", "video_redo"}
+        reserved = {QKeySequence(key).toString() for shortcut_id, key in bindings.items()
+                    if shortcut_id not in history_ids}
+        for shortcut_id, info in (registry or {}).items():
+            if info["group"] != "Global":
+                continue
+            key = (settings.get_shortcut_binding(shortcut_id, info["default"])
+                   if settings is not None else info["current"])
+            reserved.add(QKeySequence(key).toString())
+        saved_history = {
+            shortcut_id for shortcut_id in history_ids
+            if settings is not None and settings.get_shortcut_binding(shortcut_id, "")
+        }
+        reserved.update(QKeySequence(bindings[shortcut_id]).toString()
+                        for shortcut_id in saved_history)
+        for shortcut_id in ("video_undo", "video_redo"):
+            if shortcut_id in saved_history:
+                continue
+            key = QKeySequence(bindings[shortcut_id]).toString()
+            # Keep the action customizable, but never shadow an existing assignment.
+            if key in reserved:
+                bindings[shortcut_id] = ""
+            else:
+                reserved.add(key)
+        return bindings
+
     def _resolve_settings(self):
         parent = self.parentWidget()
         while parent is not None:
@@ -3666,10 +3774,21 @@ class VideoToolDialog(QDialog):
 
     def _setup_shortcuts(self) -> None:
         self._shortcut_objects: dict[str, QShortcut] = {}
+        registry = None
+        parent = self.parentWidget()
+        while parent is not None:
+            registry = getattr(parent, "_shortcut_map", None)
+            if registry is not None:
+                break
+            parent = parent.parentWidget()
+        self._resolved_shortcut_bindings = self.resolved_shortcut_bindings(
+            self._resolve_settings(), registry)
         self._bind_shortcut("video_remove_selected", "Delete", self._remove_selected)
         self._bind_shortcut("video_toggle_play", "Space", self._toggle_play)
         self._bind_shortcut("video_export", "Ctrl+S", self._export)
         self._bind_shortcut("video_split_clip", "Ctrl+E", self._split_clip_at_playhead)
+        self._bind_shortcut("video_undo", "Ctrl+Z", lambda: self._history_shortcut(False))
+        self._bind_shortcut("video_redo", "Ctrl+Shift+Z", lambda: self._history_shortcut(True))
 
     def update_shortcut_binding(self, shortcut_id: str, key_sequence: str) -> None:
         shortcut = getattr(self, "_shortcut_objects", {}).get(shortcut_id)
@@ -3685,10 +3804,7 @@ class VideoToolDialog(QDialog):
         return super().event(event)
 
     def _bind_shortcut(self, shortcut_id: str, default: str, slot) -> None:
-        settings = self._resolve_settings()
-        key_sequence = default
-        if settings is not None:
-            key_sequence = settings.get_shortcut_binding(shortcut_id, default)
+        key_sequence = self._resolved_shortcut_bindings.get(shortcut_id, default)
         shortcut = QShortcut(QKeySequence(key_sequence), self)
         shortcut.activated.connect(slot)
         self._shortcut_objects[shortcut_id] = shortcut
@@ -3724,6 +3840,203 @@ class VideoToolDialog(QDialog):
     # ------------------------------------------------------------------
     # Clip management
     # ------------------------------------------------------------------
+
+    def _editing_busy(self) -> bool:
+        project = getattr(self, "_project", None)
+        return bool(self.is_exporting() or self._history_restoring
+                    or (project is not None and project._loading))
+
+    def _history_shortcut(self, redo: bool) -> None:
+        focused = QApplication.focusWidget()
+        while focused is not None and focused is not self:
+            if isinstance(focused, (QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox)):
+                return
+            focused = focused.parentWidget()
+        (self._redo if redo else self._undo)()
+
+    def _capture_video_state(self) -> _VideoState:
+        current = self._clip_list.currentItem()
+        return _VideoState(
+            tuple(self._clips),
+            tuple((c.trim_start, c.trim_end, c.speed_percent, c.still_duration_frames,
+                   c._split_timing) for c in self._clips),
+            tuple(self._project.controls().items()) if hasattr(self, "_project") else (),
+            tuple(item.data(_CLIP_ROLE) for item in self._clip_list.selectedItems()),
+            current.data(_CLIP_ROLE) if current else None, self._scrubber.value(),
+        )
+
+    def _restore_video_state(self, state: _VideoState) -> None:
+        self._history_restoring = True
+        self._clip_list.blockSignals(True)
+        try:
+            self._clips = list(state.clips)
+            self._clip_list.clear()
+            for clip, timing in zip(state.clips, state.timing):
+                (clip.trim_start, clip.trim_end, clip.speed_percent,
+                 clip.still_duration_frames, clip._split_timing) = timing
+                item = QListWidgetItem(_format_clip_label(
+                    clip, clip.source_path, "🎞" if clip.clip_type == "video" else "🖼"))
+                item.setData(_CLIP_ROLE, clip)
+                self._clip_list.addItem(item)
+                if clip is state.current:
+                    self._clip_list.setCurrentItem(item, QItemSelectionModel.SelectionFlag.NoUpdate)
+            for index, clip in enumerate(state.clips):
+                self._clip_list.item(index).setSelected(clip in state.selected)
+            for name, value in state.controls:
+                control = getattr(self, name)
+                control.blockSignals(True)
+                if isinstance(control, QCheckBox):
+                    control.setChecked(value)
+                elif isinstance(control, QComboBox):
+                    control.setCurrentIndex(control.findData(value))
+                else:
+                    control.setValue(value)
+                control.blockSignals(False)
+            # Refresh existing value labels without rewriting any per-clip timing.
+            for name, value in state.controls:
+                control = getattr(self, name)
+                if isinstance(control, QSlider):
+                    control.valueChanged.emit(value)
+            self._on_clip_selected(self._clip_list.currentRow())
+            self._update_scrubber()
+            self._scrubber.setValue(state.playhead)
+            self._update_preview()
+            self._update_ui_state()
+        finally:
+            self._clip_list.blockSignals(False)
+            self._history_restoring = False
+        self._history_controls = tuple(self._project.controls().items())
+        self._project.poll()
+
+    def _record_video_edit(self, label: str, before: _VideoState) -> None:
+        after = self._capture_video_state()
+        self._history_controls = after.controls
+        if (before.clips, before.timing, before.controls) == (after.clips, after.timing, after.controls):
+            return
+        self._undo_stack.append(_VideoEdit(label, before, after))
+        self._redo_stack.clear()
+        self._history_entries.update(before.clips)
+        self._history_entries.update(after.clips)
+        self._trim_video_history()
+        self._release_unused_history()
+        self._project.poll()
+
+    def _trim_video_history(self) -> None:
+        while self._undo_stack or self._redo_stack:
+            retained = {c for edit in self._undo_stack + self._redo_stack
+                        for state in (edit.before, edit.after) for c in state.clips}
+            extra = retained.difference(self._clips)
+            images = {}
+            paths = set()
+            for clip in extra:
+                getter = clip._get_frame
+                frames = ([getter._img] if isinstance(getter, _ImageFrameGetter) else
+                          getter._frames if isinstance(getter, _SequenceFrameGetter) else [])
+                if isinstance(getter, _VideoFrameGetter):
+                    frames = [im for im in (getter._prefetched_frame, getter._last_frame) if im is not None]
+                    paths.update(getter._cleanup_paths)
+                for image in frames:
+                    images[id(image)] = image
+            pixels = sum(im.width * im.height if hasattr(im, "width")
+                         else int(im.shape[0]) * int(im.shape[1])
+                         for im in images.values())
+            temp_bytes = 0
+            for path in paths:
+                try:
+                    temp_bytes += os.path.getsize(path)
+                except OSError:
+                    pass
+            if (len(self._undo_stack) + len(self._redo_stack) <= _HISTORY_LIMIT
+                    and len(extra) <= _HISTORY_RESOURCE_LIMIT and pixels <= _HISTORY_PIXEL_LIMIT
+                    and temp_bytes <= _HISTORY_TEMP_BYTES_LIMIT):
+                break
+            (self._undo_stack or self._redo_stack).pop(0)
+
+    def _release_unused_history(self) -> None:
+        retained = set(self._clips)
+        for edit in self._undo_stack + self._redo_stack:
+            retained.update(edit.before.clips)
+            retained.update(edit.after.clips)
+        for clip in self._history_entries - retained:
+            if self._preview_video_getter is clip._get_frame:
+                self._preview_video_getter = None
+            clip.close()
+        # Retained video sources can reopen their reader on demand.
+        for clip in retained.difference(self._clips):
+            if isinstance(clip._get_frame, _VideoFrameGetter):
+                clip._get_frame._close_reader()
+        self._history_entries.intersection_update(retained)
+
+    def _reset_video_history(self) -> None:
+        self._history_gesture = None
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+        self._release_unused_history()
+        self._history_controls = tuple(self._project.controls().items())
+        self._update_history_controls()
+
+    def _update_history_controls(self) -> None:
+        if not hasattr(self, "_btn_undo"):
+            return
+        busy = self._editing_busy() or bool(self._history_depth)
+        for button, stack, verb in ((self._btn_undo, self._undo_stack, "Undo"),
+                                    (self._btn_redo, self._redo_stack, "Redo")):
+            button.setEnabled(bool(stack) and not busy)
+            button.setToolTip(f"{verb}: {stack[-1].label}" if stack else f"Nothing to {verb.lower()}")
+        self._btn_clear.setEnabled(bool(self._clips) and not busy)
+
+    def _undo(self) -> None:
+        self._move_video_history(False)
+
+    def _redo(self) -> None:
+        self._move_video_history(True)
+
+    def _move_video_history(self, redo: bool) -> None:
+        if self._editing_busy() or self._history_depth:
+            return
+        self._finish_history_gesture()
+        source, target = ((self._redo_stack, self._undo_stack) if redo else
+                          (self._undo_stack, self._redo_stack))
+        if source:
+            edit = source.pop()
+            self._restore_video_state(edit.after if redo else edit.before)
+            target.append(edit)
+            self._trim_video_history()
+            self._release_unused_history()
+            self.status_notice.emit(f"Video Builder: {'Redid' if redo else 'Undid'} {edit.label}", 4000)
+        self._update_history_controls()
+
+    def _begin_history_gesture(self) -> None:
+        if not self._editing_busy() and not self._history_depth:
+            self._finish_history_gesture()
+            self._history_gesture = self._capture_video_state()
+
+    def _finish_history_gesture(self) -> None:
+        before, self._history_gesture = self._history_gesture, None
+        if before is not None:
+            self._record_video_edit("Adjust timing / settings", before)
+            self._update_history_controls()
+
+    def _on_history_control_changed(self, *_args) -> None:
+        if not hasattr(self, "_history_controls"):
+            return
+        state = self._capture_video_state()
+        before = _VideoState(state.clips, state.timing, self._history_controls,
+                             state.selected, state.current, state.playhead)
+        if not self._editing_busy() and not self._history_depth and self._history_gesture is None:
+            self._record_video_edit("Export / preview settings", before)
+            self._update_history_controls()
+        self._history_controls = state.controls
+
+    @_video_edit("Clear timeline")
+    def _clear_all(self) -> None:
+        self._history_entries.update(self._clips)
+        self._clips.clear()
+        self._clip_list.clear()
+        self._on_clip_selected(-1)
+        self._update_scrubber()
+        self._update_preview()
+        self._update_ui_state()
 
     def _next_insert_row(self) -> int:
         row = self._clip_list.currentRow()
@@ -4044,6 +4357,7 @@ class VideoToolDialog(QDialog):
             )
         )
 
+    @_video_edit("Source stream selection")
     def _apply_selected_stream_choice(self) -> None:
         if self.is_exporting():
             return
@@ -4082,16 +4396,11 @@ class VideoToolDialog(QDialog):
             self.status_notice.emit(f"Video Builder: stream reload failed for {Path(clip.source_path).name}", 7000)
             self._refresh_stream_controls(row)
             return
-        old_clip = clip
         self._clips[row] = new_clip
         item = self._clip_list.item(row)
         if item is not None:
             item.setData(_CLIP_ROLE, new_clip)
         self._refresh_clip_item(row)
-        try:
-            old_clip.close()
-        except Exception:
-            pass
         self._clip_list.setCurrentRow(row)
         self._update_scrubber()
         self._update_preview()
@@ -4229,6 +4538,7 @@ class VideoToolDialog(QDialog):
 
         self._update_timeline_summary()
         self._update_audio_controls()
+        self._update_history_controls()
 
     def _refresh_clip_item(self, row: int) -> None:
         if row < 0 or row >= len(self._clips):
@@ -4293,6 +4603,7 @@ class VideoToolDialog(QDialog):
             new_clip._split_timing = clip._split_timing
         return new_clip
 
+    @_video_edit("Import media")
     def _on_files_dropped(self, paths: list[str], insert_row: int) -> None:
         if self.is_exporting():
             return
@@ -4357,6 +4668,7 @@ class VideoToolDialog(QDialog):
         )
         self._load_video_paths(paths, insert_row=self._next_insert_row())
 
+    @_video_edit("Import videos")
     def _load_video_paths(self, paths: list[str], insert_row: Optional[int] = None) -> None:
         if self.is_exporting():
             return
@@ -4499,6 +4811,7 @@ class VideoToolDialog(QDialog):
         )
         self._load_image_paths(paths, insert_row=self._next_insert_row())
 
+    @_video_edit("Import images / GIFs")
     def _load_image_paths(self, paths: list[str], insert_row: Optional[int] = None) -> None:
         if self.is_exporting():
             return
@@ -4524,13 +4837,13 @@ class VideoToolDialog(QDialog):
             skipped=skipped,
         )
 
+    @_video_edit("Remove clip")
     def _remove_selected(self) -> None:
         if self.is_exporting():
             return
         row = self._clip_list.currentRow()
         if row < 0 or row >= len(self._clips):
             return
-        self._clips[row].close()
         del self._clips[row]
         self._clip_list.takeItem(row)
         if self._clip_list.count():
@@ -4541,6 +4854,7 @@ class VideoToolDialog(QDialog):
         self._update_preview()
         self._update_ui_state()
 
+    @_video_edit("Reorder clips")
     def _sync_clips_from_list(self) -> None:
         """Rebuild ``self._clips`` from current list-item order."""
         if self.is_exporting():
@@ -4583,10 +4897,17 @@ class VideoToolDialog(QDialog):
         self._refresh_stream_controls(row)
         self._update_ui_state()
 
+    @_video_edit("Trim start")
     def _on_trim_start_changed(self, val: int) -> None:
         row = self._clip_list.currentRow()
         if 0 <= row < len(self._clips):
             clip = self._clips[row]
+            if clip.trim_start == min(val, clip.trim_end):
+                self._trim_start_slider.blockSignals(True)
+                self._trim_start_slider.setValue(clip.trim_start)
+                self._trim_start_slider.blockSignals(False)
+                self._trim_start_lbl.setText(str(clip.trim_start))
+                return
             clip._split_timing = None
             clip.trim_start = min(val, clip.trim_end)
             self._trim_start_slider.blockSignals(True)
@@ -4602,10 +4923,17 @@ class VideoToolDialog(QDialog):
         else:
             self._trim_start_lbl.setText(str(val))
 
+    @_video_edit("Trim end")
     def _on_trim_end_changed(self, val: int) -> None:
         row = self._clip_list.currentRow()
         if 0 <= row < len(self._clips):
             clip = self._clips[row]
+            if clip.trim_end == max(val, clip.trim_start):
+                self._trim_end_slider.blockSignals(True)
+                self._trim_end_slider.setValue(clip.trim_end)
+                self._trim_end_slider.blockSignals(False)
+                self._trim_end_lbl.setText(str(clip.trim_end))
+                return
             clip._split_timing = None
             clip.trim_end = max(val, clip.trim_start)
             self._trim_end_slider.blockSignals(True)
@@ -4712,6 +5040,7 @@ class VideoToolDialog(QDialog):
                 hint += " " + audio_plan_hint
         self._audio_hint_lbl.setText(hint)
 
+    @_video_edit("Clip speed")
     def _on_clip_speed_changed(self, value: int) -> None:
         row = self._clip_list.currentRow()
         if row < 0 or row >= len(self._clips):
@@ -4719,6 +5048,8 @@ class VideoToolDialog(QDialog):
             return
         clip = self._clips[row]
         if clip.clip_type == "image":
+            return
+        if clip.speed_percent == max(10, min(400, int(value))):
             return
         clip._split_timing = None
         clip.speed_percent = max(10, min(400, int(value)))
@@ -4732,6 +5063,7 @@ class VideoToolDialog(QDialog):
         self._on_clip_selected(row)
         self._update_ui_state()
 
+    @_video_edit("Still duration")
     def _on_still_duration_changed(self, value: int) -> None:
         row = self._clip_list.currentRow()
         fps = max(0.1, float(self._fps_slider.value()))
@@ -4744,6 +5076,7 @@ class VideoToolDialog(QDialog):
         clip.still_duration_frames = max(1, int(value))
         self._after_selected_clip_timing_changed(row)
 
+    @_video_edit("Split clip")
     def _split_clip_at_playhead(self) -> None:
         if self.is_exporting():
             return
@@ -5009,6 +5342,7 @@ class VideoToolDialog(QDialog):
             self._export_selecting = False
 
     def _select_export(self) -> None:
+        self._finish_history_gesture()
         output_fps = max(0.1, float(self._fps_slider.value()))
         clip_snapshot = [
             self._snapshot_clip_render_state(clip, output_fps)
@@ -5175,6 +5509,7 @@ class VideoToolDialog(QDialog):
         for shortcut, enabled in self._export_shortcuts:
             shortcut.setEnabled(enabled)
         self._export_worker = None
+        self._update_history_controls()
         self._export_copy_jobs.clear()
         if worker.outcome == "success":
             self._record_export_history(
@@ -5220,6 +5555,7 @@ class VideoToolDialog(QDialog):
     # Misc
     # ------------------------------------------------------------------
 
+    @_video_edit("Reset adjustments")
     def _reset_adjustments(self) -> None:
         for slider, val in [
             (self._brightness_slider, _ADJUSTMENT_DEFAULT_VALUES["brightness"]),
@@ -5295,14 +5631,14 @@ class VideoToolDialog(QDialog):
     def _release_clips(self) -> None:
         self._preview_timer.stop()
         self._btn_play.setChecked(False)
-        for clip in self._clips:
-            clip.close()
+        self._history_entries.update(self._clips)
         self._clips.clear()
         self._clip_list.clear()
         self._clip_list.setCurrentRow(-1)
         self._on_clip_selected(-1)
         self._update_scrubber()
         self._update_preview()
+        self._reset_video_history()
 
     def closeEvent(self, event) -> None:
         if self.is_exporting():

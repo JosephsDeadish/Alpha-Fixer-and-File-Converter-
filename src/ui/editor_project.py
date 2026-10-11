@@ -430,11 +430,16 @@ class EditorProjectController(QObject):
             previous = dict(controls=self.controls(), selected=self.entry_list.currentRow(),
                             playhead=dialog._preview_idx if self.kind == "gif" else dialog._scrubber.value())
             old_items = [self.entry_list.item(i).clone() for i in range(self.entry_list.count())]
+            if self.kind == "video":
+                dialog._history_restoring = True
             try:
                 self._apply_state(document, entries, items)
             except Exception:
                 self._apply_state(previous, old, old_items)
                 raise
+            finally:
+                if self.kind == "video":
+                    dialog._history_restoring = False
         except Exception:
             for entry in entries:
                 entry.close()
@@ -443,8 +448,8 @@ class EditorProjectController(QObject):
             self.dialog._history_entries.update(old)
             self.dialog._reset_frame_history()
         else:
-            for entry in old:
-                entry.close()
+            dialog._history_entries.update(old)
+            dialog._reset_video_history()
 
     def _apply_state(self, document, entries, items):
         dialog = self.dialog
