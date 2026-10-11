@@ -9,7 +9,7 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QEvent, Qt, QTimer, pyqtSignal, pyqtSlot
 from .alpha_tool import _FileCollectThread
 from PyQt6.QtGui import QImage, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QSpinBox, QCheckBox, QFileDialog,
     QProgressBar, QGroupBox, QGridLayout, QScrollArea,
     QLineEdit, QSplitter, QMessageBox, QTextEdit,
-    QAbstractSpinBox, QSlider,
+    QAbstractSpinBox, QSlider, QApplication, QBoxLayout, QSizePolicy,
 )
 
 from ..core.alpha_processor import collect_files, SUPPORTED_READ
@@ -182,7 +182,16 @@ class ConverterTab(QWidget):
     # ------------------------------------------------------------------
 
     def _setup_ui(self):
-        main_layout = QVBoxLayout(self)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        self._content_scroll = QScrollArea()
+        self._content_scroll.setWidgetResizable(True)
+        self._content_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._content_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        outer_layout.addWidget(self._content_scroll)
+        self._content = QWidget()
+        self._content_scroll.setWidget(self._content)
+        main_layout = QVBoxLayout(self._content)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(8)
 
@@ -192,6 +201,7 @@ class ConverterTab(QWidget):
         _conv_prefix = _default_labels[1].split("  ", 1)[0] if "  " in _default_labels[1] else "🔄"
         hdr = QLabel(f"{_conv_prefix}  File Converter")
         hdr.setObjectName("header")
+        hdr.setWordWrap(True)
         self._hdr = hdr
         main_layout.addWidget(hdr)
 
@@ -214,16 +224,17 @@ class ConverterTab(QWidget):
         main_layout.addWidget(self._next_step_lbl)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._splitter = splitter
         splitter.setChildrenCollapsible(False)
 
         # ---- Left: input files (scrollable) + preview (always visible) ----
         left = QWidget()
-        left.setMinimumWidth(320)
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 4, 0)
         lv.setSpacing(5)
 
         lbl_files = QLabel("Input Files / Folders  (drag & drop supported)")
+        lbl_files.setWordWrap(True)
         lbl_files.setObjectName("section")
         self._lbl_files = lbl_files
         lv.addWidget(lbl_files)
@@ -252,7 +263,6 @@ class ConverterTab(QWidget):
         go_layout.setColumnStretch(0, 0)
         go_layout.setColumnStretch(1, 1)
         go_layout.setColumnStretch(2, 0)
-        go_layout.setColumnMinimumWidth(0, 120)
         go_layout.setHorizontalSpacing(12)
         go_layout.setVerticalSpacing(10)
 
@@ -262,6 +272,8 @@ class ConverterTab(QWidget):
         self._lbl_out = lbl_out
         go_layout.addWidget(lbl_out, 0, 0)
         self._out_dir_edit = QLineEdit()
+        lbl_out.setBuddy(self._out_dir_edit)
+        self._out_dir_edit.setAccessibleName("Output folder")
         self._out_dir_edit.setPlaceholderText("Same as source (default)")
         self._out_dir_edit.setMinimumHeight(28)
         saved_out = self._settings.get("converter_output_dir", "")
@@ -278,6 +290,8 @@ class ConverterTab(QWidget):
         self._lbl_suffix = lbl_suffix
         go_layout.addWidget(lbl_suffix, 1, 0)
         self._suffix_edit = QLineEdit()
+        lbl_suffix.setBuddy(self._suffix_edit)
+        self._suffix_edit.setAccessibleName("Filename suffix")
         self._suffix_edit.setPlaceholderText("e.g. _converted  (blank = overwrite source)")
         self._suffix_edit.setMinimumHeight(28)
         saved_suffix = self._settings.get("output_suffix", "")
@@ -304,6 +318,7 @@ class ConverterTab(QWidget):
         la_layout.addWidget(self._file_list, 1)
 
         self._file_count_lbl = QLabel("0 files  |  F5 to convert  |  Esc to stop")
+        self._file_count_lbl.setWordWrap(True)
         self._file_count_lbl.setObjectName("subheader")
         la_layout.addWidget(self._file_count_lbl)
 
@@ -321,7 +336,9 @@ class ConverterTab(QWidget):
         left_scroll = QScrollArea()
         left_scroll.setWidget(left)
         left_scroll.setWidgetResizable(True)
+        left_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self._left_scroll = left_scroll
 
         # ---- Preview area (outside scroll area, always visible) ----
         # Mirrors the Alpha & RGBA Adjuster tab's before/after compare layout:
@@ -334,11 +351,13 @@ class ConverterTab(QWidget):
         preview_lbl = QLabel("Source / Output Preview  ◀▶ drag to compare")
         preview_lbl.setObjectName("section")
         preview_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        preview_lbl.setWordWrap(True)
         self._preview_lbl = preview_lbl
         pa_layout.addWidget(preview_lbl)
 
         # Row: [Source info panel] [BeforeAfterWidget] [Output info panel]
         preview_row = QHBoxLayout()
+        self._preview_row = preview_row
         preview_row.setContentsMargins(0, 0, 0, 0)
         preview_row.setSpacing(4)
 
@@ -425,7 +444,6 @@ class ConverterTab(QWidget):
         # This matches the layout structure used by the Alpha & RGBA Adjuster tab.
         left_vsplit = QSplitter(Qt.Orientation.Vertical)
         left_vsplit.setChildrenCollapsible(False)
-        left_vsplit.setMinimumWidth(320)
         left_vsplit.addWidget(left_scroll)
         left_vsplit.addWidget(preview_area)
         left_vsplit.setSizes([420, 280])
@@ -435,7 +453,6 @@ class ConverterTab(QWidget):
 
         # ---- Right: options ----
         right = QWidget()
-        right.setMinimumWidth(360)
         rv = QVBoxLayout(right)
         rv.setContentsMargins(4, 0, 0, 0)
         rv.setSpacing(6)
@@ -457,6 +474,7 @@ class ConverterTab(QWidget):
         rv.addWidget(self._progress)
 
         self._status_lbl = QLabel("Ready.")
+        self._status_lbl.setWordWrap(True)
         self._status_lbl.setObjectName("subheader")
         rv.addWidget(self._status_lbl)
 
@@ -467,7 +485,6 @@ class ConverterTab(QWidget):
         gf_layout.setContentsMargins(8, 12, 8, 10)
         gf_layout.setColumnStretch(0, 0)
         gf_layout.setColumnStretch(1, 1)
-        gf_layout.setColumnMinimumWidth(0, 140)
         gf_layout.setHorizontalSpacing(12)
         gf_layout.setVerticalSpacing(10)
 
@@ -498,6 +515,7 @@ class ConverterTab(QWidget):
             self._fmt_combo.setCurrentIndex(idx)
 
         lbl_quality = QLabel("Quality (JPEG/WEBP/AVIF/JPEG2000):")
+        lbl_quality.setWordWrap(True)
         lbl_quality.setMinimumHeight(24)
         self._lbl_quality = lbl_quality
         gf_layout.addWidget(lbl_quality, 1, 0)
@@ -512,6 +530,10 @@ class ConverterTab(QWidget):
         self._lbl_dds_variant.setMinimumHeight(24)
         gf_layout.addWidget(self._lbl_dds_variant, 2, 0)
         self._dds_variant_combo = QComboBox()
+        self._dds_variant_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self._dds_variant_combo.setMinimumContentsLength(10)
         self._dds_variant_combo.setMinimumHeight(28)
         for label, value in DDS_VARIANT_OPTIONS:
             self._dds_variant_combo.addItem(label, userData=value)
@@ -534,6 +556,7 @@ class ConverterTab(QWidget):
         gf_layout.addWidget(self._dds_variant_combo, 2, 1)
 
         self._keep_metadata_check = QCheckBox("Preserve metadata (EXIF/ICC)")
+        self._keep_metadata_check.setAccessibleName("Preserve metadata (EXIF/ICC)")
         self._keep_metadata_check.setChecked(
             bool(self._settings.get("converter_keep_metadata", False))
         )
@@ -552,7 +575,6 @@ class ConverterTab(QWidget):
         gr_layout.setContentsMargins(8, 12, 8, 10)
         gr_layout.setColumnStretch(0, 0)
         gr_layout.setColumnStretch(1, 1)
-        gr_layout.setColumnMinimumWidth(0, 80)
         gr_layout.setHorizontalSpacing(12)
         gr_layout.setVerticalSpacing(10)
 
@@ -623,6 +645,7 @@ class ConverterTab(QWidget):
         )
         log_btn_row.addWidget(self._btn_skip_failed)
         self._btn_export_failures = QPushButton("Export Failure Report…")
+        self._btn_export_failures.setAccessibleName("Export Failure Report")
         self._btn_export_failures.setEnabled(False)
         self._btn_export_failures.setToolTip(
             "Save the most recent batch failure details as a text or JSON report."
@@ -638,11 +661,39 @@ class ConverterTab(QWidget):
         right_scroll = QScrollArea()
         right_scroll.setWidget(right)
         right_scroll.setWidgetResizable(True)
+        right_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         right_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        right_scroll.setMinimumWidth(360)
+        self._right_scroll = right_scroll
         splitter.addWidget(right_scroll)
         splitter.setSizes([440, 580])
         main_layout.addWidget(splitter, 1)
+        self._responsive_rows = (
+            (btn_row, [self._btn_add_files, self._btn_add_folder, self._btn_clear]),
+            (run_row, [self._btn_run, self._btn_stop]),
+            (log_btn_row, [self._failure_actions_lbl, self._btn_retry_failed,
+                           self._btn_keep_failed, self._btn_skip_failed,
+                           self._btn_export_failures]),
+        )
+        self._responsive_grids = (
+            (go_layout, [(lbl_out, self._out_dir_edit, self._btn_out_dir),
+                         (lbl_suffix, self._suffix_edit)]),
+            (gf_layout, [(lbl_fmt, self._fmt_combo), (lbl_quality, self._quality_spin),
+                         (self._lbl_dds_variant, self._dds_variant_combo),
+                         (self._keep_metadata_check,)]),
+            (gr_layout, [(self._resize_check,), (lbl_w, self._width_spin),
+                         (lbl_h, self._height_spin), (self._lock_aspect_check,)]),
+        )
+        self._layout_timer = QTimer(self)
+        self._layout_timer.setSingleShot(True)
+        self._layout_timer.timeout.connect(self._reflow_controls)
+        self._focus_timer = QTimer(self)
+        self._focus_timer.setSingleShot(True)
+        self._focus_timer.timeout.connect(self._reveal_focus)
+        for widget in (self._content, self._content_scroll.viewport(),
+                       left, right, left_scroll.viewport(), right_scroll.viewport()):
+            widget.installEventFilter(self)
+        QApplication.instance().focusChanged.connect(self._schedule_focus_reveal)
+        self._layout_timer.start(0)
 
         # ---- Connections ----
         self._btn_add_files.clicked.connect(self._add_files)
@@ -700,6 +751,83 @@ class ConverterTab(QWidget):
         self._on_format_changed(self._fmt_combo.currentIndex())
         # Pop-out/dock-back for compare widget (item 15)
         self._compare.popout_requested.connect(self._on_compare_popout)
+
+    def _reflow_controls(self):
+        available = self._content_scroll.viewport().width()
+        compact = available < max(760, self.fontMetrics().height() * 38)
+        self._keep_metadata_check.setText(
+            "Preserve metadata" if compact else "Preserve metadata (EXIF/ICC)"
+        )
+        self._btn_export_failures.setText(
+            "Export Report…" if compact else "Export Failure Report…"
+        )
+        orientation = Qt.Orientation.Vertical if compact else Qt.Orientation.Horizontal
+        self._splitter.setOrientation(orientation)
+        self._preview_row.setDirection(
+            QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight
+        )
+        for grid, rows in self._responsive_grids:
+            grid.setColumnStretch(0, 1 if compact else 0)
+            grid.setColumnStretch(1, 0 if compact else 1)
+            for row in rows:
+                for control in row:
+                    grid.removeWidget(control)
+            for row_index, row in enumerate(rows):
+                for column, control in enumerate(row):
+                    grid.addWidget(control, row_index * 3 + column if compact else row_index,
+                                   0 if compact else column,
+                                   1, 1 if compact or len(row) > 1 else 2)
+        for layout, controls in self._responsive_rows:
+            width = min(available, layout.parentWidget().width()) - 40
+            required = sum(control.minimumSizeHint().width() for control in controls)
+            required += layout.spacing() * (len(controls) - 1)
+            layout.setDirection(
+                QBoxLayout.Direction.TopToBottom if required > width
+                else QBoxLayout.Direction.LeftToRight
+            )
+        for control in self._content.findChildren(QWidget):
+            if isinstance(control, (QPushButton, QCheckBox, QLineEdit, QComboBox, QAbstractSpinBox)):
+                control.setMinimumHeight(control.minimumSizeHint().height())
+            if isinstance(control, QComboBox):
+                control.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+                control.setMinimumContentsLength(10)
+            if isinstance(control, QLabel):
+                control.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        # Let the outer scroll area carry compact overflow instead of squeezing
+        # the two inner viewports into unusable slivers above the preview.
+        for scroll in (self._left_scroll, self._right_scroll):
+            scroll.setMinimumHeight(scroll.widget().minimumSizeHint().height() if compact else 0)
+        self._focus_timer.start(0)
+
+    def _schedule_focus_reveal(self, _previous, current):
+        if current is not None and self._content.isAncestorOf(current):
+            self._focus_timer.start(0)
+
+    def _reveal_focus(self):
+        current = QApplication.focusWidget()
+        if current is None or not self._content.isAncestorOf(current):
+            return
+        if isinstance(current.parentWidget(), QAbstractSpinBox):
+            current = current.parentWidget()
+        for scroll in (self._left_scroll, self._right_scroll, self._content_scroll):
+            if scroll.widget().isAncestorOf(current):
+                viewport = scroll.viewport()
+                rect = current.rect()
+                rect.moveTopLeft(current.mapTo(viewport, rect.topLeft()))
+                for bar, leading, trailing, extent in (
+                    (scroll.horizontalScrollBar(), rect.left(), rect.right(), viewport.width()),
+                    (scroll.verticalScrollBar(), rect.top(), rect.bottom(), viewport.height()),
+                ):
+                    delta = leading if leading < 0 else max(0, trailing - extent + 1)
+                    bar.setValue(bar.value() + delta)
+
+    def eventFilter(self, watched, event):
+        if hasattr(self, "_layout_timer"):
+            if event.type() in (QEvent.Type.Resize, QEvent.Type.FontChange, QEvent.Type.StyleChange):
+                self._layout_timer.start(0)
+            elif event.type() == QEvent.Type.LayoutRequest:
+                self._focus_timer.start(0)
+        return super().eventFilter(watched, event)
 
     def _setup_shortcuts(self):
         self._shortcut_objects: dict[str, QShortcut] = {}

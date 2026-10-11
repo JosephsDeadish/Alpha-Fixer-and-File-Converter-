@@ -402,6 +402,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Converter panes, option grids and action rows stack on compact windows and at
+large fonts. Outer scrolling keeps previews and controls reachable; keyboard focus
+reveals complete controls and failure-report actions. Generated-image checks cover
+compact/theme/font layouts, DDS selection, resize preferences and report saving.
+Physical display, native screen-reader and full application acceptance remain
+separate qualification gates.
+
 Video Builder panes and control rows reflow for compact screens and large fonts.
 Focused controls scroll into view, controls retain font-safe heights, and cached
 preview images resize to their available area without decoding another frame.
