@@ -6,11 +6,11 @@ from pathlib import Path
 import time
 import uuid
 
-from PyQt6.QtCore import QObject, QThread, QTimer, QLockFile, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, QThread, QTimer, QLockFile, pyqtSignal
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QFileDialog, QHBoxLayout, QInputDialog, QLabel, QListWidgetItem,
-    QMessageBox, QPushButton, QCheckBox, QComboBox,
+    QMessageBox, QPushButton, QCheckBox, QComboBox, QSizePolicy, QWidget, QVBoxLayout, QBoxLayout,
 )
 
 from src.core.app_paths import user_data_directory
@@ -79,29 +79,59 @@ class EditorProjectController(QObject):
         self._last_autosave = time.monotonic()
         self._last_recovery_scan = 0.0
         self._recoveries = []
-        row = QHBoxLayout()
-        self.save_button = QPushButton("Save Project…")
-        self.open_button = QPushButton("Open Project…")
-        self.recover_button = QPushButton("Recover…")
+        self.header = QWidget(dialog._export_content)
+        header_layout = QVBoxLayout(self.header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(4)
+        self._row = row = QHBoxLayout()
+        self.save_button = QPushButton("&Save Project…")
+        self.open_button = QPushButton("&Open Project…")
+        self.recover_button = QPushButton("&Recover…")
         self.status = QLabel("Project: new")
         self.status.setWordWrap(True)
+        self.status.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         for button in (self.save_button, self.open_button, self.recover_button):
             row.addWidget(button)
-        dialog.layout().insertLayout(0, row)
-        dialog.layout().insertWidget(1, self.status)
+            button.setAutoDefault(False)
+            button.setAccessibleName(button.text().replace("&", ""))
+        # Project controls share the builder's scroll/reflow and focus-reveal path.
+        header_layout.addLayout(row)
+        header_layout.addWidget(self.status)
+        dialog._export_content.layout().insertWidget(1, self.header)
+        self._layout_timer = QTimer(self)
+        self._layout_timer.setSingleShot(True)
+        self._layout_timer.timeout.connect(self._reflow_header)
+        dialog._content_scroll.viewport().installEventFilter(self)
+        self.header.installEventFilter(self)
+        self._layout_timer.start(0)
         self.save_button.clicked.connect(self.save_project)
         self.open_button.clicked.connect(self.open_project)
         self.recover_button.clicked.connect(self.recover_project)
         self.recover_button.setToolTip(
-            "Choose a retained autosave from a closed/crashed editor. Active sessions are excluded. "
+            "Alt+R: choose a retained autosave from a closed/crashed editor. Active sessions are excluded. "
             "Recovery copies are retained until you remove them manually."
         )
-        self.save_button.setToolTip("Save editable project (not media export). Ctrl+S still exports media.")
+        self.save_button.setToolTip("Alt+S: save editable project (not media export). Ctrl+S still exports media.")
+        self.open_button.setToolTip("Alt+O: open an editable project, replacing this editor's current contents.")
         self.timer = QTimer(self)
         self.timer.setInterval(2000)
         self.timer.timeout.connect(self.poll)
         self.timer.start()
         self.refresh_recoveries()
+
+    def eventFilter(self, watched, event):
+        if event.type() in (QEvent.Type.Resize, QEvent.Type.FontChange, QEvent.Type.StyleChange):
+            self._layout_timer.start(0)
+        return super().eventFilter(watched, event)
+
+    def _reflow_header(self):
+        available = self.dialog._content_scroll.viewport().width()
+        buttons = (self.save_button, self.open_button, self.recover_button)
+        required = sum(button.minimumSizeHint().width() for button in buttons)
+        required += self._row.spacing() * (len(buttons) - 1)
+        self._row.setDirection(QBoxLayout.Direction.LeftToRight if required <= available
+                               else QBoxLayout.Direction.TopToBottom)
+        self.header.setMaximumWidth(max(available, max(button.minimumSizeHint().width() for button in buttons)))
 
     @property
     def entries(self):
@@ -547,7 +577,9 @@ class EditorProjectController(QObject):
         except OSError as error:
             self.status.setText(f"Recovery discovery failed: {error}")
         self._recoveries = candidates
-        self.recover_button.setText(f"Recover… ({len(candidates)})")
+        label = f"Recover… ({len(candidates)})"
+        self.recover_button.setText(f"&{label}")
+        self.recover_button.setAccessibleName(label)
         self.recover_button.setEnabled(bool(candidates) and self._job is None)
 
     def recover_project(self, _checked=False):

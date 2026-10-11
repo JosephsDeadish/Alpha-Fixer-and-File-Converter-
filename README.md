@@ -451,6 +451,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+GIF and Video project controls share the scrollable builder content below the
+title. Save/Open/Recover actions stack when necessary, status text wraps within
+the viewport, and keyboard-focused actions remain reachable. Accessible names
+and Alt+S/Alt+O/Alt+R mnemonics distinguish project actions from Ctrl+S media
+export; recovery refresh preserves its mnemonic. Compact/theme/font and project
+workflow regressions are offscreen checks, not native accessibility certification.
+
 Advanced summaries distinguish effective processing from retained preferences.
 Alpha guidance explains binary cutting after inversion/range normalization and
 RGBA adjustments after threshold protection; enabled zero deltas are not counted

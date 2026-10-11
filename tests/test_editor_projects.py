@@ -7,7 +7,10 @@ from unittest.mock import Mock, patch
 import pytest
 from PIL import Image
 from PyQt6 import sip
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QKeySequence
+from PyQt6.QtTest import QTest
+from PyQt6.QtWidgets import QApplication, QMessageBox, QBoxLayout
 
 from src.core.editor_projects import read_project, validate, write_project, prepare_entries, source_signature
 from src.ui.gif_builder import GifBuilderDialog
@@ -68,6 +71,70 @@ def open_project(widget, path):
             patch("src.ui.editor_project.QMessageBox.question", return_value=QMessageBox.StandardButton.Discard):
         widget._project.open_button.click()
         wait(widget)
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("size", [(480, 400), (640, 480)])
+@pytest.mark.parametrize("font_size", [13, 24, 32])
+@pytest.mark.parametrize("theme_name", ["dark", "light"])
+def test_project_header_compact_reflow_and_keyboard(dialogs, tmp_path, kind, size, font_size, theme_name):
+    from src.ui.theme_engine import DEFAULT_THEME, LIGHT_THEME, build_stylesheet
+    widget = dialogs(kind)
+    stylesheet = build_stylesheet(DEFAULT_THEME if theme_name == "dark" else LIGHT_THEME)
+    widget.setStyleSheet(stylesheet + f"\nQWidget {{ font-size: {font_size}px; }}")
+    _, still = sources(tmp_path)
+    if kind == "gif":
+        widget._add_paths([str(still)])
+    else:
+        widget._load_image_paths([str(still)])
+    widget.resize(*size)
+    widget.show()
+    for _ in range(20):
+        QApplication.processEvents()
+    project = widget._project
+    viewport = widget._content_scroll.viewport()
+    assert (widget.width(), widget.height()) == size
+    assert widget.layout().count() == 1
+    assert viewport.height() >= size[1] - 48
+    assert widget._export_content.isAncestorOf(project.header)
+    required = sum(b.minimumSizeHint().width() for b in
+                   (project.save_button, project.open_button, project.recover_button))
+    required += 2 * project._row.spacing()
+    assert project._row.direction() == (QBoxLayout.Direction.LeftToRight if required <= viewport.width()
+                                        else QBoxLayout.Direction.TopToBottom)
+    for button in (project.save_button, project.open_button, project.recover_button):
+        assert button.font().pixelSize() == font_size
+        assert button.width() >= button.minimumSizeHint().width()
+        assert button.height() >= button.minimumSizeHint().height()
+        assert not button.autoDefault()
+    project.status.setText("Project operation failed: " + "missing-original-media/" * 20)
+    for _ in range(5):
+        QApplication.processEvents()
+    assert viewport.height() >= size[1] - 48
+    assert project.status.width() <= viewport.width()
+    widget._content_scroll.verticalScrollBar().setValue(
+        widget._content_scroll.verticalScrollBar().maximum())
+    project.save_button.setFocus()
+    for _ in range(10):
+        QApplication.processEvents()
+    position = project.save_button.mapTo(viewport, project.save_button.rect().topLeft())
+    assert viewport.rect().contains(position)
+    assert position.y() + project.save_button.height() <= viewport.height()
+    path = tmp_path / "keyboard-project.json"
+    with patch("src.ui.editor_project.QFileDialog.getSaveFileName", return_value=(str(path), "")), \
+            patch.object(widget, "_export") as export:
+        QTest.keyClick(project.save_button, Qt.Key.Key_Space)
+        wait(widget)
+    export.assert_not_called()
+    assert path.is_file() and not project.dirty
+    project.open_button.setFocus()
+    for _ in range(10):
+        QApplication.processEvents()
+    with patch("src.ui.editor_project.QFileDialog.getOpenFileName", return_value=(str(path), "")) as picker:
+        QTest.keyClick(project.open_button, Qt.Key.Key_Space)
+        wait(widget)
+    picker.assert_called_once()
+    assert not project.dirty
 
 
 def test_gif_owned_roundtrip_and_real_export_holds(dialogs, tmp_path):
@@ -381,6 +448,8 @@ def test_recovery_multi_instance_and_failed_autosave(dialogs, tmp_path):
     _, still = sources(tmp_path)
     first, second = dialogs("gif"), dialogs("gif")
     for widget in (first, second):
+        assert widget._project.recover_button.shortcut() == QKeySequence("Alt+R")
+        assert widget._project.recover_button.accessibleName() == "Recover… (0)"
         widget._add_paths([str(still)])
         widget._project.autosave()
         wait(widget)
@@ -401,6 +470,8 @@ def test_recovery_multi_instance_and_failed_autosave(dialogs, tmp_path):
     second._project.refresh_recoveries()
     assert one in second._project._recoveries
     assert second._project.recover_button.isEnabled()
+    assert second._project.recover_button.shortcut() == QKeySequence("Alt+R")
+    assert second._project.recover_button.accessibleName() == "Recover… (1)"
     with patch("src.ui.editor_project.QInputDialog.getItem",
                side_effect=lambda parent, title, prompt, labels, *args: (labels[0], True)), \
             patch("src.ui.editor_project.QMessageBox.question", return_value=QMessageBox.StandardButton.Discard):
