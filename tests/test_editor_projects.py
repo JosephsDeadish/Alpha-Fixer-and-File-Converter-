@@ -530,6 +530,229 @@ def test_replacement_cancel_keeps_edits_and_prepared_resources_clean(dialogs, tm
     assert widget._frames[0] is original and widget._delay_slider.value() == 250
 
 
+@pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("accepted", [False, True])
+def test_replace_prompt_blocks_reentrant_project_io(dialogs, tmp_path, kind, accepted):
+    _, still = sources(tmp_path)
+    widget = dialogs(kind)
+    if kind == "gif":
+        widget._add_paths([str(still)])
+        control = widget._delay_slider
+    else:
+        widget._load_image_paths([str(still)])
+        control = widget._brightness_slider
+    project = widget._project
+    path = tmp_path / "p.json"
+    save(widget, path)
+    assert project.autosave()
+    wait(widget)
+    recovery_before = project.recovery_path.read_bytes()
+    lock = project._lock
+    old_entries = tuple(project.entries)
+    control.setValue(control.value() + 10)
+    saved, autosaved = project._saved, project._autosaved
+    attempts = []
+
+    def prompt(*args):
+        # A modal question pumps timers and can dispatch project actions.
+        assert project._loading and widget._editing_busy()
+        widget._update_history_controls()
+        assert not widget._btn_undo.isEnabled()
+        if kind == "video":
+            assert not widget._btn_clear.isEnabled()
+        attempts.append(project.autosave())
+        wait(widget)
+        attempts.append(project._save(tmp_path / "unexpected.json"))
+        wait(widget)
+        return (QMessageBox.StandardButton.Discard if accepted
+                else QMessageBox.StandardButton.Cancel)
+
+    with patch("src.ui.editor_project.QMessageBox.question", side_effect=prompt):
+        assert project.load(path)
+        wait(widget)
+    assert attempts == [False, False]
+    assert not (tmp_path / "unexpected.json").exists()
+    assert project.recovery_path.read_bytes() == recovery_before
+    assert project._lock is lock and lock.isLocked()
+    assert project.path == str(path)
+    assert not project._loading
+    assert not widget._editing_busy()
+    assert project.entries
+    if kind == "video":
+        assert widget._btn_clear.isEnabled()
+    assert widget._btn_undo.isEnabled() == bool(widget._undo_stack)
+    assert project.dirty is not accepted
+    if not accepted:
+        assert tuple(project.entries) == old_entries
+        assert (project._saved, project._autosaved) == (saved, autosaved)
+    else:
+        assert all(new is not old for new, old in zip(project.entries, old_entries))
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+def test_failed_install_restores_history_controls(dialogs, tmp_path, kind):
+    _, still = sources(tmp_path)
+    widget = dialogs(kind)
+    if kind == "gif":
+        widget._add_paths([str(still)])
+    else:
+        widget._load_image_paths([str(still)])
+    project = widget._project
+    path = tmp_path / "p.json"
+    save(widget, path)
+    entries = tuple(project.entries)
+    assert widget._btn_undo.isEnabled()
+
+    def failed_install(document, prepared):
+        assert project._loading and widget._editing_busy()
+        widget._update_history_controls()
+        assert not widget._btn_undo.isEnabled()
+        for entry in prepared:
+            entry.close()
+        raise ValueError("installation failed")
+
+    with patch.object(project, "_install", side_effect=failed_install), \
+            patch("src.ui.editor_project.QMessageBox.critical") as error:
+        assert project.load(path)
+        wait(widget)
+    error.assert_called_once()
+    assert tuple(project.entries) == entries
+    assert not project._loading and not widget._editing_busy()
+    assert widget._btn_undo.isEnabled()
+    if kind == "video":
+        assert widget._btn_clear.isEnabled()
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+def test_replace_prompt_late_edit_keeps_live_session(dialogs, tmp_path, kind):
+    from src.ui import editor_project
+    _, still = sources(tmp_path)
+    widget = dialogs(kind)
+    if kind == "gif":
+        widget._add_paths([str(still)])
+        control = widget._delay_slider
+    else:
+        widget._load_image_paths([str(still)])
+        control = widget._brightness_slider
+    project = widget._project
+    path = tmp_path / "p.json"
+    save(widget, path)
+    old_entries = tuple(project.entries)
+    control.setValue(control.value() + 10)
+    prepared = []
+    prepare = editor_project.prepare_entries
+
+    def tracked_prepare(*args):
+        entries = prepare(*args)
+        for entry in entries:
+            entry.close = Mock(wraps=entry.close)
+        prepared.extend(entries)
+        return entries
+
+    def prompt(*args):
+        control.setValue(control.value() + 10)
+        return QMessageBox.StandardButton.Discard
+
+    with patch.object(editor_project, "prepare_entries", side_effect=tracked_prepare), \
+            patch.object(editor_project.QMessageBox, "question", side_effect=prompt):
+        assert project.load(path)
+        wait(widget)
+    assert tuple(project.entries) == old_entries
+    assert project.dirty and project.path == str(path)
+    assert prepared
+    for entry in prepared:
+        entry.close.assert_called_once()
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("automatic", [False, True])
+@pytest.mark.parametrize("failure", ["ENOSPC", "EACCES"])
+def test_storage_failure_preserves_project_recovery_and_retries(dialogs, tmp_path, kind, automatic, failure):
+    import errno
+    from src.ui import editor_project
+    _, still = sources(tmp_path)
+    widget = dialogs(kind)
+    if kind == "gif":
+        widget._add_paths([str(still)])
+        control = widget._delay_slider
+    else:
+        widget._load_image_paths([str(still)])
+        control = widget._brightness_slider
+    project = widget._project
+    path = tmp_path / "p.json"
+    save(widget, path)
+    assert project.autosave()
+    wait(widget)
+    before = path.read_bytes(), project.recovery_path.read_bytes()
+    state = project._saved, project._autosaved, project._lock
+    old_entries = tuple(project.entries)
+    control.setValue(control.value() + 10)
+    destination = project.recovery_path if automatic else path
+    target = "os.fsync" if failure == "ENOSPC" else "tempfile.NamedTemporaryFile"
+    error = OSError(getattr(errno, failure), failure)
+    with patch(target, side_effect=error), patch.object(editor_project.QMessageBox, "critical") as modal:
+        assert project._save(destination, automatic=automatic)
+        wait(widget)
+    assert modal.call_count == (0 if automatic else 1)
+    assert failure in project.status.text()
+    assert project.path == str(path) and project.dirty
+    assert tuple(project.entries) == old_entries
+    assert (project._saved, project._autosaved, project._lock) == state
+    assert project._lock.isLocked() and project.timer.isActive()
+    assert (path.read_bytes(), project.recovery_path.read_bytes()) == before
+    assert not list(tmp_path.rglob(".alpha_fixer_save_*"))
+    assert project._save(destination, automatic=automatic)
+    wait(widget)
+    assert project.dirty is automatic
+    assert destination.read_bytes() != before[1 if automatic else 0]
+    assert project._lock is state[2] and project._lock.isLocked()
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+def test_malformed_recovery_media_keeps_live_unsaved_session(dialogs, tmp_path, kind):
+    source, still = sources(tmp_path)
+    writer, reader = dialogs(kind), dialogs(kind)
+    for widget in (writer, reader):
+        if kind == "gif":
+            widget._add_paths([str(source), str(still)])
+        else:
+            widget._load_image_paths([str(source), str(still)])
+        assert widget._project.autosave()
+        wait(widget)
+    corrupt = writer._project.recovery_path
+    writer._project._release_session()
+    document = read_project(corrupt)
+    if kind == "gif":
+        document["entries"][-1]["png"] = "not-base64!"
+    else:
+        malformed = tmp_path / "malformed.png"
+        malformed.write_bytes(b"not an image")
+        document["entries"][-1].update(source=str(malformed), source_sha256=source_signature(malformed))
+    write_project(corrupt, document)
+    before = corrupt.read_bytes(), reader._project.recovery_path.read_bytes()
+    project = reader._project
+    state = project.path, project._saved, project._autosaved, project._lock
+    entries = tuple(project.entries)
+    project.refresh_recoveries()
+    assert corrupt in project._recoveries
+    with patch("src.ui.editor_project.QMessageBox.critical") as error:
+        assert project.load(corrupt, recovery=True)
+        wait(reader)
+    error.assert_called_once()
+    assert "kept intact" in project.status.text()
+    assert project.dirty and not project._loading
+    assert tuple(project.entries) == entries
+    assert (project.path, project._saved, project._autosaved, project._lock) == state
+    assert project._lock.isLocked() and project.timer.isActive()
+    assert (corrupt.read_bytes(), project.recovery_path.read_bytes()) == before
+    colors = [(255, 0, 0, 255), (0, 128, 0, 255), (0, 0, 255, 255), (255, 0, 0, 255)] if kind == "gif" else [
+        (255, 0, 0, 255), (255, 0, 0, 255)]
+    for entry, color in zip(entries, colors):
+        image = entry._pil.copy() if kind == "gif" else entry.get_frame(0)
+        with image:
+            assert image.getpixel((0, 0)) == color
+
+
 def test_duplicate_keys_and_wrong_editor(tmp_path):
     path = tmp_path / "duplicate.json"
     path.write_text('{"version":1,"version":1}')

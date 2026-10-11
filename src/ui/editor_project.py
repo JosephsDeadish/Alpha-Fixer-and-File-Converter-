@@ -272,6 +272,7 @@ class EditorProjectController(QObject):
                 self._failure(str(error))
         finally:
             job.deleteLater()
+            self.dialog._update_history_controls()
             if self._parent_resume is not None:
                 resume = self._parent_resume
                 self._parent_resume = None
@@ -449,17 +450,24 @@ class EditorProjectController(QObject):
                         entry.close()
                     failed(f"Project setting unavailable in this runtime: {value}")
                     return
-            if captured != self.fingerprint() or not self.confirm_replace():
-                for entry in entries:
-                    entry.close()
-                if was_playing:
-                    self.dialog._btn_play.setChecked(True)
-                return
+            # The replacement prompt runs a nested event loop after the worker
+            # finishes. Keep project actions/autosave blocked until install ends.
+            self._loading = True
             try:
-                self._install(document, entries)
-            except Exception as error:
-                failed(str(error))
-                return
+                if (captured != self.fingerprint() or not self.confirm_replace()
+                        or captured != self.fingerprint()):
+                    for entry in entries:
+                        entry.close()
+                    if was_playing:
+                        self.dialog._btn_play.setChecked(True)
+                    return
+                try:
+                    self._install(document, entries)
+                except Exception as error:
+                    failed(str(error))
+                    return
+            finally:
+                self._loading = False
             self.path = "" if recovery else str(path)
             self._observed = self.fingerprint()
             unsaved = recovery or bool(replacements)

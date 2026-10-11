@@ -451,6 +451,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Builder project replacement keeps save/autosave actions blocked through modal
+confirmation and installation. Edits made during confirmation prevent stale
+replacement; completion restores editing controls on success, cancellation and
+failure. Generated-project regressions also cover injected storage failures,
+retry and malformed recovery media while retaining session resources/state.
+These checks do not certify physical storage recovery or complete native workflows.
+
 Video Builder supports named reusable export presets for format, FPS, source-audio
 retention, mute and volume. Save/apply/delete persists through settings; presets
 exclude source/destination paths, clip edits and automatic output sizing. Applying
