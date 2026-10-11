@@ -6,7 +6,7 @@ from pathlib import Path
 import time
 import uuid
 
-from PyQt6.QtCore import QEvent, QObject, QThread, QTimer, QLockFile, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, QThread, QTimer, QLockFile, QItemSelectionModel, pyqtSignal
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QFileDialog, QHBoxLayout, QInputDialog, QLabel, QListWidgetItem,
@@ -455,7 +455,11 @@ class EditorProjectController(QObject):
                 if was_playing:
                     self.dialog._btn_play.setChecked(True)
                 return
-            self._install(document, entries)
+            try:
+                self._install(document, entries)
+            except Exception as error:
+                failed(str(error))
+                return
             self.path = "" if recovery else str(path)
             self._observed = self.fingerprint()
             unsaved = recovery or bool(replacements)
@@ -494,7 +498,8 @@ class EditorProjectController(QObject):
         try:
             old = list(self.entries)
             previous = dict(controls=self.controls(), selected=self.entry_list.currentRow(),
-                            playhead=dialog._preview_idx if self.kind == "gif" else dialog._scrubber.value())
+                            playhead=dialog._preview_idx if self.kind == "gif" else dialog._scrubber.value(),
+                            selected_rows=[self.entry_list.row(item) for item in self.entry_list.selectedItems()])
             old_items = [self.entry_list.item(i).clone() for i in range(self.entry_list.count())]
             if self.kind == "video":
                 dialog._history_restoring = True
@@ -527,7 +532,13 @@ class EditorProjectController(QObject):
             dialog._clips = entries
         for item in items:
             self.entry_list.addItem(item)
-        self.entry_list.setCurrentRow(document["selected"])
+        if "selected_rows" in document:
+            # Rollback keeps multi-selection independent of the current/preview row.
+            self.entry_list.setCurrentRow(document["selected"], QItemSelectionModel.SelectionFlag.NoUpdate)
+            for row in document["selected_rows"]:
+                self.entry_list.item(row).setSelected(True)
+        else:
+            self.entry_list.setCurrentRow(document["selected"])
         self.entry_list.blockSignals(False)
         # Block per-clip controls while setting global controls.
         for name, value in document["controls"].items():

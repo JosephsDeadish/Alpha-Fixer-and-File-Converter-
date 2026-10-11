@@ -451,6 +451,12 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Failed editor project installation restores the previous session through the
+normal load-failure path, including playback and GIF multi-selection. Generated
+media and injected post-application failures verify controls, history, dirty state,
+media ownership and saved project JSON remain intact. These bounded offscreen
+checks do not replace native recovery or physical storage qualification.
+
 GIF and Video project controls share the scrollable builder content below the
 title. Save/Open/Recover actions stack when necessary, status text wraps within
 the viewport, and keyboard-focused actions remain reachable. Accessible names

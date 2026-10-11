@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 from PIL import Image
 from PyQt6 import sip
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QItemSelectionModel
 from PyQt6.QtGui import QKeySequence
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QMessageBox, QBoxLayout
@@ -936,6 +936,115 @@ def test_install_snapshot_failure_releases_prepared_entries(dialogs, tmp_path, f
     assert widget._clips == [original]
     with original.get_frame(0) as frame:
         assert frame.getpixel((0, 0)) == (255, 0, 0, 255)
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+def test_failed_install_keeps_unsaved_selection_history_and_playback(dialogs, tmp_path, kind):
+    from src.ui import editor_project
+    source, still = sources(tmp_path)
+    widget = dialogs(kind)
+    if kind == "gif":
+        widget._add_paths([str(source), str(still)])
+    else:
+        widget._load_image_paths([str(source), str(still), str(still)])
+    path = tmp_path / "rollback.json"
+    save(widget, path)
+    project = widget._project
+    listing = project.entry_list
+    listing.setCurrentRow(2, QItemSelectionModel.SelectionFlag.NoUpdate)
+    listing.clearSelection()
+    selected_rows = [0, 2] if kind == "gif" else [2]
+    for row in selected_rows:
+        listing.item(row).setSelected(True)
+    assert [listing.row(item) for item in listing.selectedItems()] == selected_rows
+    if kind == "gif":
+        widget._pf_check.setChecked(True)
+        widget._pf_slider.setValue(333)
+        widget._delay_slider.setValue(777)
+    else:
+        widget._brightness_slider.setValue(177)
+    widget._scrubber.setValue(1)
+    widget._btn_play.setChecked(True)
+    entries = list(project.entries)
+    fingerprint = project.fingerprint()
+    saved, autosaved = project._saved, project._autosaved
+    history = (list(widget._undo_stack), list(widget._redo_stack))
+    before = path.read_bytes()
+    prepared = []
+    prepare = editor_project.prepare_entries
+
+    def tracked_prepare(*args):
+        result = prepare(*args)
+        for entry in result:
+            entry.close = Mock(wraps=entry.close)
+        prepared.extend(result)
+        return result
+
+    apply = project._apply_state
+    attempts = []
+
+    def fail_after_apply(*args):
+        apply(*args)
+        attempts.append(True)
+        if len(attempts) == 1:
+            raise RuntimeError("late project refresh failed")
+
+    with patch.object(editor_project, "prepare_entries", side_effect=tracked_prepare), \
+            patch.object(project, "_apply_state", side_effect=fail_after_apply), \
+            patch.object(editor_project.QMessageBox, "critical") as error:
+        open_project(widget, path)
+    error.assert_called_once()
+    assert len(attempts) == 2
+    assert project.entries == entries
+    assert project.fingerprint() == fingerprint
+    assert (project._saved, project._autosaved) == (saved, autosaved)
+    assert (widget._undo_stack, widget._redo_stack) == history
+    assert listing.currentRow() == 2
+    assert [listing.row(item) for item in listing.selectedItems()] == selected_rows
+    assert widget._scrubber.value() == 1
+    assert widget._btn_play.isChecked() and widget._preview_timer.isActive()
+    widget._btn_play.setChecked(False)
+    assert project.dirty and project.path == str(path)
+    assert path.read_bytes() == before
+    assert project.open_button.isEnabled() and widget._content_scroll.isEnabled()
+    for entry in prepared:
+        entry.close.assert_called_once()
+    assert "current project has been kept intact" in error.call_args.args[2]
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+def test_invalid_open_keeps_unsaved_controls_and_playback(dialogs, tmp_path, kind):
+    source, _ = sources(tmp_path)
+    widget = dialogs(kind)
+    if kind == "gif":
+        widget._add_paths([str(source)])
+    else:
+        widget._load_image_paths([str(source)])
+    path = tmp_path / "invalid.json"
+    save(widget, path)
+    document = read_project(path)
+    document["version"] = True
+    path.write_text(json.dumps(document))
+    control = widget._delay_slider if kind == "gif" else widget._brightness_slider
+    control.setValue(177)
+    widget._scrubber.setValue(1)
+    widget._btn_play.setChecked(True)
+    project = widget._project
+    entries = list(project.entries)
+    fingerprint = project.fingerprint()
+    saved, autosaved = project._saved, project._autosaved
+    with patch("src.ui.editor_project.QMessageBox.critical") as error, \
+            patch("src.ui.editor_project.prepare_entries") as prepare:
+        open_project(widget, path)
+    error.assert_called_once()
+    prepare.assert_not_called()
+    assert project.entries == entries and project.fingerprint() == fingerprint
+    assert (project._saved, project._autosaved) == (saved, autosaved)
+    assert control.value() == 177 and project.dirty
+    assert widget._btn_play.isChecked() and widget._preview_timer.isActive()
+    widget._btn_play.setChecked(False)
+    assert widget._scrubber.value() == 1
+    assert project.open_button.isEnabled() and widget._content_scroll.isEnabled()
 
 
 def test_first_autosave_retains_hash_and_pending_parent_close_keeps_media(dialogs, tmp_path):
