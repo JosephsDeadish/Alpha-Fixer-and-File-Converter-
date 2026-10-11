@@ -35,10 +35,7 @@ def approve_parent_projects(dialogs, resume):
             project.dialog._release_clips()
         else:
             project.dialog._preview_timer.stop()
-            for entry in project.entries:
-                entry.close()
-            project.entries.clear()
-            project.entry_list.clear()
+            project.dialog._release_frames()
     return True
 
 
@@ -442,8 +439,12 @@ class EditorProjectController(QObject):
             for entry in entries:
                 entry.close()
             raise
-        for entry in old:
-            entry.close()
+        if self.kind == "gif":
+            self.dialog._history_entries.update(old)
+            self.dialog._reset_frame_history()
+        else:
+            for entry in old:
+                entry.close()
 
     def _apply_state(self, document, entries, items):
         dialog = self.dialog

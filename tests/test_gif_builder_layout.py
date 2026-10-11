@@ -55,6 +55,7 @@ def visible(builder, control):
 def controls(builder):
     return [
         builder._btn_add, builder._btn_remove, builder._btn_clear,
+        builder._btn_undo,
         builder._import_detail_toggle_btn, builder._import_copy_btn,
         builder._frame_list, builder._pf_check, builder._pf_slider,
         builder._delay_slider, builder._loop_slider, builder._width_slider,

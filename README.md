@@ -451,6 +451,15 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+GIF Builder provides Undo/Redo for adding, removing, clearing and reordering
+frames and editing per-frame delay overrides. Buttons and configurable Ctrl+Z /
+Ctrl+Shift+Z shortcuts restore frame selection and timing; text fields retain
+their own undo behavior. History retains references rather than copying pixels
+and is capped at 50 edits and 32 million history-only pixels. Older edits may be
+released. Global export settings are not part of this history. Generated-frame
+regressions cover history branching, resource cleanup and project replacement;
+Video Builder undo/redo and native workflow acceptance remain outstanding.
+
 Converter metadata checks now cover EXIF dimensions after resize, nested
 interoperability tags, TIFF metadata/storage-tag separation, AVIF ICC copying
 and disabled-metadata stripping. Applied TIFF decoder orientation is normalized

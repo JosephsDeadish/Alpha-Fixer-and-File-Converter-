@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import datetime
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -30,7 +31,7 @@ from src.core.gif_export import GifExportSettings, GifExportWorker
 from ._ui_utils import fit_dialog_to_screen, scrollable_dialog_layout, reserve_space_for_focused_control
 
 from PyQt6.QtCore import (
-    Qt, QTimer, QSize, QEvent, pyqtSignal,
+    Qt, QTimer, QSize, QEvent, QItemSelectionModel, pyqtSignal,
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QDragEnterEvent, QDropEvent, QDragMoveEvent,
@@ -42,6 +43,7 @@ from PyQt6.QtWidgets import (
     QCheckBox, QGroupBox, QGridLayout, QMessageBox,
     QProgressDialog, QSplitter, QWidget, QApplication,
     QFrame, QPlainTextEdit, QSpinBox, QAbstractSpinBox, QSizePolicy, QLayout, QBoxLayout,
+    QLineEdit, QTextEdit,
 )
 from .video_tool import (
     _VIDEO_EXTS,
@@ -72,6 +74,25 @@ _THUMB_H = 100
 
 # UserRole key for storing _FrameEntry in QListWidgetItem
 _ENTRY_ROLE = Qt.ItemDataRole.UserRole
+_HISTORY_LIMIT = 50
+_HISTORY_PIXEL_LIMIT = 32_000_000
+
+
+@dataclass(frozen=True)
+class _FrameState:
+    frames: tuple
+    delays: tuple
+    labels: tuple
+    selected: tuple
+    current: object
+    preview: object
+
+
+@dataclass(frozen=True)
+class _FrameEdit:
+    label: str
+    before: _FrameState
+    after: _FrameState
 
 
 def _gif_frame_rect(gif, frame_img) -> tuple[int, int, int, int]:
@@ -228,8 +249,11 @@ class _FrameEntry:
         if cached is not None:
             return cached
         tmp = self._pil.copy()
-        tmp.thumbnail((w, h), Image.LANCZOS)
-        pix = _pil_to_pixmap(tmp)
+        try:
+            tmp.thumbnail((w, h), Image.LANCZOS)
+            pix = _pil_to_pixmap(tmp)
+        finally:
+            tmp.close()
         self._thumb_cache = {key: pix}
         return pix
 
@@ -453,6 +477,8 @@ class GifBuilderDialog(QDialog):
     status_notice = pyqtSignal(str, int)
     queue_status_changed = pyqtSignal(str)
     SHORTCUT_DEFS = (
+        ("gif_undo", "Ctrl+Z", "Undo frame edit", "GIF Builder"),
+        ("gif_redo", "Ctrl+Shift+Z", "Redo frame edit", "GIF Builder"),
         ("gif_remove_selected", "Delete", "Remove selected frame", "GIF Builder"),
         ("gif_export", "Ctrl+S", "Export GIF", "GIF Builder"),
         ("gif_toggle_play", "Space", "Play or pause preview", "GIF Builder"),
@@ -467,6 +493,13 @@ class GifBuilderDialog(QDialog):
         self._tooltip_mgr = tooltip_mgr
         self._import_detail_expanded = False
         self._frames: list[_FrameEntry] = []
+        self._undo_stack: list[_FrameEdit] = []
+        self._redo_stack: list[_FrameEdit] = []
+        self._history_entries: set[_FrameEntry] = set()
+        self._history_restoring = False
+        self._delay_gesture = None
+        self._importing = False
+        self._close_after_import = False
         self._export_worker: Optional[GifExportWorker] = None
         self._export_selecting = False
         self._export_canceling = False
@@ -479,6 +512,9 @@ class GifBuilderDialog(QDialog):
         self._preview_timer = QTimer(self)
         self._preview_timer.timeout.connect(self._advance_preview)
         self._build_ui()
+        self._pf_slider.sliderPressed.connect(self._begin_delay_gesture)
+        self._pf_slider.sliderReleased.connect(self._finish_delay_gesture)
+        self._update_history_controls()
         self._on_selection_changed(-1)
         self._update_preview_frame()
         self.queue_status_changed.connect(self._refresh_session_status)
@@ -550,6 +586,23 @@ class GifBuilderDialog(QDialog):
         self._btn_clear.clicked.connect(self._clear_all)
         tb.addWidget(self._btn_clear, 1)
         left_layout.addLayout(tb)
+        history_row = QHBoxLayout()
+        history_scope = (
+            "Frame edits only: add, remove, clear, reorder, and per-frame delay. "
+            "Global export settings are not included. Keeps up to 50 edits and "
+            "32 million history-only pixels; older edits may be released."
+        )
+        self._btn_undo = QPushButton("Undo")
+        self._btn_redo = QPushButton("Redo")
+        for button, label, slot in (
+            (self._btn_undo, "Undo frame edit", self._undo),
+            (self._btn_redo, "Redo frame edit", self._redo),
+        ):
+            button.setAccessibleName(label)
+            button.setAccessibleDescription(history_scope)
+            button.clicked.connect(slot)
+            history_row.addWidget(button)
+        left_layout.addLayout(history_row)
 
         # Hint label
         hint = QLabel("💡 Drag frames to reorder  •  Drop image or video files to add")
@@ -880,6 +933,8 @@ class GifBuilderDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _on_add_clicked(self) -> None:
+        if self._editing_busy():
+            return
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add Media", "",
             "Media (*.png *.jpg *.jpeg *.jfif *.jpe *.webp *.bmp *.tiff *.tif *.gif "
@@ -892,8 +947,23 @@ class GifBuilderDialog(QDialog):
 
     def _add_paths(self, paths: list[str]) -> None:
         """Load image/video files and append their frames to the list."""
-        if self._export_worker is not None:
+        if self._editing_busy():
             return
+        self._finish_delay_gesture()
+        before = self._capture_frame_state()
+        self._importing = True
+        self._update_history_controls()
+        try:
+            self._import_paths(paths)
+        finally:
+            self._importing = False
+            self._record_frame_edit("Add media", before)
+            self._update_history_controls()
+            if self._close_after_import:
+                self._close_after_import = False
+                QTimer.singleShot(0, self.close)
+
+    def _import_paths(self, paths: list[str]) -> None:
         progress = QProgressDialog("Loading media…", "Cancel", 0, len(paths), self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(500)
@@ -1047,6 +1117,8 @@ class GifBuilderDialog(QDialog):
 
     def _setup_shortcuts(self) -> None:
         self._shortcut_objects: dict[str, QShortcut] = {}
+        self._bind_shortcut("gif_undo", "Ctrl+Z", lambda: self._history_shortcut(False))
+        self._bind_shortcut("gif_redo", "Ctrl+Shift+Z", lambda: self._history_shortcut(True))
         self._bind_shortcut("gif_remove_selected", "Delete", self._remove_selected)
         self._bind_shortcut("gif_export", "Ctrl+S", self._export)
         self._bind_shortcut(
@@ -1057,6 +1129,12 @@ class GifBuilderDialog(QDialog):
 
     def event(self, event):
         if reserve_space_for_focused_control(self, event):
+            return True
+        if (event.type() == QEvent.Type.ShortcutOverride
+                and self._text_control_focused()
+                and (event.matches(QKeySequence.StandardKey.Undo)
+                     or event.matches(QKeySequence.StandardKey.Redo))):
+            event.accept()
             return True
         result = super().event(event)
         if (event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange,
@@ -1176,8 +1254,162 @@ class GifBuilderDialog(QDialog):
         mgr.register(self._btn_play, "gif_preview")
         mgr.register(self._btn_export, "gif_export")
 
+    def _editing_busy(self) -> bool:
+        project = getattr(self, "_project", None)
+        return bool(self._export_worker is not None or self._export_selecting
+                    or self._importing or (project is not None and project._loading))
+
+    def _text_control_focused(self) -> bool:
+        focused = QApplication.focusWidget()
+        return (focused is not None and self.isAncestorOf(focused)
+                and isinstance(focused, (QLineEdit, QTextEdit, QPlainTextEdit,
+                                         QAbstractSpinBox)))
+
+    def _history_shortcut(self, redo: bool) -> None:
+        if not self._text_control_focused():
+            (self._redo if redo else self._undo)()
+
+    def _capture_frame_state(self) -> _FrameState:
+        items = {self._frame_list.item(i).data(_ENTRY_ROLE): self._frame_list.item(i)
+                 for i in range(self._frame_list.count())}
+        current = self._frame_list.currentItem()
+        return _FrameState(
+            tuple(self._frames), tuple(entry.delay_ms for entry in self._frames),
+            tuple((items[entry].text(), items[entry].toolTip())
+                  for entry in self._frames),
+            tuple(item.data(_ENTRY_ROLE) for item in self._frame_list.selectedItems()),
+            current.data(_ENTRY_ROLE) if current else None,
+            self._frames[self._preview_idx] if 0 <= self._preview_idx < len(self._frames) else None,
+        )
+
+    def _restore_frame_state(self, state: _FrameState) -> None:
+        self._history_restoring = True
+        self._frame_list.blockSignals(True)
+        try:
+            self._frame_list.clear()
+            self._frames = list(state.frames)
+            for entry, delay, (label, tooltip) in zip(state.frames, state.delays, state.labels):
+                entry.delay_ms = delay
+                item = QListWidgetItem(label)
+                item.setToolTip(tooltip)
+                item.setIcon(QIcon(entry.thumbnail(_THUMB_W, _THUMB_H)))
+                item.setData(_ENTRY_ROLE, entry)
+                self._frame_list.addItem(item)
+                if entry is state.current:
+                    self._frame_list.setCurrentItem(
+                        item, QItemSelectionModel.SelectionFlag.NoUpdate
+                    )
+            for index, entry in enumerate(state.frames):
+                self._frame_list.item(index).setSelected(entry in state.selected)
+            self._preview_idx = (state.frames.index(state.preview)
+                                 if state.preview in state.frames else 0)
+        finally:
+            self._frame_list.blockSignals(False)
+            self._history_restoring = False
+        self._on_selection_changed(self._frame_list.currentRow(), update_preview=False)
+        self._update_count()
+        self._update_scrubber()
+        self._update_preview_frame()
+
+    def _record_frame_edit(self, label: str, before: _FrameState) -> None:
+        if self._history_restoring:
+            return
+        after = self._capture_frame_state()
+        if before.frames == after.frames and before.delays == after.delays:
+            return
+        self._undo_stack.append(_FrameEdit(label, before, after))
+        self._redo_stack.clear()
+        self._history_entries.update(before.frames)
+        self._history_entries.update(after.frames)
+        self._trim_frame_history()
+        self._release_unused_history()
+        self._update_history_controls()
+
+    def _trim_frame_history(self) -> None:
+        while len(self._undo_stack) + len(self._redo_stack) > _HISTORY_LIMIT:
+            (self._undo_stack or self._redo_stack).pop(0)
+        # Bound history-only pixels, not the user's live timeline. Commands keep
+        # references and timing metadata; they never duplicate image buffers.
+        while self._undo_stack or self._redo_stack:
+            retained = {entry for edit in self._undo_stack + self._redo_stack
+                        for state in (edit.before, edit.after) for entry in state.frames}
+            pixels = sum(entry._pil.width * entry._pil.height
+                         for entry in retained.difference(self._frames))
+            if pixels <= _HISTORY_PIXEL_LIMIT:
+                break
+            (self._undo_stack or self._redo_stack).pop(0)
+
+    def _release_unused_history(self) -> None:
+        retained = set(self._frames)
+        for edit in self._undo_stack + self._redo_stack:
+            retained.update(edit.before.frames)
+            retained.update(edit.after.frames)
+        for entry in self._history_entries - retained:
+            entry.close()
+        self._history_entries.intersection_update(retained)
+
+    def _reset_frame_history(self) -> None:
+        self._delay_gesture = None
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+        self._release_unused_history()
+        self._update_history_controls()
+
+    def _release_frames(self) -> None:
+        self._history_entries.update(self._frames)
+        self._frames.clear()
+        self._frame_list.clear()
+        self._reset_frame_history()
+
+    def _update_history_controls(self) -> None:
+        busy = self._editing_busy()
+        for button, stack, verb in (
+            (self._btn_undo, self._undo_stack, "Undo"),
+            (self._btn_redo, self._redo_stack, "Redo"),
+        ):
+            button.setEnabled(bool(stack) and not busy)
+            action = f"{verb}: {stack[-1].label}" if stack else f"Nothing to {verb.lower()}"
+            button.setToolTip(action + "\n" + button.accessibleDescription())
+
+    def _undo(self) -> None:
+        self._move_frame_history(False)
+
+    def _redo(self) -> None:
+        self._move_frame_history(True)
+
+    def _move_frame_history(self, redo: bool) -> None:
+        if self._editing_busy():
+            return
+        self._finish_delay_gesture()
+        source, target = ((self._redo_stack, self._undo_stack) if redo
+                          else (self._undo_stack, self._redo_stack))
+        if source:
+            edit = source.pop()
+            self._restore_frame_state(edit.after if redo else edit.before)
+            target.append(edit)
+            self._trim_frame_history()
+            self._release_unused_history()
+            self.status_notice.emit(f"GIF Builder: {'Redid' if redo else 'Undid'} {edit.label}", 4000)
+        self._update_history_controls()
+
+    def _begin_delay_gesture(self) -> None:
+        if not self._editing_busy():
+            self._delay_gesture = self._capture_frame_state()
+
+    def _finish_delay_gesture(self) -> None:
+        before, self._delay_gesture = self._delay_gesture, None
+        if before is not None:
+            self._record_frame_edit("Frame delay", before)
+
     def _sync_frames_from_list(self) -> None:
         """Rebuild ``self._frames`` from current list-widget item order."""
+        if self._history_restoring:
+            return
+        if self._editing_busy():
+            self._restore_frame_state(self._capture_frame_state())
+            return
+        self._finish_delay_gesture()
+        before = self._capture_frame_state()
         preview_entry = (
             self._frames[self._preview_idx]
             if 0 <= self._preview_idx < len(self._frames) else None
@@ -1194,34 +1426,38 @@ class GifBuilderDialog(QDialog):
         self._on_selection_changed(self._frame_list.currentRow(), update_preview=False)
         self._update_scrubber()
         self._update_preview_frame()
+        self._record_frame_edit("Reorder frames", before)
 
     def _remove_selected(self) -> None:
-        if self._export_worker is not None:
+        if self._editing_busy():
             return
+        self._finish_delay_gesture()
+        before = self._capture_frame_state()
         rows = sorted(
             {self._frame_list.row(item) for item in self._frame_list.selectedItems()},
             reverse=True,
         )
         for row in rows:
             if 0 <= row < len(self._frames):
-                self._frames[row].close()
                 del self._frames[row]
             self._frame_list.takeItem(row)
         self._update_count()
         self._update_scrubber()
         self._on_selection_changed(self._frame_list.currentRow())
         self._update_preview_frame()
+        self._record_frame_edit("Remove frames", before)
 
     def _clear_all(self) -> None:
-        if self._export_worker is not None:
+        if self._editing_busy():
             return
-        for entry in self._frames:
-            entry.close()
+        self._finish_delay_gesture()
+        before = self._capture_frame_state()
         self._frames.clear()
         self._frame_list.clear()
         self._update_count()
         self._update_scrubber()
         self._update_preview_frame()
+        self._record_frame_edit("Clear frames", before)
 
     def _update_count(self) -> None:
         n = len(self._frames)
@@ -1473,6 +1709,7 @@ class GifBuilderDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _on_selection_changed(self, row: int, *, update_preview: bool = True) -> None:
+        self._finish_delay_gesture()
         self._pf_check.setEnabled(0 <= row < len(self._frames))
         if row < 0 or row >= len(self._frames):
             self._pf_check.blockSignals(True)
@@ -1500,6 +1737,11 @@ class GifBuilderDialog(QDialog):
         self._update_frame_diagnostics()
 
     def _on_pf_check(self, checked: bool) -> None:
+        if self._editing_busy():
+            self._on_selection_changed(self._frame_list.currentRow(), update_preview=False)
+            return
+        self._finish_delay_gesture()
+        before = self._capture_frame_state()
         row = self._frame_list.currentRow()
         self._pf_slider.setEnabled(checked and 0 <= row < len(self._frames))
         if 0 <= row < len(self._frames):
@@ -1508,14 +1750,21 @@ class GifBuilderDialog(QDialog):
             self._sync_inherited_delay_control()
         self._sync_preview_delay()
         self._update_frame_diagnostics()
+        self._record_frame_edit("Frame delay override", before)
 
     def _on_pf_slider_changed(self, value: int) -> None:
+        if self._editing_busy():
+            self._on_selection_changed(self._frame_list.currentRow(), update_preview=False)
+            return
+        before = self._capture_frame_state()
         self._pf_val_lbl.setText(f"{value} ms")
         row = self._frame_list.currentRow()
         if 0 <= row < len(self._frames) and self._pf_check.isChecked():
             self._frames[row].delay_ms = value
         self._sync_preview_delay()
         self._update_frame_diagnostics()
+        if self._delay_gesture is None:
+            self._record_frame_edit("Frame delay", before)
 
     # ------------------------------------------------------------------
     # Global delay slider
@@ -1641,8 +1890,9 @@ class GifBuilderDialog(QDialog):
         self._cancel_export()
 
     def _export(self) -> None:
-        if self._export_worker is not None or self._export_selecting:
+        if self._editing_busy():
             return
+        self._finish_delay_gesture()
         if not self._frames:
             QMessageBox.information(self, "No Frames", "Add at least one image first.")
             return
@@ -1672,6 +1922,7 @@ class GifBuilderDialog(QDialog):
         )
         worker = GifExportWorker(settings, self)
         self._export_worker = worker
+        self._update_history_controls()
         self._export_canceling = False
         self._export_snapshot = []
         self._export_sources = tuple(
@@ -1772,6 +2023,7 @@ class GifBuilderDialog(QDialog):
         self._export_sources = ()
         # Native QThread.finished is emitted after run() and image cleanup.
         self._export_worker = None
+        self._update_history_controls()
         worker.deleteLater()
         if outcome == "success":
             self._record_export_history(
@@ -1812,6 +2064,10 @@ class GifBuilderDialog(QDialog):
     # ------------------------------------------------------------------
 
     def closeEvent(self, event) -> None:
+        if self._importing:
+            self._close_after_import = True
+            event.ignore()
+            return
         if self._export_worker is not None:
             self._close_after_export = True
             self._cancel_export()
@@ -1821,13 +2077,14 @@ class GifBuilderDialog(QDialog):
             event.ignore()
             return
         self._preview_timer.stop()
-        for entry in self._frames:
-            entry.close()
-        self._frames.clear()
+        self._release_frames()
         super().closeEvent(event)
 
     def done(self, result: int) -> None:
         # Escape/reject/accept can bypass closeEvent on QDialog.
+        if self._importing:
+            self._close_after_import = True
+            return
         if self._export_worker is not None:
             self._close_after_export = True
             self._cancel_export()
@@ -1835,8 +2092,5 @@ class GifBuilderDialog(QDialog):
         if hasattr(self, "_project") and not self._project.allow_close(lambda: self.done(result)):
             return
         self._preview_timer.stop()
-        for entry in self._frames:
-            entry.close()
-        self._frames.clear()
-        self._frame_list.clear()
+        self._release_frames()
         super().done(result)
