@@ -53,7 +53,7 @@ from src.core.video_export import (
 from .video_preview_audio import PreviewAudioController, QtAudioBackend, clip_audio_target
 
 from PyQt6.QtCore import (
-    Qt, QTimer, QSize, QEvent, QItemSelectionModel, pyqtSignal,
+    Qt, QTimer, QSize, QEvent, QItemSelectionModel, QSignalBlocker, pyqtSignal,
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QKeySequence, QShortcut, QIcon,
@@ -3090,6 +3090,9 @@ class VideoToolDialog(QDialog):
             and self._imageio_ffmpeg_available
         )
         self._mp4_export_available = self._video_io_available
+        from src.core.settings_manager import SettingsManager
+        from src.core.video_presets import VideoExportPresets
+        self._export_presets = VideoExportPresets(self._resolve_settings() or SettingsManager())
         self._build_ui()
         self.queue_status_changed.connect(self._refresh_session_status)
         mgr = self._resolve_tooltip_mgr()
@@ -3617,6 +3620,48 @@ class VideoToolDialog(QDialog):
         ex_vl = QVBoxLayout(grp_export)
         ex_vl.setSpacing(6)
 
+        preset_row = QHBoxLayout()
+        preset_label = QLabel("Preset:")
+        self._export_preset_combo = QComboBox()
+        self._export_preset_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self._export_preset_combo.setMinimumContentsLength(8)
+        preset_label.setBuddy(self._export_preset_combo)
+        preset_row.addWidget(preset_label)
+        preset_row.addWidget(self._export_preset_combo, 1)
+        self._btn_apply_export_preset = QPushButton("Apply")
+        self._btn_delete_export_preset = QPushButton("Delete")
+        self._btn_apply_export_preset.clicked.connect(self._apply_export_preset)
+        self._btn_delete_export_preset.clicked.connect(self._delete_export_preset)
+        preset_row.addWidget(self._btn_apply_export_preset)
+        preset_row.addWidget(self._btn_delete_export_preset)
+        ex_vl.addLayout(preset_row)
+        preset_save_row = QHBoxLayout()
+        self._export_preset_name = QLineEdit()
+        self._export_preset_name.setMaxLength(80)
+        self._export_preset_name.setPlaceholderText("New preset name")
+        self._btn_save_export_preset = QPushButton("Save new")
+        self._btn_save_export_preset.clicked.connect(self._save_export_preset)
+        for button in (self._btn_apply_export_preset, self._btn_delete_export_preset,
+                       self._btn_save_export_preset):
+            button.setAutoDefault(False)
+        self._export_preset_combo.setToolTip("Select a saved export preset, then choose Apply.")
+        self._btn_apply_export_preset.setToolTip(
+            "Apply format, preview/export FPS and MP4 audio preferences without changing clip edits."
+        )
+        self._btn_delete_export_preset.setToolTip("Delete only the selected export preset.")
+        self._btn_save_export_preset.setToolTip(
+            "Save current export preferences under a new name. Existing presets are not overwritten."
+        )
+        preset_save_row.addWidget(self._export_preset_name, 1)
+        preset_save_row.addWidget(self._btn_save_export_preset)
+        ex_vl.addLayout(preset_save_row)
+        self._export_preset_status = QLabel(
+            "Saves format, FPS and MP4 audio only; canvas stays automatic."
+        )
+        self._export_preset_status.setWordWrap(True)
+        self._export_preset_status.setProperty("toolGuidance", True)
+        ex_vl.addWidget(self._export_preset_status)
+
         fmt_row = QHBoxLayout()
         fmt_row.addWidget(QLabel("Format:"))
         self._export_fmt_combo = QComboBox()
@@ -3703,7 +3748,8 @@ class VideoToolDialog(QDialog):
         self._responsive_rows = [
             tb, history_row, insert_row, import_detail_actions, start_row, end_row,
             video_stream_row, audio_stream_row, clip_speed_row, still_row,
-            scrub_row, ctrl, audio_row, preview_volume_row, fps_row, fl_layout, fmt_row, audio_volume_row,
+            scrub_row, ctrl, audio_row, preview_volume_row, fps_row, fl_layout,
+            preset_row, preset_save_row, fmt_row, audio_volume_row,
         ]
         self._responsive_rows.extend(
             adj_vl.itemAt(i).layout() for i in range(adj_vl.count())
@@ -3738,6 +3784,11 @@ class VideoToolDialog(QDialog):
             (self._fps_slider, "Timeline frame rate (frames per second)"),
             (self._filter_combo, "Video filter"),
             (self._export_fmt_combo, "Video export format"),
+            (self._export_preset_combo, "Saved video export preset"),
+            (self._export_preset_name, "New video export preset name"),
+            (self._btn_apply_export_preset, "Apply video export preset"),
+            (self._btn_delete_export_preset, "Delete selected video export preset"),
+            (self._btn_save_export_preset, "Save new video export preset"),
             (self._audio_volume_slider, "MP4 audio volume (percent)"),
         ):
             control.setAccessibleName(name)
@@ -3745,6 +3796,93 @@ class VideoToolDialog(QDialog):
         self._update_audio_controls()
         self._refresh_stream_controls()
         self._update_ui_state()
+        self._export_preset_combo.currentIndexChanged.connect(self._update_export_preset_actions)
+        self._reload_export_presets()
+
+    def _export_preferences(self):
+        return {
+            "format": self._export_fmt_combo.currentData(),
+            "fps": self._fps_slider.value(),
+            "keep_audio": self._audio_enable_check.isChecked(),
+            "mute_audio": self._audio_mute_check.isChecked(),
+            "volume": self._audio_volume_slider.value(),
+        }
+
+    def _reload_export_presets(self, selected=None):
+        self._export_preset_combo.clear()
+        self._export_preset_combo.addItem("Select preset…", None)
+        try:
+            for name in sorted(self._export_presets.available()):
+                self._export_preset_combo.addItem(name, name)
+        except ValueError as exc:
+            self._export_preset_status.setText(str(exc))
+        if selected:
+            self._export_preset_combo.setCurrentIndex(self._export_preset_combo.findData(selected))
+        self._update_export_preset_actions()
+
+    def _update_export_preset_actions(self):
+        selected = self._export_preset_combo.currentData() is not None
+        self._btn_apply_export_preset.setEnabled(selected)
+        self._btn_delete_export_preset.setEnabled(selected)
+
+    def _save_export_preset(self):
+        if self._editing_busy():
+            return
+        try:
+            name = self._export_presets.save(self._export_preset_name.text(), self._export_preferences())
+        except ValueError as exc:
+            self._export_preset_status.setText(str(exc))
+            return
+        self._export_preset_name.clear()
+        self._reload_export_presets(name)
+        self._export_preset_status.setText(f"Saved “{name}”.")
+
+    def _delete_export_preset(self):
+        if self._editing_busy():
+            return
+        name = self._export_preset_combo.currentData()
+        try:
+            self._export_presets.delete(name)
+        except ValueError as exc:
+            self._export_preset_status.setText(str(exc))
+            return
+        self._reload_export_presets()
+        self._export_preset_status.setText(f"Deleted “{name}”.")
+
+    def _apply_export_preset(self):
+        if self._editing_busy() or self._history_depth:
+            return
+        name = self._export_preset_combo.currentData()
+        try:
+            record = self._export_presets.available().get(name)
+            record = self._export_presets.validate(record)
+            index = self._export_fmt_combo.findData(record["format"])
+            if index < 0:
+                raise ValueError("This preset needs the unavailable MP4 export backend; nothing was changed.")
+        except ValueError as exc:
+            self._export_preset_status.setText(str(exc))
+            return
+        if record == self._export_preferences():
+            self._export_preset_status.setText(f"“{name}” already matches the export settings.")
+            return
+        self._finish_history_gesture()
+        before = self._capture_video_state()
+        controls = (
+            self._export_fmt_combo, self._fps_slider, self._audio_enable_check,
+            self._audio_mute_check, self._audio_volume_slider,
+        )
+        blockers = [QSignalBlocker(control) for control in controls]
+        self._export_fmt_combo.setCurrentIndex(index)
+        self._fps_slider.setValue(record["fps"])
+        self._audio_enable_check.setChecked(record["keep_audio"])
+        self._audio_mute_check.setChecked(record["mute_audio"])
+        self._audio_volume_slider.setValue(record["volume"])
+        del blockers
+        self._audio_volume_lbl.setText(f'{record["volume"]}%')
+        self._on_preview_fps_changed(record["fps"])
+        self._record_video_edit("Apply export preset", before)
+        self._update_history_controls()
+        self._export_preset_status.setText(f"Applied “{name}”. Timeline edits and automatic canvas unchanged.")
 
     def _reflow_controls(self) -> None:
         available = self._content_scroll.viewport().width()

@@ -451,6 +451,14 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Video Builder supports named reusable export presets for format, FPS, source-audio
+retention, mute and volume. Save/apply/delete persists through settings; presets
+exclude source/destination paths, clip edits and automatic output sizing. Applying
+a preset is one undoable edit and rejects unavailable MP4 or invalid values without
+partially changing controls. Tests cover persistence, malformed records, compact
+controls and undo/redo; device playback and native end-to-end acceptance remain
+separate gates.
+
 Failed editor project installation restores the previous session through the
 normal load-failure path, including playback and GIF multi-selection. Generated
 media and injected post-application failures verify controls, history, dirty state,

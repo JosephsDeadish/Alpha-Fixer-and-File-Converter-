@@ -71,7 +71,10 @@ def controls(video):
         video._preview_mute_check, video._preview_volume_slider, video._fps_slider,
         video._brightness_slider, video._contrast_slider, video._saturation_slider,
         video._sharpness_slider, video._black_slider, video._white_slider,
-        video._filter_combo, video._export_fmt_combo, video._audio_enable_check,
+        video._filter_combo, video._export_preset_combo,
+        video._btn_apply_export_preset, video._btn_delete_export_preset,
+        video._export_preset_name, video._btn_save_export_preset,
+        video._export_fmt_combo, video._audio_enable_check,
         video._audio_mute_check, video._audio_volume_slider, video._btn_export,
     ]
 
