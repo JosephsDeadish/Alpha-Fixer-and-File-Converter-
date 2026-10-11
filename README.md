@@ -402,6 +402,14 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Converter metadata checks now cover EXIF dimensions after resize, nested
+interoperability tags, TIFF metadata/storage-tag separation, AVIF ICC copying
+and disabled-metadata stripping. Applied TIFF decoder orientation is normalized
+without transposing unapplied JPEG pixels again. Generated roundtrips cover five
+output formats; legacy TIFF behavior is simulated, not tested in a Pillow 10
+runtime. An existing LZW-to-TIFF encoder failure and metadata-aware TIFF preview
+parity remain follow-up work, alongside real-corpus and packaged-codec coverage.
+
 Bounded Linux X11 qualification used Qt's `xcb` platform with Xvfb/Openbox at
 verified device-pixel ratios 1, 1.5 and 2. Sixteen existing Alpha, Converter, GIF
 and Video layout/keyboard checks passed per scale (48 executions), including

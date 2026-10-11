@@ -497,6 +497,35 @@ def _save_svg(img: Image.Image, path: str) -> None:
         f.write(svg_text)
 
 
+def _load_image_pixels(img: Image.Image) -> None:
+    if img.format != "TIFF":
+        img.load()
+        return
+
+    load_end = img.load_end
+
+    def tracked_load_end():
+        # Pillow 10 transposes the core but leaves Orientation in EXIF.
+        # Observe the transpose, not just a tag or a change in dimensions:
+        # mirrors and square rotations do not change the raster dimensions.
+        orientation = getattr(img, "_tile_orientation", img.tag_v2.get(274))
+        core = img.im
+        load_end()
+        if orientation in range(2, 9) and img.im is not core:
+            exif = img.getexif()
+            if exif.get(274) == orientation:
+                del exif[274]
+                img.tag_v2.pop(274, None)
+                if "exif" in img.info:
+                    img.info["exif"] = exif.tobytes()
+
+    img.load_end = tracked_load_end
+    try:
+        img.load()
+    finally:
+        del img.load_end
+
+
 def _open_image(path: str) -> Image.Image:
     """Open an image preserving its native mode (DDS/SVG/XNB/TIM handled specially)."""
     ext = Path(path).suffix.lower()
@@ -512,7 +541,15 @@ def _open_image(path: str) -> Image.Image:
         return load_tim(path)
     img = Image.open(path)
     try:
-        img.load()  # force decode so the file handle can be closed
+        if ext in (".tiff", ".tif"):
+            # TIFF loading closes the file before Pillow caches nested IFDs.
+            try:
+                exif = img.getexif()
+                if 40965 in exif.get_ifd(34665):
+                    exif.get_ifd(40965)
+            except Exception:
+                pass
+        _load_image_pixels(img)  # force decode so the file handle can be closed
     except MemoryError:
         w, h = img.size
         img.close()
@@ -534,6 +571,8 @@ def _open_image_for_preview(path: str, max_size: int) -> Image.Image:
 
     img = Image.open(path)
     try:
+        if img.format == "TIFF":
+            _load_image_pixels(img)
         target = max(1, int(max_size))
         longest = max(img.size) if img.size else 0
         if longest > target * 2:
@@ -629,7 +668,8 @@ def convert_file(
     :param target_format:  One of the keys in SUPPORTED_OUTPUT_FORMATS, e.g. "PNG".
     :param quality:        JPEG/WEBP/AVIF/JPEG2000 quality (1-100). 100 = lossless for JPEG2000.
     :param resize:         Optional (width, height) tuple.
-    :param keep_metadata:  When True, copy EXIF/ICC/DPI metadata to the output.
+    :param keep_metadata:  Copy supported EXIF/ICC/DPI, updating raster dimensions.
+                           Native decoded pixels are not EXIF-transposed.
     :returns: output_path on success.
     :raises:  Exception on failure.
     """
@@ -671,31 +711,56 @@ def convert_file(
         ext = Path(output_path).suffix.lower()
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
+        if ext in (".tiff", ".tif"):
+            # TIFF encoders also copy source tag_v2 fields implicitly.
+            detached = img.copy()
+            if img is not src_img:
+                img.close()
+            img = detached
+        if not keep_metadata:
+            for key in ("exif", "icc_profile", "dpi", "xmp", "Raw profile type exif"):
+                img.info.pop(key, None)
+
         # Helper: inject metadata kwargs into save calls
         def _meta_kwargs(fmt_ext: str) -> dict:
             if not keep_metadata:
                 return {}
             kw: dict = {}
             try:
-                if fmt_ext in (".jpg", ".jpeg", ".jfif", ".jpe"):
-                    for k in ("exif", "icc_profile", "dpi"):
-                        if k in src_img.info:
-                            kw[k] = src_img.info[k]
-                elif fmt_ext in (".webp",):
-                    for k in ("exif", "icc_profile"):
-                        if k in src_img.info:
-                            kw[k] = src_img.info[k]
-                elif fmt_ext in (".png",):
-                    for k in ("exif", "icc_profile", "dpi"):
-                        if k in src_img.info:
-                            kw[k] = src_img.info[k]
-                elif fmt_ext in (".tiff", ".tif"):
-                    for k in ("exif", "icc_profile", "dpi"):
-                        if k in src_img.info:
-                            kw[k] = src_img.info[k]
-                elif fmt_ext in (".avif",):
-                    if "exif" in src_img.info:
-                        kw["exif"] = src_img.info["exif"]
+                if fmt_ext not in (".jpg", ".jpeg", ".jfif", ".jpe",
+                                   ".png", ".tiff", ".tif", ".webp", ".avif"):
+                    return kw
+                for key in ("icc_profile", "dpi"):
+                    if key == "dpi" and fmt_ext in (".webp", ".avif"):
+                        continue
+                    if key in src_img.info:
+                        kw[key] = src_img.info[key]
+                source_exif = src_img.getexif()
+                if source_exif:
+                    exif = Image.Exif()
+                    exif.load(source_exif.tobytes())
+                    # Storage/layout tags from TIFF describe the source raster,
+                    # not the output's mode, strips, compression, or palette.
+                    for tag in (254, 255, 258, 259, 262, 266, 273, 277, 278,
+                                279, 284, 288, 289, 292, 293, 301, 317, 320,
+                                322, 323, 324, 325, 330, 338, 339, 347, 34675):
+                        exif.pop(tag, None)
+                    for tag, value in ((256, img.width), (257, img.height),
+                                       (40962, img.width), (40963, img.height)):
+                        if tag in exif:
+                            exif[tag] = value
+                    if 34665 in exif:
+                        # Update the cache without replacing the offset: Pillow
+                        # needs it to resolve nested interoperability IFDs.
+                        details = exif.get_ifd(34665)
+                        for tag, value in ((40962, img.width), (40963, img.height)):
+                            if tag in details:
+                                details[tag] = value
+                        if fmt_ext in (".tiff", ".tif") and 40965 in details:
+                            # TIFF's writer uses get_ifd directly, not tobytes.
+                            details[40965] = exif.get_ifd(40965)
+                    serialized = exif.tobytes()
+                    kw["exif"] = exif if fmt_ext in (".tiff", ".tif") else serialized
             except Exception:
                 pass
             return kw

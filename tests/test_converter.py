@@ -14,7 +14,7 @@ import importlib.util
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageCms, ImageOps, TiffImagePlugin
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from tests.corpus_helpers import (
@@ -28,6 +28,7 @@ from src.core.file_converter import (
     build_output_path,
     SUPPORTED_OUTPUT_FORMATS,
     DDS_VARIANT_OPTIONS,
+    _open_image,
     _open_image_for_preview,
     _flatten_alpha,
     output_format_discards_alpha,
@@ -1416,6 +1417,283 @@ class TestAtlasDetection(unittest.TestCase):
     def test_detect_atlas_cells_still_returns_empty_without_seams(self):
         alpha = np.full((16, 16), 255, dtype=np.uint8)
         self.assertEqual(detect_atlas_cells(alpha), [])
+
+
+class TestConversionMetadata(unittest.TestCase):
+    def test_legacy_tiff_applied_orientation_is_not_exported_twice(self):
+        methods = {
+            2: Image.Transpose.FLIP_LEFT_RIGHT,
+            3: Image.Transpose.ROTATE_180,
+            4: Image.Transpose.FLIP_TOP_BOTTOM,
+            5: Image.Transpose.TRANSPOSE,
+            6: Image.Transpose.ROTATE_270,
+            7: Image.Transpose.TRANSVERSE,
+            8: Image.Transpose.ROTATE_90,
+        }
+
+        def legacy_load_end(image):
+            # Pillow 10.0 load_end: rotate the core, retaining EXIF/tag_v2.
+            orientation = image.tag_v2.get(274)
+            image._tile_orientation = orientation
+            if orientation in methods:
+                image.im = image.im.transpose(methods[orientation])
+                image._size = image.im.size
+
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            for size in ((40, 24), (24, 24)):
+                with Image.new("RGB", size, "red") as raster:
+                    raster.paste("blue", (size[0] // 2, 0, size[0], size[1]))
+                    raster.paste("green", (0, size[1] // 2, size[0] // 2, size[1]))
+                    for orientation, method in methods.items():
+                        for compression in ("raw", "tiff_lzw"):
+                            source = Path(directory) / "legacy.tif"
+                            exif = Image.Exif()
+                            exif[274] = orientation
+                            exif[305] = "legacy TIFF regression"
+                            if compression == "raw":
+                                exif[34665] = {40962: size[0], 40963: size[1]}
+                            raster.save(source, exif=exif.tobytes(), compression=compression)
+                            with self.subTest(size=size, orientation=orientation,
+                                              compression=compression), mock.patch.object(
+                                    TiffImagePlugin.TiffImageFile, "load_end", legacy_load_end):
+                                with raster.transpose(method) as expected:
+                                    for opener in (_open_image, lambda path: _open_image_for_preview(path, 512)):
+                                        with opener(str(source)) as loaded:
+                                            self.assertEqual(loaded.size, expected.size)
+                                            self.assertEqual(loaded.tobytes(), expected.tobytes())
+                                            self.assertNotIn(274, loaded.getexif())
+                                            with ImageOps.exif_transpose(loaded) as displayed:
+                                                self.assertEqual(displayed.tobytes(), expected.tobytes())
+                                    with _open_image_for_preview(str(source), 8) as preview:
+                                        factor = max(1, max(expected.size) // 16)
+                                        with expected.reduce(factor) as reduced:
+                                            self.assertEqual(preview.size, reduced.size)
+                                            self.assertEqual(preview.tobytes(), reduced.tobytes())
+                                            self.assertNotIn(274, preview.getexif())
+                                    targets = ("PNG", "JPEG", "TIFF") if compression == "raw" else ("PNG", "JPEG")
+                                    for target in targets:
+                                        for resize in (None, (20, 12)):
+                                            output = Path(directory) / ("output" + SUPPORTED_OUTPUT_FORMATS[target])
+                                            convert_file(str(source), str(output), target, quality=100,
+                                                         resize=resize, keep_metadata=True)
+                                            wanted = expected.resize(resize, Image.LANCZOS) if resize else expected.copy()
+                                            try:
+                                                with _open_image(str(output)) as saved:
+                                                    self.assertEqual(saved.size, wanted.size)
+                                                    self.assertNotIn(274, saved.getexif())
+                                                    self.assertEqual(saved.getexif()[305], "legacy TIFF regression")
+                                                    details = saved.getexif().get_ifd(34665)
+                                                    if compression == "raw":
+                                                        self.assertEqual((details[40962], details[40963]), wanted.size)
+                                                    for point in ((0, 0), (wanted.width - 1, wanted.height - 1)):
+                                                        self.assertLess(max(abs(a - b) for a, b in zip(
+                                                            saved.getpixel(point), wanted.getpixel(point))), 25)
+                                            finally:
+                                                wanted.close()
+
+    def test_unapplied_tiff_orientation_is_preserved(self):
+        def unrotated_load_end(image):
+            image._tile_orientation = image.tag_v2.get(274)
+            image._size = image.im.size
+
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source = Path(directory) / "unrotated.tif"
+            exif = Image.Exif()
+            exif[274] = 6
+            with Image.new("RGB", (40, 24), "red") as raster:
+                raster.paste("blue", (20, 0, 40, 24))
+                raster.save(source, exif=exif)
+                with mock.patch.object(TiffImagePlugin.TiffImageFile, "load_end", unrotated_load_end):
+                    with _open_image(str(source)) as loaded:
+                        self.assertEqual(loaded.tobytes(), raster.tobytes())
+                        self.assertEqual(loaded.getexif()[274], 6)
+                    output = Path(directory) / "unrotated.png"
+                    convert_file(str(source), str(output), "PNG", keep_metadata=True)
+                    with Image.open(output) as saved:
+                        saved.load()
+                        self.assertEqual(saved.size, raster.size)
+                        self.assertEqual(saved.tobytes(), raster.tobytes())
+                        self.assertEqual(saved.getexif()[274], 6)
+
+    def test_oriented_metadata_encode_decode_matrix(self):
+        formats = [fmt for fmt in ("PNG", "JPEG", "TIFF", "WEBP", "AVIF")
+                   if output_format_available(fmt)]
+        profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            root = Path(directory)
+            for source_format in formats:
+                source = root / ("source" + SUPPORTED_OUTPUT_FORMATS[source_format])
+                with Image.new("RGB", (40, 24), (240, 30, 20)) as raster:
+                    raster.paste((20, 30, 240), (20, 0, 40, 24))
+                    exif = Image.Exif()
+                    exif[274] = 6
+                    exif[305] = "generated metadata regression"
+                    exif[34665] = {40962: 40, 40963: 24}
+                    if source_format != "TIFF":
+                        exif[256], exif[257] = raster.size
+                    raster.save(source, exif=exif.tobytes(), icc_profile=profile,
+                                dpi=(144, 144), quality=100)
+                with _open_image(str(source)) as original:
+                    for target_format in formats:
+                        for keep in (False, True):
+                            for resize in (None, (20, 12)):
+                                with self.subTest(source=source_format, target=target_format,
+                                                  keep=keep, resize=resize):
+                                    destination = root / ("output" + SUPPORTED_OUTPUT_FORMATS[target_format])
+                                    convert_file(str(source), str(destination), target_format,
+                                                 quality=100, resize=resize, keep_metadata=keep)
+                                    expected = original.resize(resize, Image.LANCZOS) if resize else original.copy()
+                                    try:
+                                        native_size = expected.size
+                                        orientation = original.getexif().get(274)
+                                        if target_format == "TIFF" and keep and orientation == 6:
+                                            rotated = expected.transpose(Image.Transpose.ROTATE_270)
+                                            expected.close()
+                                            expected = rotated
+                                        with _open_image(str(destination)) as decoded:
+                                            self.assertEqual(decoded.size, expected.size)
+                                            with decoded.convert("RGB") as rgb:
+                                                for x, y in ((0, 0), (decoded.width - 1, decoded.height - 1)):
+                                                    actual = rgb.getpixel((x, y))
+                                                    wanted = expected.getpixel((x, y))
+                                                    self.assertLess(max(abs(a - b) for a, b in zip(actual, wanted)), 25)
+                                            saved_exif = decoded.getexif()
+                                            if keep:
+                                                self.assertEqual(saved_exif[305], "generated metadata regression")
+                                                self.assertEqual(decoded.info.get("icc_profile"), profile)
+                                                self.assertEqual(saved_exif.get_ifd(34665)[40962], native_size[0])
+                                                self.assertEqual(saved_exif.get_ifd(34665)[40963], native_size[1])
+                                                for tag, value in ((256, native_size[0]), (257, native_size[1])):
+                                                    if tag in saved_exif:
+                                                        self.assertEqual(saved_exif[tag], value)
+                                                if target_format in ("PNG", "JPEG", "TIFF") and "dpi" in original.info:
+                                                    for value in decoded.info["dpi"]:
+                                                        self.assertAlmostEqual(value, 144, delta=0.1)
+                                                self.assertEqual(saved_exif.get(274),
+                                                                 None if target_format == "TIFF" else orientation)
+                                            else:
+                                                self.assertNotIn(305, saved_exif)
+                                                self.assertNotIn(274, saved_exif)
+                                                self.assertNotIn("icc_profile", decoded.info)
+                                                self.assertNotIn("exif", decoded.info)
+                                    finally:
+                                        expected.close()
+
+    def test_nested_exif_roundtrip_preserves_interoperability_and_dimensions(self):
+        interop = {1: "R98", 2: b"0100", 4096: "nested interoperability"}
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            for source_format in ("PNG", "JPEG", "TIFF", "WEBP", "AVIF"):
+                if not output_format_available(source_format):
+                    continue
+                source = Path(directory) / ("nested" + SUPPORTED_OUTPUT_FORMATS[source_format])
+                exif = Image.Exif()
+                exif[305] = "nested EXIF regression"
+                exif[256], exif[257] = 40, 24
+                exif[34665] = {
+                    36867: "2026:10:11 03:00:00",
+                    40962: 40, 40963: 24, 40965: interop,
+                }
+                source_metadata = exif.tobytes()
+                if source_format == "TIFF":
+                    exif.load(source_metadata)
+                    exif.get_ifd(34665)[40965] = exif.get_ifd(40965)
+                    source_metadata = exif
+                with Image.new("RGB", (40, 24), "red") as raster:
+                    raster.save(source, exif=source_metadata, quality=100)
+                with Image.open(source) as original:
+                    self.assertEqual(original.getexif().get_ifd(40965), interop)
+                for target_format in ("PNG", "JPEG", "TIFF", "WEBP", "AVIF"):
+                    if not output_format_available(target_format):
+                        continue
+                    for resize in (None, (20, 12)):
+                        with self.subTest(source=source_format, target=target_format, resize=resize):
+                            destination = Path(directory) / ("output" + SUPPORTED_OUTPUT_FORMATS[target_format])
+                            convert_file(str(source), str(destination), target_format,
+                                         quality=100, resize=resize, keep_metadata=True)
+                            with Image.open(destination) as decoded:
+                                # TIFF closes its file on load before caching the
+                                # nested IFD, so resolve it while the file is open.
+                                saved_exif = decoded.getexif()
+                                self.assertEqual(saved_exif.get_ifd(40965), interop)
+                                details = saved_exif.get_ifd(34665)
+                                self.assertEqual(details[36867], "2026:10:11 03:00:00")
+                                self.assertEqual(saved_exif[305], "nested EXIF regression")
+                                size = resize or (40, 24)
+                                self.assertEqual((details[40962], details[40963]), size)
+                                self.assertEqual((saved_exif[256], saved_exif[257]), size)
+                                decoded.load()
+                                self.assertEqual(decoded.size, size)
+
+    def test_malformed_exif_falls_back_to_pixels_and_other_metadata(self):
+        profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source = Path(directory) / "malformed.png"
+            with Image.new("RGB", (40, 24), "red") as raster:
+                raster.save(source, exif=b"Exif\x00\x00invalid TIFF header",
+                            icc_profile=profile, dpi=(144, 144))
+            for fmt in ("PNG", "JPEG", "TIFF", "WEBP", "AVIF"):
+                if not output_format_available(fmt):
+                    continue
+                with self.subTest(format=fmt):
+                    destination = Path(directory) / ("output" + SUPPORTED_OUTPUT_FORMATS[fmt])
+                    convert_file(str(source), str(destination), fmt, quality=100,
+                                 resize=(20, 12), keep_metadata=True)
+                    with _open_image(str(destination)) as decoded:
+                        self.assertEqual(decoded.size, (20, 12))
+                        self.assertEqual(decoded.info.get("icc_profile"), profile)
+                        self.assertFalse(decoded.getexif().get(34665))
+                        with decoded.convert("RGB") as rgb:
+                            self.assertLess(max(abs(a - b) for a, b in
+                                                zip(rgb.getpixel((0, 0)), (255, 0, 0))), 25)
+
+    def test_preview_preserves_native_orientation_without_double_rotation(self):
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            for fmt in ("PNG", "JPEG", "TIFF", "WEBP", "AVIF"):
+                if not output_format_available(fmt):
+                    continue
+                with self.subTest(format=fmt):
+                    source = Path(directory) / ("oriented" + SUPPORTED_OUTPUT_FORMATS[fmt])
+                    exif = Image.Exif()
+                    exif[274] = 6
+                    with Image.new("RGB", (40, 24), "red") as raster:
+                        raster.paste("blue", (20, 0, 40, 24))
+                        raster.save(source, exif=exif.tobytes(), quality=100)
+                    with _open_image(str(source)) as native, _open_image_for_preview(str(source), 512) as preview:
+                        self.assertEqual(preview.size, native.size)
+                        self.assertEqual(preview.tobytes(), native.tobytes())
+                        self.assertEqual(preview.getexif().get(274), native.getexif().get(274))
+                        if fmt == "TIFF":
+                            with ImageOps.exif_transpose(preview) as displayed:
+                                self.assertEqual(displayed.size, preview.size)
+                                self.assertEqual(displayed.tobytes(), preview.tobytes())
+
+    def test_converter_preview_matches_native_pixel_export(self):
+        from src.ui.preview_pane import _ConverterPreviewLoader, _pil_to_qimage
+
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            for source_format in ("PNG", "TIFF"):
+                source = Path(directory) / ("oriented" + SUPPORTED_OUTPUT_FORMATS[source_format])
+                exif = Image.Exif()
+                exif[274] = 6
+                with Image.new("RGB", (40, 24), "red") as raster:
+                    raster.paste("blue", (20, 0, 40, 24))
+                    raster.save(source, exif=exif.tobytes())
+                for target_format in ("PNG", "JPEG", "TIFF", "WEBP"):
+                    if not output_format_available(target_format):
+                        continue
+                    for resize in (None, (20, 12)):
+                        with self.subTest(source=source_format, target=target_format, resize=resize):
+                            results, errors = [], []
+                            loader = _ConverterPreviewLoader(str(source), target_format, 90, resize=resize)
+                            loader.ready.connect(lambda *args: results.append(args))
+                            loader.failed.connect(errors.append)
+                            loader.run()
+                            self.assertFalse(errors)
+                            self.assertEqual(len(results), 1)
+                            destination = Path(directory) / ("export" + SUPPORTED_OUTPUT_FORMATS[target_format])
+                            convert_file(str(source), str(destination), target_format, quality=90, resize=resize)
+                            with _open_image(str(destination)) as decoded:
+                                self.assertEqual(results[0][1], _pil_to_qimage(decoded))
 
 
 class TestConvertFile(unittest.TestCase):
