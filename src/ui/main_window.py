@@ -4343,7 +4343,9 @@ class MainWindow(QMainWindow):
 
     def _show_about(self):
         from PyQt6.QtWidgets import QDialog, QScrollArea, QDialogButtonBox, QSizePolicy
-        from PyQt6.QtCore import QSize
+        from PyQt6.QtCore import QTimer
+        from html import escape
+        from ._ui_utils import fit_dialog_to_screen
 
         dlg = QDialog(self)
         dlg.setWindowTitle(f"About 🐼 {APP_NAME}")
@@ -4379,13 +4381,16 @@ class MainWindow(QMainWindow):
         outer.setContentsMargins(12, 12, 12, 8)
         outer.setSpacing(8)
 
+        help_key = getattr(self, "_shortcut_map", {}).get("help", {}).get("current", "F1")
+        help_binding = escape(help_key) if help_key else "unassigned"
         content_lbl = QLabel(
             f"<h2>🐼 {APP_NAME.replace('&', '&amp;')}  v{__version__}</h2>"
             "<p>A powerful panda-themed tool for fixing alpha channels, converting image "
             "files, and painting custom alpha zones.</p>"
             "<ul>"
-            "<li><b>Alpha &amp; RGBA Adjuster:</b> PS2, N64, No Alpha, Max Alpha presets + "
-            "custom fine-tune (set / multiply / add / subtract), per-channel RGBA ±255 adjustments</li>"
+            "<li><b>Alpha &amp; RGBA Adjuster:</b> PS2 and PC range / fixed-opacity presets, "
+            "N64 Binary Alpha, Invert Alpha, and Force Transparent; custom alpha range, "
+            "threshold, invert and binary cut, per-channel RGBA ±255 adjustments</li>"
             "<li><b>File Converter:</b> PNG, DDS, JPEG, BMP, TIFF, WEBP, TGA, ICO, GIF, AVIF, "
             "QOI and more — batch folder processing with live before/after preview</li>"
             f"<li><b>Alpha Painter:</b> paint alpha zones on images ({SELECTIVE_ALPHA_UI_ZONE_COUNT} visible zones), "
@@ -4406,8 +4411,8 @@ class MainWindow(QMainWindow):
             "<li>Button press animations: press, fall, bounce, shake, shatter</li>"
             "<li>Animated banner (10 modes) + animated emoji cursors: spin, wobble, cycling</li>"
             "<li>Cycling tooltips with Normal, Dumbed Down, and No Filter 🤬 modes</li>"
-            "<li>Keyboard shortcuts: F5 run · Esc stop · Ctrl+O add files · "
-            "Ctrl+1/2/3/4 switch tabs · F1 shortcuts</li>"
+            "<li>Keyboard shortcuts are configurable. View current bindings in "
+            f"Help → Keyboard Shortcuts (current key: {help_binding}).</li>"
             "</ul>"
             "<p>Built with <b>Python + PyQt6 + Pillow</b>.</p>"
             f'<p><a href="{PATREON_URL}">❤ Support on Patreon</a></p>'
@@ -4417,9 +4422,14 @@ class MainWindow(QMainWindow):
         content_lbl.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextBrowserInteraction
         )
+        content_lbl.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        content_lbl.setAccessibleName("About application features and support")
         content_lbl.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         scroll = QScrollArea()
+        scroll.setObjectName("aboutContentScroll")
+        scroll.setAccessibleName("Scrollable application information")
+        scroll.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(scroll.Shape.NoFrame)
         scroll.setWidget(content_lbl)
@@ -4428,7 +4438,13 @@ class MainWindow(QMainWindow):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         buttons.accepted.connect(dlg.accept)
         outer.addWidget(buttons)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setFocus()
 
+        fit_dialog_to_screen(dlg)
+        fit_timer = QTimer(dlg)
+        fit_timer.setSingleShot(True)
+        fit_timer.timeout.connect(lambda: fit_dialog_to_screen(dlg))
+        fit_timer.start(0)
         dlg.exec()
 
     def _open_patreon(self):

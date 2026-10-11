@@ -402,6 +402,12 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+About fits the available screen, exposes scrollable information accessibly and
+starts with its confirmation button focused. Deferred fitting uses a dialog-owned
+timer. Feature guidance reflects current alpha processing and the configured help
+shortcut, including remapped or unassigned bindings. Compact/font/theme and
+keyboard tests use lightweight widget hosts; native acceptance remains separate.
+
 Shortcut configuration and key-capture guidance scroll on compact screens and
 at large fonts. Action columns retain readable widths, row buttons identify their
 actions accessibly, and Enter activates focused Change/Reset buttons. Key capture
