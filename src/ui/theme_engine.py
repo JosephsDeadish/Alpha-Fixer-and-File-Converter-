@@ -3583,26 +3583,52 @@ def _get_theme_gradient_css(t: dict) -> str:
     return ""
 
 
-def _readable_disabled_color(theme: dict) -> str:
-    """Keep disabled text legible while preferring the theme's muted color."""
+def _painted_color(foreground, background):
+    """Composite QColor's ARGB colors in Qt's painted sRGB space."""
     from PyQt6.QtGui import QColor
 
-    def luminance(value: str) -> float:
+    foreground, background = QColor(foreground), QColor(background)
+    alpha = foreground.alphaF()
+    return QColor.fromRgbF(*(
+        front * alpha + back * (1 - alpha)
+        for front, back in zip(
+            (foreground.redF(), foreground.greenF(), foreground.blueF()),
+            (background.redF(), background.greenF(), background.blueF()))
+    ))
+
+
+def _readable_color(backgrounds, *candidates) -> str:
+    """Choose text on resolved solid fills, including foreground alpha.
+
+    Custom images/gradients and unknown parent surfaces cannot be guaranteed.
+    """
+    from PyQt6.QtGui import QColor
+
+    def luminance(value) -> float:
         color = QColor(value)
         channels = (color.redF(), color.greenF(), color.blueF())
         linear = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
                   for c in channels]
         return sum(c * weight for c, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
 
-    backgrounds = [luminance(theme[key]) for key in ("surface", "background")]
-    for candidate in (theme["text_secondary"], theme["text"], "#000000", "#ffffff"):
-        foreground = luminance(candidate)
-        if all((max(foreground, bg) + 0.05) / (min(foreground, bg) + 0.05) >= 4.5
-               for bg in backgrounds):
+    backgrounds = list(backgrounds)
+    background_luminances = [luminance(value) for value in backgrounds]
+    for candidate in (*candidates, "#000000", "#ffffff"):
+        foregrounds = [luminance(_painted_color(candidate, bg)) for bg in backgrounds]
+        if all((max(fg, bg) + 0.05) / (min(fg, bg) + 0.05) >= 4.5
+               for fg, bg in zip(foregrounds, background_luminances)):
             return candidate
     # Unusually contrasting custom surfaces may have no mutually readable color.
-    surface = backgrounds[0]
+    surface = background_luminances[0]
     return "#000000" if surface > 0.179 else "#ffffff"
+
+
+def _readable_disabled_color(theme: dict) -> str:
+    """Keep disabled text legible while preferring the theme's muted color."""
+    background = _painted_color(theme["background"], DEFAULT_THEME["background"])
+    surface = _painted_color(theme["surface"], background)
+    return _readable_color(
+        (surface, background), theme["text_secondary"], theme["text"])
 
 
 def build_stylesheet(theme: Optional[dict] = None, tooltip_style: str = "Auto (follow theme)") -> str:
@@ -3615,8 +3641,22 @@ def build_stylesheet(theme: Optional[dict] = None, tooltip_style: str = "Auto (f
     """
     t = {**DEFAULT_THEME, **(theme or {})}
     disabled_text = _readable_disabled_color(t)
-    accent_focus = _readable_disabled_color(
-        {**t, "surface": t["accent"], "background": t["button_hover"]})
+    background = _painted_color(t["background"], DEFAULT_THEME["background"])
+    surface = _painted_color(t["surface"], background)
+
+    def action_fills(key):
+        return tuple(_painted_color(t[key], parent) for parent in (surface, background))
+
+    button_text = _readable_color(action_fills("button_bg"), t["text"], t["panda_white"])
+    tab_text = _readable_color((_painted_color(t["primary"], background),),
+                               t["text_secondary"], t["text"], t["panda_white"])
+    selected_text = _readable_color((_painted_color(t["tab_selected"], background),),
+                                    t["panda_white"], t["text"])
+    hover_text = _readable_color(action_fills("button_hover"), t["panda_white"], t["text"])
+    accent_text = _readable_color(action_fills("accent"), t["panda_white"], t["text"])
+    accent_focus = _readable_color(
+        (*action_fills("accent"), *action_fills("button_hover")),
+        t["text_secondary"], t["text"])
     return f"""
 /* ===== Global ===== */
 QWidget {{
@@ -3658,7 +3698,7 @@ QTabBar[objectName="qt_tabwidget_tabbar"] {{
 }}
 QTabBar::tab {{
     background: {t['primary']};
-    color: {t['text_secondary']};
+    color: {tab_text};
     padding: 7px 16px;
     min-width: 108px;
     min-height: 28px;
@@ -3672,14 +3712,14 @@ QTabBar::tab {{
 }}
 QTabBar::tab:selected {{
     background: {t['tab_selected']};
-    color: {t['panda_white']};
+    color: {selected_text};
     border: 2px solid {t['tab_selected']};
     border-bottom: none;
     margin-bottom: -2px;
 }}
 QTabBar::tab:hover:!selected {{
     background: {t['button_hover']};
-    color: {t['panda_white']};
+    color: {hover_text};
     border-color: {t['accent']};
 }}
 /* Fill the space to the right of the last tab with the background colour */
@@ -3706,10 +3746,11 @@ QTabBar QToolButton {{
 QTabBar QToolButton:hover {{
     background: {t['button_hover']};
     border-color: {t['accent']};
-    color: {t['text']};
+    color: {hover_text};
 }}
 QTabBar QToolButton:pressed {{
     background: {t['accent']};
+    color: {accent_text};
 }}
 QTabBar QToolButton:disabled {{
     background: {t['background']};
@@ -3723,7 +3764,7 @@ QToolButton {{
 }}
 QPushButton {{
     background-color: {t['button_bg']};
-    color: {t['text']};
+    color: {button_text};
     border: 1px solid {t['border']};
     border-radius: 6px;
     padding: 7px 16px;
@@ -3731,20 +3772,22 @@ QPushButton {{
 }}
 QPushButton:hover {{
     background-color: {t['button_hover']};
-    color: {t['panda_white']};
+    color: {hover_text};
     border-color: {t['accent']};
 }}
 QPushButton:pressed {{
     background-color: {t['accent']};
+    color: {accent_text};
 }}
 QPushButton:checked {{
     background-color: {t['accent']};
-    color: {t['panda_white']};
+    color: {accent_text};
     border: 2px solid {t['button_hover']};
     font-weight: 700;
 }}
 QPushButton:checked:hover {{
     background-color: {t['button_hover']};
+    color: {hover_text};
     border-color: {t['panda_white']};
 }}
 QPushButton:disabled {{
@@ -3755,13 +3798,14 @@ QPushButton:disabled {{
 /* ===== Accent Buttons ===== */
 QPushButton#accent {{
     background-color: {t['accent']};
-    color: {t['panda_white']};
+    color: {accent_text};
     border: 1px solid transparent;
     font-size: 14px;
     padding: 9px 20px;
 }}
 QPushButton#accent:hover {{
     background-color: {t['button_hover']};
+    color: {hover_text};
 }}
 
 /* ===== Line Edits / Inputs ===== */
@@ -3928,6 +3972,7 @@ QPushButton[previewOverlay="true"] {{
 }}
 QPushButton[previewOverlay="true"]:hover {{
     background-color: {t['button_hover']};
+    color: {hover_text};
 }}
 QLabel[statusTone] {{
     color: {t['text']};
@@ -3962,6 +4007,7 @@ QLabel[settingsGuide="true"] {{
     border-radius: 6px;
 }}
 QPushButton#resetBtn {{
+    background-color: {t['surface']};
     color: {t['error']};
     border: 1px solid {t['error']};
     border-radius: 4px;
@@ -4196,9 +4242,28 @@ QComboBox:enabled:focus, QSpinBox:enabled:focus, QDoubleSpinBox:enabled:focus {{
     border-style: dotted;
     border-color: {t['text']};
 }}
+QPushButton:enabled:focus {{
+    border-color: {button_text};
+}}
+QPushButton:enabled:hover:focus, QTabBar QToolButton:enabled:hover:focus {{
+    border-color: {hover_text};
+}}
 QPushButton#accent:enabled:focus, QPushButton:enabled:checked:focus {{
     border-style: dotted;
     border-color: {accent_focus};
+}}
+QPushButton#accent:enabled:hover:focus, QPushButton:enabled:checked:hover:focus {{
+    border-color: {hover_text};
+}}
+QPushButton#resetBtn:enabled:focus {{
+    border-color: {t['text']};
+}}
+QPushButton[previewOverlay="true"]:enabled:focus {{
+    border-style: dotted;
+    border-color: {t['text']};
+}}
+QPushButton[previewOverlay="true"]:enabled:hover:focus {{
+    border-color: {hover_text};
 }}
 QCheckBox::indicator:enabled:focus, QRadioButton::indicator:enabled:focus {{
     border-style: dotted;

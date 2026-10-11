@@ -451,6 +451,19 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Action/tab text now follows the actual theme fill, including composited custom
+color transparency, instead of assuming white text is readable on every accent.
+Focus cues follow the corresponding state. All 57 built-in themes retain the
+same final styles after the transparency follow-up; arbitrary media backgrounds
+still require visual review. Final targeted source checks passed 619 tests.
+The exact rebuilt Linux folder executable passed 24 Alpha/Converter GUI cases
+across scales 1/1.5/2, Dark/Light and 900×700/1200×800 windows, with 48 screenshots
+and externally observed exit 0 at every scale. Only the scale-1 contact sheet was
+visually reviewed; higher-scale screenshot review remains outstanding.
+An earlier packaged scale-2 run and a wider source lifecycle run segfaulted;
+neither is dismissed by the successful final matrix. Root-cause diagnosis and
+sustained native teardown qualification remain release blockers.
+
 The latest hierarchy pass removes duplicate in-tool next-step labels and shortens
 Basic/Advanced guidance while retaining complete settings details in tooltips and
 accessible descriptions. A freshly rebuilt Linux folder bundle passed 24 actual
