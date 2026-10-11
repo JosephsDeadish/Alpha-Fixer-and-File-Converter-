@@ -33,6 +33,7 @@ import copy
 from collections import deque
 from functools import lru_cache, wraps
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP
 import json
 import os
 from pathlib import Path
@@ -61,7 +62,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QFileDialog, QSlider,
-    QCheckBox, QComboBox, QGroupBox, QGridLayout, QSpinBox,
+    QCheckBox, QComboBox, QGroupBox, QGridLayout, QSpinBox, QDoubleSpinBox,
     QMessageBox, QProgressDialog, QSplitter, QWidget, QApplication,
     QFrame, QPlainTextEdit, QTextEdit, QLineEdit, QAbstractSpinBox,
     QScrollArea, QSizePolicy, QLayout, QBoxLayout,
@@ -3280,6 +3281,11 @@ class VideoToolDialog(QDialog):
         self._trim_start_spin.valueChanged.connect(self._trim_start_slider.setValue)
         start_label.setBuddy(self._trim_start_spin)
         start_row.addWidget(self._trim_start_spin)
+        self._trim_start_seconds = self._make_seconds_entry(
+            "Inclusive trim start timestamp in source seconds (source FPS).")
+        self._trim_start_seconds.valueChanged.connect(
+            lambda value: self._on_trim_seconds_changed(value, start=True))
+        start_row.addWidget(self._trim_start_seconds)
         trim_vl.addLayout(start_row)
 
         # End trim
@@ -3301,8 +3307,16 @@ class VideoToolDialog(QDialog):
         self._trim_end_spin.valueChanged.connect(self._trim_end_slider.setValue)
         end_label.setBuddy(self._trim_end_spin)
         end_row.addWidget(self._trim_end_spin)
+        self._trim_end_seconds = self._make_seconds_entry(
+            "Inclusive trim end frame timestamp in source seconds (source FPS), "
+            "not the exclusive clip duration.")
+        self._trim_end_seconds.valueChanged.connect(
+            lambda value: self._on_trim_seconds_changed(value, start=False))
+        end_row.addWidget(self._trim_end_seconds)
         trim_vl.addLayout(end_row)
-        trim_units = QLabel("In / Out: source frames, 0-based; both endpoints included.")
+        trim_units = QLabel(
+            "In / Out: 0-based source frames or seconds at source FPS. "
+            "Out is the included last frame's timestamp, not duration.")
         trim_units.setWordWrap(True)
         trim_vl.addWidget(trim_units)
 
@@ -3437,6 +3451,11 @@ class VideoToolDialog(QDialog):
         self._playhead_spin.valueChanged.connect(self._scrubber.setValue)
         scrub_label.setBuddy(self._playhead_spin)
         scrub_row.addWidget(self._playhead_spin)
+        self._playhead_seconds = self._make_seconds_entry(
+            "Rendered timeline timestamp in seconds at output FPS, after trims, "
+            "speed changes and splits.")
+        self._playhead_seconds.valueChanged.connect(self._on_playhead_seconds_changed)
+        scrub_row.addWidget(self._playhead_seconds)
         pv_layout.addLayout(scrub_row)
 
         # Transport
@@ -3709,10 +3728,13 @@ class VideoToolDialog(QDialog):
             (self._trim_end_slider, "Clip trim end (frames)"),
             (self._trim_start_spin, "Inclusive trim start (0-based source frame)"),
             (self._trim_end_spin, "Inclusive trim end (0-based source frame)"),
+            (self._trim_start_seconds, "Inclusive trim start (source seconds)"),
+            (self._trim_end_seconds, "Inclusive trim end frame timestamp (source seconds)"),
             (self._clip_speed_slider, "Selected clip speed (percent)"),
             (self._still_duration_spin, "Still image duration (frames)"),
             (self._scrubber, "Video preview frame"),
             (self._playhead_spin, "Playhead (0-based rendered output frame)"),
+            (self._playhead_seconds, "Playhead (rendered output seconds)"),
             (self._fps_slider, "Timeline frame rate (frames per second)"),
             (self._filter_combo, "Video filter"),
             (self._export_fmt_combo, "Video export format"),
@@ -3727,7 +3749,7 @@ class VideoToolDialog(QDialog):
     def _reflow_controls(self) -> None:
         available = self._content_scroll.viewport().width()
         for control in self._export_content.findChildren(QWidget):
-            if isinstance(control, (QPushButton, QCheckBox, QComboBox, QSpinBox)):
+            if isinstance(control, (QPushButton, QCheckBox, QComboBox, QAbstractSpinBox)):
                 control.setMaximumHeight(16777215)
                 control.setMinimumHeight(control.minimumSizeHint().height())
         # Stack before measuring pane minima, otherwise a wide toolbar keeps
@@ -3738,7 +3760,7 @@ class VideoToolDialog(QDialog):
             required = sum(w.minimumSizeHint().width() for w in widgets)
             required += max(0, len(widgets) - 1) * row.spacing()
             row.setDirection(
-                QBoxLayout.Direction.LeftToRight if required <= available - 48
+                QBoxLayout.Direction.LeftToRight if required <= available - 80
                 else QBoxLayout.Direction.TopToBottom
             )
         required = sum(self._splitter.widget(i).minimumSizeHint().width() for i in range(3))
@@ -3753,7 +3775,7 @@ class VideoToolDialog(QDialog):
             required += max(0, len(widgets) - 1) * row.spacing()
             row.setDirection(
                 QBoxLayout.Direction.LeftToRight
-                if required <= min(available, row.parentWidget().width()) - 48
+                if required <= min(available, row.parentWidget().width()) - 80
                 else QBoxLayout.Direction.TopToBottom
             )
         self._focus_timer.start(0)
@@ -3888,7 +3910,9 @@ class VideoToolDialog(QDialog):
                 and hasattr(self, "_playhead_spin")):
             focused = QApplication.focusWidget()
             if any(focused is spin or (focused is not None and spin.isAncestorOf(focused))
-                   for spin in (self._trim_start_spin, self._trim_end_spin, self._playhead_spin)):
+                   for spin in (self._trim_start_spin, self._trim_end_spin, self._playhead_spin,
+                                self._trim_start_seconds, self._trim_end_seconds,
+                                self._playhead_seconds)):
                 # The spin box already committed the entry; do not activate a
                 # dialog default button when its Return event bubbles up.
                 event.accept()
@@ -3917,6 +3941,8 @@ class VideoToolDialog(QDialog):
         mgr.register(self._trim_end_slider, "video_trim")
         mgr.register(self._trim_start_spin, "video_trim")
         mgr.register(self._trim_end_spin, "video_trim")
+        mgr.register(self._trim_start_seconds, "video_trim")
+        mgr.register(self._trim_end_seconds, "video_trim")
         mgr.register(self._clip_info_lbl, "video_trim")
         mgr.register(self._clip_speed_slider, "video_trim")
         mgr.register(self._still_duration_spin, "video_trim")
@@ -3924,6 +3950,7 @@ class VideoToolDialog(QDialog):
         mgr.register(self._preview_lbl, "video_preview")
         mgr.register(self._scrubber, "video_preview")
         mgr.register(self._playhead_spin, "video_preview")
+        mgr.register(self._playhead_seconds, "video_preview")
         mgr.register(self._btn_rewind, "video_preview")
         mgr.register(self._btn_play, "video_preview")
         mgr.register(self._fps_slider, "video_preview")
@@ -4628,6 +4655,7 @@ class VideoToolDialog(QDialog):
         self._btn_play.setEnabled(can_play)
         self._scrubber.setEnabled(can_play)
         self._playhead_spin.setEnabled(can_play)
+        self._playhead_seconds.setEnabled(can_play)
         self._btn_export.setEnabled(has_clips)
         self._trim_start_slider.setEnabled(has_selection)
         self._trim_end_slider.setEnabled(has_selection)
@@ -5052,6 +5080,35 @@ class VideoToolDialog(QDialog):
         else:
             self._trim_end_lbl.setText(str(val))
 
+    @staticmethod
+    def _make_seconds_entry(description: str) -> QDoubleSpinBox:
+        spin = QDoubleSpinBox()
+        spin.setDecimals(9)
+        spin.setRange(0, 0)
+        spin.setSuffix(" s")
+        spin.setKeyboardTracking(False)
+        spin.setToolTip(description + " Rounded to nearest frame; half-frame ties go forward.")
+        return spin
+
+    @staticmethod
+    def _seconds_to_frame(seconds: float, fps: float) -> int:
+        # Preserve decimal UI timestamps rather than binary-float half-frame drift.
+        frames = Decimal(str(seconds)) * Decimal(str(fps))
+        return max(0, int(frames.to_integral_value(rounding=ROUND_HALF_UP)))
+
+    def _on_trim_seconds_changed(self, value: float, *, start: bool) -> None:
+        row = self._clip_list.currentRow()
+        if 0 <= row < len(self._clips):
+            fps = max(0.1, float(self._clips[row].fps))
+            slider = self._trim_start_slider if start else self._trim_end_slider
+            slider.setValue(self._seconds_to_frame(value, fps))
+        self._sync_trim_frame_entries()
+
+    def _on_playhead_seconds_changed(self, value: float) -> None:
+        self._scrubber.setValue(
+            self._seconds_to_frame(value, max(0.1, float(self._fps_slider.value()))))
+        self._sync_playhead_frame_entry()
+
     def _sync_trim_frame_entries(self) -> None:
         row = self._clip_list.currentRow()
         clip = self._clips[row] if 0 <= row < len(self._clips) else None
@@ -5064,6 +5121,17 @@ class VideoToolDialog(QDialog):
             blocked = spin.blockSignals(True)
             spin.setRange(minimum, maximum)
             spin.setValue(value)
+            spin.blockSignals(blocked)
+            spin.setEnabled(clip is not None)
+        fps = max(0.1, float(clip.fps)) if clip else 25.0
+        for spin, frame_spin in (
+            (self._trim_start_seconds, self._trim_start_spin),
+            (self._trim_end_seconds, self._trim_end_spin),
+        ):
+            blocked = spin.blockSignals(True)
+            spin.setRange(frame_spin.minimum() / fps, frame_spin.maximum() / fps)
+            spin.setSingleStep(1 / fps)
+            spin.setValue(frame_spin.value() / fps)
             spin.blockSignals(blocked)
             spin.setEnabled(clip is not None)
 
@@ -5276,6 +5344,12 @@ class VideoToolDialog(QDialog):
         self._playhead_spin.setRange(0, self._scrubber.maximum())
         self._playhead_spin.setValue(self._scrubber.value())
         self._playhead_spin.blockSignals(blocked)
+        fps = max(0.1, float(self._fps_slider.value()))
+        blocked = self._playhead_seconds.blockSignals(True)
+        self._playhead_seconds.setRange(0, self._scrubber.maximum() / fps)
+        self._playhead_seconds.setSingleStep(1 / fps)
+        self._playhead_seconds.setValue(self._scrubber.value() / fps)
+        self._playhead_seconds.blockSignals(blocked)
 
     def _global_frame_to_clip(self, global_idx: int):
         idx = global_idx
@@ -5378,6 +5452,8 @@ class VideoToolDialog(QDialog):
         if self._preview_timer.isActive():
             self._preview_timer.setInterval(max(1, int(1000 / max(1, value))))
         self._update_timing_controls()
+        self._sync_trim_frame_entries()
+        self._sync_playhead_frame_entry()
         self._update_timeline_summary()
         self._update_export_summary()
         self._sync_preview_audio(force=True)

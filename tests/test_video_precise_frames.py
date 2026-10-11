@@ -37,11 +37,12 @@ def video(app):
     shutil.rmtree(directory)
 
 
-def add_clip(video, count=12, offset=0, clip_type="video"):
+def add_clip(video, count=12, offset=0, clip_type="video", fps=25.0):
     def frame(index):
         return Image.new("RGBA", (8, 8), (offset + index * 10, 0, 0, 255))
 
-    clip = _ClipEntry("generated.video", count, frame, frame_size=(8, 8), clip_type=clip_type)
+    clip = _ClipEntry("generated.video", count, frame, fps=fps,
+                      frame_size=(8, 8), clip_type=clip_type)
     video._insert_clip(clip, "generated")
     video._clip_list.setCurrentRow(len(video._clips) - 1)
     video._update_scrubber()
@@ -60,6 +61,8 @@ def enter(spin, value):
 
 def assert_playhead(video, output, red):
     assert video._playhead_spin.value() == video._scrubber.value() == output
+    assert video._playhead_seconds.value() == pytest.approx(
+        output / video._fps_slider.value(), abs=5e-10)
     assert video._preview_lbl.pixmap().toImage().pixelColor(0, 0).red() == red
 
 
@@ -186,20 +189,23 @@ def test_still_holds_and_running_transport_remain_unchanged(video):
     assert not video._playhead_spin.isEnabled()
 
 
-def test_numeric_playhead_split_preserves_cadence_and_restores_entries(video):
-    clip = add_clip(video)
-    enter(video._trim_start_spin, 2)
-    enter(video._trim_end_spin, 9)
-    video._clip_speed_slider.setValue(75)
+@pytest.mark.parametrize("speed", [50, 75, 200])
+def test_numeric_playhead_split_preserves_cadence_and_restores_entries(video, speed):
+    fps = 30000 / 1001
+    clip = add_clip(video, fps=fps)
+    enter(video._trim_start_seconds, f"{2 / fps:.9f}")
+    enter(video._trim_end_seconds, f"{9 / fps:.9f}")
+    video._clip_speed_slider.setValue(speed)
     expected = [clip.trim_start + clip.output_index_to_source_offset(i)
                 for i in range(clip.active_frames)]
-    enter(video._playhead_spin, 3)
+    split_at = min(3, clip.active_frames - 2)
+    enter(video._playhead_seconds, split_at / video._fps_slider.value())
     with patch("src.ui.video_tool._load_video_clip", side_effect=lambda *a, **kw:
-               _ClipEntry("generated.video", 12, clip._get_frame, frame_size=(8, 8))):
+               _ClipEntry("generated.video", 12, clip._get_frame, fps=fps, frame_size=(8, 8))):
         video._split_clip_at_playhead()
     assert len(video._clips) == 2
     for index, source in enumerate(expected):
-        enter(video._playhead_spin, index)
+        enter(video._playhead_seconds, index / video._fps_slider.value())
         assert_playhead(video, index, source * 10)
     count = len(video._undo_stack)
     for row in (0, 1):
@@ -207,12 +213,166 @@ def test_numeric_playhead_split_preserves_cadence_and_restores_entries(video):
         selected = video._clips[row]
         assert video._trim_start_spin.value() == selected.trim_start
         assert video._trim_end_spin.value() == selected.trim_end
+        assert video._trim_start_seconds.value() == pytest.approx(
+            selected.trim_start / fps, abs=5e-10)
+        assert video._trim_end_seconds.value() == pytest.approx(
+            selected.trim_end / fps, abs=5e-10)
     assert len(video._undo_stack) == count
     video._undo()
     assert video._clips == [clip]
     assert video._trim_start_spin.value() == 2
     assert video._trim_end_spin.value() == 9
-    assert_playhead(video, 3, expected[3] * 10)
+    assert_playhead(video, split_at, expected[split_at] * 10)
     video._redo()
     assert len(video._clips) == 2
     assert video._playhead_spin.maximum() == len(expected) - 1
+
+
+@pytest.mark.parametrize("fps", [24000 / 1001, 30000 / 1001, 60000 / 1001])
+def test_seconds_source_trim_roundtrip_and_rendered_output_clock(video, fps):
+    clip = add_clip(video, fps=fps)
+    count = len(video._undo_stack)
+    video._trim_start_seconds.setFocus()
+    video._trim_start_seconds.selectAll()
+    QTest.keyClicks(video._trim_start_seconds, f"{2 / fps:.9f}")
+    assert clip.trim_start == 0
+    QTest.keyClick(video._trim_start_seconds, Qt.Key.Key_Return)
+    assert clip.trim_start == 2
+    assert len(video._undo_stack) == count + 1
+    enter(video._trim_end_seconds, f"{9 / fps:.9f}")
+    assert (clip.trim_start, clip.trim_end) == (2, 9)
+    assert video._trim_end_seconds.minimum() == pytest.approx(2 / fps, abs=5e-10)
+    assert video._trim_start_seconds.maximum() == pytest.approx(9 / fps, abs=5e-10)
+    # Inclusive Out is frame 9's timestamp: the included range has eight frames.
+    assert clip.base_active_frames == 8
+    video._clip_speed_slider.setValue(50)
+    video._fps_slider.setValue(30)
+    assert video._playhead_seconds.maximum() == pytest.approx(15 / 30)
+    enter(video._playhead_seconds, 15 / 30)
+    assert_playhead(video, 15, 90)
+    video._clip_speed_slider.setValue(200)
+    assert_playhead(video, 3, 80)
+    history = len(video._undo_stack)
+    video._fps_slider.setValue(60)
+    assert_playhead(video, 3, 80)
+    assert video._playhead_seconds.value() == 0.05
+    assert video._trim_start_seconds.value() == pytest.approx(2 / fps, abs=5e-10)
+    assert len(video._undo_stack) == history + 1  # Existing FPS edit, not selector sync.
+    assert video._undo_stack[-1].label != "Trim start"
+    video._undo()
+    assert video._fps_slider.value() == 30
+    assert clip.speed_percent == 200
+    video._undo()
+    assert clip.speed_percent == 50
+    assert video._trim_end_seconds.value() == pytest.approx(9 / fps, abs=5e-10)
+    video._redo()
+    assert clip.speed_percent == 200
+
+
+def test_seconds_rounding_bounds_noop_and_selection_do_not_edit(video):
+    assert not video._trim_start_seconds.isEnabled()
+    assert not video._trim_end_seconds.isEnabled()
+    assert not video._playhead_seconds.isEnabled()
+    first = add_clip(video, fps=25)
+    enter(video._trim_start_seconds, 0.099999)
+    assert first.trim_start == 2
+    enter(video._trim_start_seconds, 0.1)
+    assert first.trim_start == 3  # Exactly halfway between frames 2 and 3.
+    count = len(video._undo_stack)
+    enter(video._trim_start_seconds, 0.121)
+    assert first.trim_start == 3
+    assert video._trim_start_seconds.value() == 0.12
+    assert len(video._undo_stack) == count
+    enter(video._playhead_seconds, 0.02)
+    assert_playhead(video, 1, 40)
+    second = add_clip(video, 1, fps=30000 / 1001)
+    assert video._trim_start_seconds.maximum() == video._trim_end_seconds.maximum() == 0
+    video._clip_list.setCurrentRow(0)
+    assert video._trim_start_seconds.value() == 0.12
+    assert (first.trim_start, second.trim_start) == (3, 0)
+    assert len(video._undo_stack) == count
+    video._clip_list.setCurrentRow(-1)
+    assert video._trim_start_seconds.value() == video._trim_end_seconds.value() == 0
+    assert not video._trim_end_seconds.isEnabled()
+    video._clear_all()
+    assert video._playhead_seconds.maximum() == video._playhead_seconds.value() == 0
+    assert not video._playhead_seconds.isEnabled()
+
+
+@pytest.mark.parametrize("seconds, expected", [
+    ("1.024999999", 61),
+    ("1.025", 62),
+    ("1.025000001", 62),
+])
+@pytest.mark.parametrize("control", ["trim_start", "trim_end", "playhead"])
+def test_seconds_decimal_half_frame_ui_rounding(video, seconds, expected, control):
+    clip = add_clip(video, count=100, fps=60)
+    video._fps_slider.setValue(60)
+    enter(getattr(video, f"_{control}_seconds"), seconds)
+    if control == "playhead":
+        assert video._scrubber.value() == video._playhead_spin.value() == expected
+    else:
+        assert getattr(clip, control) == expected
+        assert getattr(video, f"_{control}_spin").value() == expected
+
+
+@pytest.mark.parametrize("seconds, fps, expected", [
+    (1.024999999, 60, 61),
+    (1.025, 60, 62),
+    (1.025000001, 60, 62),
+    (4.919999999, 12.5, 61),
+    (4.92, 12.5, 62),
+    (4.920000001, 12.5, 62),
+    (49.999999999, 29.97, 1498),
+    (50, 29.97, 1499),
+    (50.000000001, 29.97, 1499),
+])
+def test_seconds_decimal_half_up_with_fractional_fps(seconds, fps, expected):
+    assert VideoToolDialog._seconds_to_frame(seconds, fps) == expected
+
+
+def test_seconds_frame_steps_and_still_transport(video):
+    clip = add_clip(video, fps=60000 / 1001)
+    video._trim_start_seconds.setFocus()
+    QTest.keyClick(video._trim_start_seconds, Qt.Key.Key_Up)
+    assert clip.trim_start == 1
+    QTest.keyClick(video._trim_start_seconds, Qt.Key.Key_Down)
+    assert clip.trim_start == 0
+    video._trim_end_seconds.setFocus()
+    QTest.keyClick(video._trim_end_seconds, Qt.Key.Key_Up)
+    assert clip.trim_end == 11
+    QTest.keyClick(video._trim_end_seconds, Qt.Key.Key_Down)
+    assert clip.trim_end == 10
+    video._playhead_seconds.setFocus()
+    QTest.keyClick(video._playhead_seconds, Qt.Key.Key_Up)
+    assert_playhead(video, 1, 10)
+    video._clear_all()
+    add_clip(video, 1, offset=170, clip_type="image")
+    video._still_duration_spin.setValue(7)
+    enter(video._playhead_seconds, 6 / video._fps_slider.value())
+    assert_playhead(video, 6, 170)
+    video._btn_play.setChecked(True)
+    video._preview_timer.stop()
+    enter(video._playhead_seconds, 3 / video._fps_slider.value())
+    assert video._is_playing
+    assert_playhead(video, 3, 170)
+    video._still_duration_spin.setValue(1)
+    assert not video._playhead_seconds.isEnabled()
+    assert_playhead(video, 0, 170)
+
+
+def test_seconds_long_clip_range_and_last_frame_roundtrip(video):
+    fps = 30000 / 1001
+    clip = add_clip(video, fps=fps)
+    # Extend generated metadata without decoding or allocating a long native clip.
+    clip.total_frames = 2_000_000_000
+    clip.trim_end = clip.total_frames - 1
+    video._on_clip_selected(0)
+    maximum = video._trim_end_seconds.maximum()
+    assert maximum > 60_000_000
+    assert video._seconds_to_frame(maximum, fps) == clip.trim_end
+    assert video._seconds_to_frame(video._trim_end_seconds.value(), fps) == clip.trim_end
+    count = len(video._undo_stack)
+    enter(video._trim_end_seconds, f"{maximum:.9f}")
+    assert clip.trim_end == 1_999_999_999
+    assert len(video._undo_stack) == count

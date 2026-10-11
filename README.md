@@ -451,6 +451,15 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Video trim and playhead controls offer seconds alongside exact frame indices.
+Trim seconds use source FPS; inclusive Out identifies the last retained frame's
+timestamp, not the clip duration. Playhead seconds use output FPS after timeline
+edits. Entries round to the nearest frame with decimal half-frame ties forward;
+controls synchronize without extra edits. Generated-image/key regressions cover
+fractional FPS, long ranges, selection, splits and boundary rounding. Timecode,
+waveform navigation, synchronized audible preview and export presets remain
+separate work.
+
 Video trim controls now include precise numeric entry for inclusive, zero-based
 source-frame boundaries. The timeline has a synchronized numeric entry for its
 zero-based rendered output frame. Keyboard-entry, selection, undo/redo and timing
