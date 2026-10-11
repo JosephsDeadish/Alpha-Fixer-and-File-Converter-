@@ -402,6 +402,12 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+GIF Builder panes and control rows reflow on compact windows and at large fonts.
+Buttons retain theme-sized heights, panes cannot collapse completely, and keyboard
+focus scrolls controls into view. Compact/theme/font and generated-frame action
+regressions cover these changes; physical DPI and native screen-reader acceptance
+remain outstanding.
+
 Comparison previews support keyboard divider control: Tab to the comparison,
 use Left/Right to adjust it and Home/End to reveal either side. A visible focus
 ring and accessible guidance apply to docked and floating previews. Compact

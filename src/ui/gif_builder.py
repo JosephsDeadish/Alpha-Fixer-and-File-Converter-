@@ -30,7 +30,7 @@ from src.core.gif_export import GifExportSettings, GifExportWorker
 from ._ui_utils import fit_dialog_to_screen, scrollable_dialog_layout, reserve_space_for_focused_control
 
 from PyQt6.QtCore import (
-    Qt, QTimer, QSize, pyqtSignal,
+    Qt, QTimer, QSize, QEvent, pyqtSignal,
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QDragEnterEvent, QDropEvent, QDragMoveEvent,
@@ -41,7 +41,7 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QFileDialog, QSlider,
     QCheckBox, QGroupBox, QGridLayout, QMessageBox,
     QProgressDialog, QSplitter, QWidget, QApplication,
-    QFrame, QPlainTextEdit, QSpinBox, QAbstractSpinBox, QSizePolicy, QLayout,
+    QFrame, QPlainTextEdit, QSpinBox, QAbstractSpinBox, QSizePolicy, QLayout, QBoxLayout,
 )
 from .video_tool import (
     _VIDEO_EXTS,
@@ -516,6 +516,8 @@ class GifBuilderDialog(QDialog):
         root.addLayout(title_row)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._splitter = splitter
+        splitter.setChildrenCollapsible(False)
         root.addWidget(splitter, 1)
 
         # ── Left: frame grid ─────────────────────────────────────────────
@@ -532,7 +534,7 @@ class GifBuilderDialog(QDialog):
             "Supports PNG, JPEG, WEBP, BMP, TIFF, GIF (all frames), MP4, WEBM, AVI, MOV, and more.\n"
             "You can also drag supported media files directly onto the grid below."
         )
-        self._btn_add.setMinimumHeight(32)
+        self._btn_add.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._btn_add.clicked.connect(self._on_add_clicked)
         tb.addWidget(self._btn_add, 2)
 
@@ -603,17 +605,19 @@ class GifBuilderDialog(QDialog):
 
         # Frame grid
         self._frame_list = _FrameListWidget()
+        self._frame_list.setMinimumHeight(160)
         self._frame_list.files_dropped.connect(self._add_paths)
         self._frame_list.order_changed.connect(self._sync_frames_from_list)
         self._frame_list.currentRowChanged.connect(self._on_selection_changed)
         left_layout.addWidget(self._frame_list, 1)
 
         # Per-frame delay override  (slider-based)
-        pf_box = QGroupBox("Per-Frame Delay Override")
+        pf_box = QGroupBox("Per-Frame Delay")
         pf_layout = QVBoxLayout(pf_box)
         pf_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         pf_top = QHBoxLayout()
-        self._pf_check = QCheckBox("Override delay for selected frame")
+        self._pf_check = QCheckBox("Override frame delay")
+        self._pf_check.setToolTip("Override delay for selected frame")
         self._pf_check.toggled.connect(self._on_pf_check)
         pf_top.addWidget(self._pf_check)
         self._pf_val_lbl = QLabel("100 ms")
@@ -722,7 +726,8 @@ class GifBuilderDialog(QDialog):
         h_row.addWidget(self._height_val_lbl)
         gl.addLayout(h_row, 3, 1)
 
-        self._optimize_check = QCheckBox("Optimize palette (smaller file, slightly slower export)")
+        self._optimize_check = QCheckBox("Optimize palette")
+        self._optimize_check.setToolTip("Optimize palette (smaller file, slightly slower export)")
         self._optimize_check.setChecked(True)
         gl.addWidget(self._optimize_check, 4, 0, 1, 2)
 
@@ -736,6 +741,7 @@ class GifBuilderDialog(QDialog):
         self._preview_lbl = QLabel()
         self._preview_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._preview_lbl.setMinimumSize(280, 220)
+        self._preview_lbl.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         self._preview_lbl.setFrameShape(QFrame.Shape.StyledPanel)
         self._preview_lbl.setText("(no frames yet)")
         pv_layout.addWidget(self._preview_lbl, 1)
@@ -752,7 +758,7 @@ class GifBuilderDialog(QDialog):
         self._btn_rewind = QPushButton("⏮  Rewind")
         self._btn_rewind.setAccessibleName("Rewind GIF preview")
         self._btn_rewind.setMinimumWidth(96)
-        self._btn_rewind.setMinimumHeight(26)
+        self._btn_rewind.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._btn_rewind.setToolTip("Rewind to first frame (jump to frame 1)")
         self._btn_rewind.clicked.connect(self._rewind)
         pv_ctrl.addWidget(self._btn_rewind)
@@ -781,7 +787,7 @@ class GifBuilderDialog(QDialog):
         export_row = QHBoxLayout()
         self._btn_export = QPushButton("💾  Export GIF…")
         self._btn_export.setToolTip("Build and save the animated GIF.  Shortcut: Ctrl+S")
-        self._btn_export.setMinimumHeight(34)
+        self._btn_export.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._btn_export.clicked.connect(self._export)
         export_row.addStretch()
         export_row.addWidget(self._btn_export)
@@ -789,6 +795,83 @@ class GifBuilderDialog(QDialog):
 
         splitter.addWidget(right)
         splitter.setSizes([520, 340])
+        self._responsive_rows = (
+            (tb, (self._btn_add, self._btn_remove, self._btn_clear)),
+            (import_detail_actions, (self._import_detail_toggle_btn, self._import_copy_btn)),
+            (pf_top, (self._pf_check, self._pf_val_lbl)),
+            (pv_ctrl, (self._btn_rewind, self._btn_play, self._preview_frame_lbl)),
+        )
+        self._layout_timer = QTimer(self)
+        self._layout_timer.setSingleShot(True)
+        self._layout_timer.timeout.connect(self._reflow_controls)
+        self._focus_timer = QTimer(self)
+        self._focus_timer.setSingleShot(True)
+        self._focus_timer.timeout.connect(
+            lambda: self._reveal_focused_control(None, QApplication.focusWidget())
+        )
+        self._content_scroll = self.findChild(QWidget, "dialogContentScroll")
+        self._content_scroll.viewport().installEventFilter(self)
+        self._export_content.installEventFilter(self)
+        QApplication.instance().focusChanged.connect(self._schedule_focus_reveal)
+        self._layout_timer.start(0)
+
+    def _reflow_controls(self) -> None:
+        available = self._content_scroll.viewport().width()
+        for control in self._export_content.findChildren(QWidget):
+            if isinstance(control, (QPushButton, QCheckBox)):
+                control.setMinimumHeight(control.minimumSizeHint().height())
+        for layout, controls in self._responsive_rows:
+            required = sum(control.minimumSizeHint().width() for control in controls)
+            required += layout.spacing() * (len(controls) - 1)
+            layout.setDirection(
+                QBoxLayout.Direction.LeftToRight if required <= available - 40
+                else QBoxLayout.Direction.TopToBottom
+            )
+        # Measure the panes independently of their current splitter orientation.
+        panes = [self._splitter.widget(i) for i in range(2)]
+        required = sum(pane.minimumSizeHint().width() for pane in panes)
+        orientation = (
+            Qt.Orientation.Horizontal
+            if required + self._splitter.handleWidth() <= available
+            else Qt.Orientation.Vertical
+        )
+        self._splitter.setOrientation(orientation)
+        for layout, controls in self._responsive_rows:
+            required = sum(control.minimumSizeHint().width() for control in controls)
+            required += layout.spacing() * (len(controls) - 1)
+            margins = layout.contentsMargins()
+            row_available = min(available, layout.parentWidget().width())
+            row_available -= margins.left() + margins.right() + 40
+            layout.setDirection(
+                QBoxLayout.Direction.LeftToRight if required <= row_available
+                else QBoxLayout.Direction.TopToBottom
+            )
+        self._focus_timer.start(0)
+
+    def _reveal_focused_control(self, _previous, current) -> None:
+        if current is not None and self._export_content.isAncestorOf(current):
+            viewport = self._content_scroll.viewport()
+            rect = current.rect()
+            rect.moveTopLeft(current.mapTo(viewport, rect.topLeft()))
+            for bar, leading, trailing, extent in (
+                (self._content_scroll.horizontalScrollBar(), rect.left(), rect.right(), viewport.width()),
+                (self._content_scroll.verticalScrollBar(), rect.top(), rect.bottom(), viewport.height()),
+            ):
+                delta = leading if leading < 0 else max(0, trailing - extent + 1)
+                bar.setValue(bar.value() + delta)
+
+    def _schedule_focus_reveal(self, _previous, current) -> None:
+        if current is not None and self._export_content.isAncestorOf(current):
+            self._layout_timer.start(0)
+
+    def eventFilter(self, watched, event):
+        if (watched is self._content_scroll.viewport()
+                and event.type() == QEvent.Type.Resize):
+            self._layout_timer.start(0)
+        if (watched is self._export_content
+                and event.type() in (QEvent.Type.Resize, QEvent.Type.LayoutRequest)):
+            self._focus_timer.start(0)
+        return super().eventFilter(watched, event)
 
     # ------------------------------------------------------------------
     # Frame management
@@ -973,7 +1056,12 @@ class GifBuilderDialog(QDialog):
     def event(self, event):
         if reserve_space_for_focused_control(self, event):
             return True
-        return super().event(event)
+        result = super().event(event)
+        if (event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange,
+                             QEvent.Type.LayoutRequest)
+                and hasattr(self, "_layout_timer")):
+            self._layout_timer.start(0)
+        return result
 
     def update_shortcut_binding(self, shortcut_id: str, key_sequence: str) -> None:
         shortcut = getattr(self, "_shortcut_objects", {}).get(shortcut_id)
