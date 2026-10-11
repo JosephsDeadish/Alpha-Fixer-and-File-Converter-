@@ -4383,7 +4383,21 @@ class MainWindow(QMainWindow):
 
         help_key = getattr(self, "_shortcut_map", {}).get("help", {}).get("current", "F1")
         help_binding = escape(help_key) if help_key else "unassigned"
-        content_lbl = QLabel(
+
+        class AboutLabel(QLabel):
+            def focusNextPrevChild(self, next):
+                handled = super().focusNextPrevChild(next)
+                if handled and self.hasFocus():
+                    # QLabel's internal anchor traversal does not notify QScrollArea.
+                    scroll.ensureVisible(0, self.height(), 0, 0)
+                return handled
+
+            def focusInEvent(self, event):
+                super().focusInEvent(event)
+                if event.reason() == Qt.FocusReason.BacktabFocusReason:
+                    scroll.ensureVisible(0, self.height(), 0, 0)
+
+        content_lbl = AboutLabel(
             f"<h2>🐼 {APP_NAME.replace('&', '&amp;')}  v{__version__}</h2>"
             "<p>A powerful panda-themed tool for fixing alpha channels, converting image "
             "files, and painting custom alpha zones.</p>"

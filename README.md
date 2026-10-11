@@ -402,6 +402,11 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+About dialog keyboard traversal scrolls its support link into view instead of
+leaving the focused anchor offscreen. Compact/font/theme regressions cover
+forward/reverse traversal, link activation and closing using lightweight widget
+hosts; native screen-reader and full MainWindow acceptance remain outstanding.
+
 About fits the available screen, exposes scrollable information accessibly and
 starts with its confirmation button focused. Deferred fitting uses a dialog-owned
 timer. Feature guidance reflects current alpha processing and the configured help

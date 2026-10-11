@@ -6,7 +6,7 @@ from PyQt6.QtCore import QRect, Qt
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QScrollArea, QWidget
 
-from src.ui.main_window import MainWindow
+from src.ui.main_window import MainWindow, PATREON_URL
 from src.ui.theme_engine import PRESET_THEMES, build_stylesheet
 
 
@@ -117,3 +117,60 @@ def test_about_guidance_matches_alpha_model_and_current_shortcuts(host, binding,
     assert "N64 Binary Alpha" in content and "Force Transparent" in content
     assert "custom alpha range" in content
     assert "F5 run" not in content and "F1 shortcuts" not in content
+
+
+@pytest.mark.parametrize("size", [(480, 400), (640, 480)])
+@pytest.mark.parametrize("pixels", [13, 24, 32])
+@pytest.mark.parametrize("theme", ["Panda Dark", "Panda Light"])
+def test_about_keyboard_support_link_stays_visible(app, host, size, pixels, theme):
+    host.setStyleSheet(build_stylesheet(PRESET_THEMES[theme])
+                      + f"\nQWidget {{ font-size: {pixels}px; }}")
+    screen = MagicMock()
+    screen.availableGeometry.return_value = QRect(170, 90, *size)
+    observed = {}
+
+    def inspect(dialog):
+        dialog.show()
+        dialog.activateWindow()
+        app.processEvents()
+        scroll = dialog.findChild(QScrollArea)
+        label = scroll.findChild(QLabel)
+        button = dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Ok)
+        observed["external_links"] = label.openExternalLinks()
+        label.setOpenExternalLinks(False)
+        links = []
+        label.linkActivated.connect(links.append)
+        # The first label stop selects text; the next stop selects its support anchor.
+        for _ in range(3):
+            QTest.keyClick(app.focusWidget(), Qt.Key.Key_Tab)
+            app.processEvents()
+        observed["link_focus"] = label.hasFocus()
+        observed["bottom"] = scroll.verticalScrollBar().value()
+        observed["maximum"] = scroll.verticalScrollBar().maximum()
+        QTest.keyClick(label, Qt.Key.Key_Return)
+        observed["links"] = links
+        observed["link_keeps_open"] = dialog.isVisible()
+        QTest.keyClick(label, Qt.Key.Key_Tab)
+        app.processEvents()
+        observed["footer_focus"] = button.hasFocus()
+        scroll.verticalScrollBar().setValue(0)
+        QTest.keyClick(button, Qt.Key.Key_Tab, Qt.KeyboardModifier.ShiftModifier)
+        app.processEvents()
+        QTest.keyClick(label, Qt.Key.Key_Tab, Qt.KeyboardModifier.ShiftModifier)
+        app.processEvents()
+        observed["reverse_focus"] = label.hasFocus()
+        observed["reverse_bottom"] = scroll.verticalScrollBar().value()
+        QTest.keyClick(label, Qt.Key.Key_Return)
+        QTest.keyClick(label, Qt.Key.Key_Escape)
+        observed["closed"] = not dialog.isVisible()
+        dialog.hide()
+        return dialog.result()
+
+    with patch.object(QWidget, "screen", return_value=screen), patch.object(QDialog, "exec", inspect):
+        MainWindow._show_about(host)
+    assert observed["link_focus"] and observed["footer_focus"] and observed["reverse_focus"]
+    assert observed["bottom"] == observed["maximum"]
+    assert observed["reverse_bottom"] == observed["maximum"]
+    assert observed["external_links"]
+    assert observed["links"] == [PATREON_URL, PATREON_URL]
+    assert observed["link_keeps_open"] and observed["closed"]
