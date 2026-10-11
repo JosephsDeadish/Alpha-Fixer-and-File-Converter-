@@ -8,9 +8,10 @@ from PIL import Image
 from PyQt6 import sip
 from PyQt6.QtCore import Qt
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QDialog
 
 from src.ui.video_tool import VideoToolDialog, _ClipEntry
+from src.ui.clock_timecode import parse_clock_timecode, format_clock_timecode
 
 
 @pytest.fixture(scope="module")
@@ -190,22 +191,30 @@ def test_still_holds_and_running_transport_remain_unchanged(video):
 
 
 @pytest.mark.parametrize("speed", [50, 75, 200])
-def test_numeric_playhead_split_preserves_cadence_and_restores_entries(video, speed):
+@pytest.mark.parametrize("unit", ["seconds", "timecode"])
+def test_numeric_playhead_split_preserves_cadence_and_restores_entries(video, speed, unit):
     fps = 30000 / 1001
     clip = add_clip(video, fps=fps)
-    enter(video._trim_start_seconds, f"{2 / fps:.9f}")
-    enter(video._trim_end_seconds, f"{9 / fps:.9f}")
+
+    def timestamp(frame, rate):
+        return (format_clock_timecode(frame, rate) if unit == "timecode"
+                else f"{frame / rate:.9f}")
+
+    enter(getattr(video, f"_trim_start_{unit}"), timestamp(2, fps))
+    enter(getattr(video, f"_trim_end_{unit}"), timestamp(9, fps))
     video._clip_speed_slider.setValue(speed)
     expected = [clip.trim_start + clip.output_index_to_source_offset(i)
                 for i in range(clip.active_frames)]
     split_at = min(3, clip.active_frames - 2)
-    enter(video._playhead_seconds, split_at / video._fps_slider.value())
+    enter(getattr(video, f"_playhead_{unit}"),
+          timestamp(split_at, video._fps_slider.value()))
     with patch("src.ui.video_tool._load_video_clip", side_effect=lambda *a, **kw:
                _ClipEntry("generated.video", 12, clip._get_frame, fps=fps, frame_size=(8, 8))):
         video._split_clip_at_playhead()
     assert len(video._clips) == 2
     for index, source in enumerate(expected):
-        enter(video._playhead_seconds, index / video._fps_slider.value())
+        enter(getattr(video, f"_playhead_{unit}"),
+              timestamp(index, video._fps_slider.value()))
         assert_playhead(video, index, source * 10)
     count = len(video._undo_stack)
     for row in (0, 1):
@@ -376,3 +385,179 @@ def test_seconds_long_clip_range_and_last_frame_roundtrip(video):
     enter(video._trim_end_seconds, f"{maximum:.9f}")
     assert clip.trim_end == 1_999_999_999
     assert len(video._undo_stack) == count
+    assert video._trim_end_timecode.text() == format_clock_timecode(clip.trim_end, fps)
+    enter(video._trim_end_timecode, video._trim_end_timecode.text())
+    assert clip.trim_end == 1_999_999_999
+    assert len(video._undo_stack) == count
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("00:00:00.000", "0"),
+    ("01:02:03.004", "3723.004"),
+    ("100:59:59.999", "363599.999"),
+])
+def test_clock_exact_decimal_parse(text, expected):
+    from decimal import Decimal
+    assert parse_clock_timecode(text) == Decimal(expected)
+
+
+@pytest.mark.parametrize("frame, fps, expected", [
+    (1, 16, "00:00:00.063"),
+    (1, 30000 / 1001, "00:00:00.033"),
+    (59999, 1000, "00:00:59.999"),
+    (60000, 1000, "00:01:00.000"),
+    (3600000, 1000, "01:00:00.000"),
+    (360000000, 1000, "100:00:00.000"),
+])
+def test_clock_format_rounding_and_carries(frame, fps, expected):
+    assert format_clock_timecode(frame, fps) == expected
+
+
+@pytest.mark.parametrize("clock, expected", [
+    ("00:00:01.024", 61),
+    ("00:00:01.025", 62),
+    ("00:00:01.026", 62),
+])
+@pytest.mark.parametrize("control", ["trim_start", "trim_end", "playhead"])
+def test_clock_decimal_half_frame_ui_rounding(video, clock, expected, control):
+    clip = add_clip(video, count=100, fps=60)
+    video._fps_slider.setValue(60)
+    enter(getattr(video, f"_{control}_timecode"), clock)
+    assert getattr(video, f"_{control}_spin").value() == expected
+    if control != "playhead":
+        assert getattr(clip, control) == expected
+
+
+@pytest.mark.parametrize("clock", [
+    "", "bad", "-00:00:01.000", "00:60:00.000", "00:00:60.000",
+    "0:00:01.000", "00:00:01.00", "00:00:01;000", "00:00:01.000 ",
+])
+@pytest.mark.parametrize("control", ["trim_start", "trim_end", "playhead"])
+def test_clock_invalid_is_noop_on_enter_and_focus_loss(video, clock, control):
+    add_clip(video)
+    video._scrubber.setValue(3)
+    project = video._project
+    project._saved = project.fingerprint()
+    count = len(video._undo_stack)
+    fingerprint = project.fingerprint()
+    entry = getattr(video, f"_{control}_timecode")
+    original = entry.text()
+    with patch.object(video, "_export") as export, \
+            patch("src.ui.video_tool.QFileDialog.getSaveFileName") as picker:
+        enter(entry, clock)
+        assert entry.text() == original
+        entry.selectAll()
+        QTest.keyClicks(entry, clock)
+        video._playhead_spin.setFocus()
+        QApplication.processEvents()
+    export.assert_not_called()
+    picker.assert_not_called()
+    assert entry.text() == original
+    assert video._scrubber.value() == 3
+    assert project.fingerprint() == fingerprint
+    assert not project.dirty
+    assert len(video._undo_stack) == count
+
+
+def test_clock_bounds_fps_selection_and_history_sync(video):
+    assert not video._trim_start_timecode.isEnabled()
+    assert not video._playhead_timecode.isEnabled()
+    first = add_clip(video, fps=30000 / 1001)
+    enter(video._trim_start_timecode, "00:00:00.067")
+    enter(video._trim_end_timecode, "00:00:00.300")
+    assert (first.trim_start, first.trim_end) == (2, 9)
+    video._clip_speed_slider.setValue(50)
+    video._fps_slider.setValue(30)
+    enter(video._playhead_timecode, "99:59:59.999")
+    assert_playhead(video, 15, 90)
+    assert video._playhead_timecode.text() == "00:00:00.500"
+    count = len(video._undo_stack)
+    video._fps_slider.setValue(60)
+    assert video._playhead_timecode.text() == "00:00:00.250"
+    assert video._trim_start_timecode.text() == "00:00:00.067"
+    assert len(video._undo_stack) == count + 1
+    video._undo()
+    assert video._playhead_timecode.text() == "00:00:00.500"
+    video._redo()
+    assert video._playhead_timecode.text() == "00:00:00.250"
+    second = add_clip(video, 1, fps=60)
+    assert video._trim_start_timecode.text() == "00:00:00.000"
+    video._clip_list.setCurrentRow(0)
+    # Selection synchronization discards a draft without applying it to another clip.
+    video._trim_start_timecode.setFocus()
+    video._trim_start_timecode.selectAll()
+    QTest.keyClicks(video._trim_start_timecode, "99:59:59.999")
+    video._clip_list.setCurrentRow(1)
+    assert video._trim_start_timecode.text() == "00:00:00.000"
+    assert (first.trim_start, second.trim_start) == (2, 0)
+    video._clip_list.setCurrentRow(0)
+    enter(video._trim_end_timecode, "00:00:00.000")
+    assert first.trim_end == first.trim_start == 2
+    enter(video._trim_start_timecode, "99:59:59.999")
+    assert first.trim_start == 2
+    video._undo()
+    assert first.trim_end == 9
+    assert video._trim_end_timecode.text() == "00:00:00.300"
+    video._clear_all()
+    assert not video._trim_end_timecode.isEnabled()
+    assert not video._playhead_timecode.isEnabled()
+    assert video._playhead_timecode.text() == "00:00:00.000"
+
+
+def test_clock_focus_noop_and_enter_inside_nested_dialog(video):
+    add_clip(video, fps=30000 / 1001)
+    host = QDialog()
+    video.setParent(host, video.windowFlags())
+    host.show()
+    video.show()
+    QApplication.processEvents()
+    video._trim_start_slider.setValue(2)
+    count = len(video._undo_stack)
+    fingerprint = video._project.fingerprint()
+    with patch("src.ui.video_tool.QFileDialog.getSaveFileName") as picker:
+        for entry in (video._trim_start_timecode, video._trim_end_timecode,
+                      video._playhead_timecode):
+            entry.setFocus()
+            QTest.keyClick(entry, Qt.Key.Key_Return)
+        assert video._project.fingerprint() == fingerprint
+        assert len(video._undo_stack) == count
+        enter(video._trim_start_timecode, "00:00:00.100")
+        enter(video._playhead_timecode, "00:00:00.080")
+    picker.assert_not_called()
+    assert video._clips[0].trim_start == 3
+    assert_playhead(video, 2, 50)
+    video.setParent(None, video.windowFlags())
+    host.close()
+    sip.delete(host)
+
+
+@pytest.mark.parametrize("control", ["trim_start", "trim_end", "playhead"])
+def test_clock_large_hours_clamp_before_qt_integer_conversion(video, control):
+    add_clip(video)
+    enter(getattr(video, f"_{control}_timecode"), "1000000000:00:00.000")
+    assert getattr(video, f"_{control}_spin").value() == 11
+    assert getattr(video, f"_{control}_timecode").text() == "00:00:00.440"
+
+
+def test_clock_focus_loss_commits_and_seeking_does_not_dirty_project(video):
+    clip = add_clip(video, fps=60)
+    video._fps_slider.setValue(30)
+    video._project._saved = video._project.fingerprint()
+    count = len(video._undo_stack)
+    entry = video._playhead_timecode
+    entry.setFocus()
+    entry.selectAll()
+    QTest.keyClicks(entry, "00:00:00.100")
+    assert video._scrubber.value() == 0
+    video._trim_start_timecode.setFocus()
+    assert_playhead(video, 3, 30)
+    assert not video._project.dirty
+    assert len(video._undo_stack) == count
+    entry = video._trim_start_timecode
+    entry.selectAll()
+    QTest.keyClicks(entry, "00:00:00.050")
+    assert clip.trim_start == 0
+    video._playhead_timecode.setFocus()
+    assert clip.trim_start == 3
+    assert video._project.dirty
+    assert len(video._undo_stack) == count + 1

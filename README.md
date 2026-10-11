@@ -451,6 +451,14 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Video trim and timeline seek controls accept clock timestamps in `HH:MM:SS.mmm`
+alongside frame and seconds entries. Trims use source FPS and inclusive endpoints;
+seeking uses output FPS. Valid timestamps round to the nearest frame (ties forward)
+and clamp to available frames; invalid input reverts without changing the edit.
+Keyboard, fractional-FPS, undo and project restoration regressions cover these
+controls. This is clock editing, not SMPTE/drop-frame timecode; waveforms, full
+timecode workflows and physical audible synchronization remain outstanding.
+
 Failed project open/recovery keeps retained playback paused while the error
 dialog is displayed, then resumes previously active playback after dismissal.
 Generated-frame tests pump Qt events during read/decode errors in both builders

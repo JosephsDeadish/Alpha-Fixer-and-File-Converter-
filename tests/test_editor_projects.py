@@ -199,6 +199,59 @@ def test_video_gif_split_still_settings_roundtrip(dialogs, tmp_path):
     assert loaded._audio_volume_slider.value() == 72
 
 
+def test_video_clock_timecode_project_roundtrip_and_recovery(dialogs, tmp_path):
+    from src.ui.clock_timecode import format_clock_timecode
+
+    def enter_clock(entry, text):
+        entry.setFocus()
+        entry.selectAll()
+        QTest.keyClicks(entry, text)
+        QTest.keyClick(entry, Qt.Key.Key_Return)
+
+    source, _ = sources(tmp_path)
+    widget = dialogs("video")
+    widget.show()
+    QApplication.processEvents()
+    widget._project.timer.stop()
+    widget._load_image_paths([str(source)])
+    clip = widget._clips[0]
+    path = tmp_path / "clock.videoproject.json"
+    save(widget, path)
+    count = len(widget._undo_stack)
+    enter_clock(widget._trim_start_timecode, format_clock_timecode(1, clip.fps))
+    assert clip.trim_start == 1 and widget._project.dirty
+    assert len(widget._undo_stack) == count + 1
+    widget._undo()
+    assert clip.trim_start == 0 and not widget._project.dirty
+    widget._redo()
+    assert clip.trim_start == 1 and widget._project.dirty
+    widget._clip_speed_slider.setValue(50)
+    widget._fps_slider.setValue(60)
+    enter_clock(widget._playhead_timecode, "00:00:00.050")
+    assert widget._scrubber.value() == 3
+    save(widget, path)
+    loaded = dialogs("video")
+    open_project(loaded, path)
+    assert loaded._clips[0].trim_start == 1
+    assert loaded._clips[0].trim_end == 2
+    assert loaded._trim_start_timecode.text() == format_clock_timecode(1, clip.fps)
+    assert loaded._playhead_timecode.text() == "00:00:00.050"
+    assert not loaded._project.dirty
+    widget._project.timer.stop()
+    enter_clock(widget._trim_start_timecode, "00:00:00.000")
+    widget._project.autosave()
+    wait(widget)
+    recovery_path = widget._project.recovery_path
+    widget._project._release_session()
+    recovered = dialogs("video")
+    assert recovered._project.load(recovery_path, recovery=True)
+    wait(recovered)
+    assert recovered._clips[0].trim_start == 0
+    assert recovered._trim_start_timecode.text() == "00:00:00.000"
+    assert recovered._playhead_timecode.text() == "00:00:00.050"
+    assert recovered._project.dirty and recovered._project.path == ""
+
+
 @pytest.mark.parametrize("mutation", [
     lambda d: d.update(version=2),
     lambda d: d.update(version=True),
