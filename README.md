@@ -451,6 +451,14 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Opening Video projects offers to locate missing media once per unique source.
+Replacement files must match the saved SHA-256 identity; verification and decoding
+remain asynchronous. Cancellation or preparation failure keeps the current editor
+intact, and relinked projects remain unsaved until Save Project records new paths.
+Recovery files are not rewritten by opening them. Changed media must be imported
+anew rather than silently substituted; embedded GIF project frames need no relink.
+Generated-media tests cover relinking, cancellation, identity rejection and saving.
+
 Multipage TIFF conversion and previews explicitly use page 1 only, including
 TIFF-to-TIFF output; additional pages are not preserved. Preview details, direct
 conversion warnings and batch logs disclose this limit. Page counting uses a

@@ -216,7 +216,17 @@ def source_signature(path):
     return digest.hexdigest()
 
 
-def prepare_entries(document, project_path):
+def missing_sources(document, project_path):
+    """Find unique missing references without inspecting embedded GIF media."""
+    if document["kind"] != "video":
+        return []
+    sources = dict.fromkeys(
+        str((Path(project_path).absolute().parent / entry["source"]).resolve())
+        for entry in document["entries"])
+    return [source for source in sources if not Path(source).is_file()]
+
+
+def prepare_entries(document, project_path, replacements=None):
     """Resolve/decode everything before the caller touches the live session."""
     prepared = []
     try:
@@ -231,7 +241,8 @@ def prepare_entries(document, project_path):
             signatures = {}
             source_stamps = {}
             for entry in document["entries"]:
-                source = str((Path(project_path).absolute().parent / entry["source"]).resolve())
+                original_source = str((Path(project_path).absolute().parent / entry["source"]).resolve())
+                source = str(Path((replacements or {}).get(original_source, original_source)).resolve())
                 if not Path(source).is_file():
                     raise ValueError(f"Missing project media: {source}")
                 if source not in signatures:
@@ -277,7 +288,13 @@ def prepare_entries(document, project_path):
                 clip.still_duration_frames = entry["still_duration"]
                 clip._split_timing = tuple(entry["split"]) if entry["split"] else None
         return prepared
-    except BaseException:
+    except BaseException as error:
         for entry in prepared:
             entry.close()
+        if document["kind"] == "video" and isinstance(error, Exception):
+            raise ValueError(
+                f"Cannot prepare project media: {locals().get('source', project_path)}\n{error}\n"
+                "Restore the original, unchanged media. If it moved, reopen the project and "
+                "locate that same file; a different file must be imported into a new project."
+            ) from error
         raise

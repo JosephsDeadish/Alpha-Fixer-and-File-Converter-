@@ -178,11 +178,183 @@ def test_missing_video_media_preserves_live_session(dialogs, tmp_path):
     save(widget, path)
     original = widget._clips[0]
     still.unlink()
-    with patch("src.ui.editor_project.QMessageBox.critical") as error:
-        open_project(widget, path)
-    error.assert_called_once()
+    with patch("src.ui.editor_project.QMessageBox.critical") as error, \
+            patch("src.ui.editor_project.QFileDialog.getOpenFileName", return_value=("", "")) as picker:
+        assert widget._project.load(path)
+        wait(widget)
+    error.assert_not_called()
+    picker.assert_called_once()
+    assert str(still) in picker.call_args.args[1]
+    assert "cancelled" in widget._project.status.text()
     assert widget._clips[0] is original
     assert original.get_frame(0).getpixel((0, 0)) == (255, 0, 0, 255)
+
+
+def test_missing_media_relink_repeated_entries_save_and_export(dialogs, tmp_path):
+    import threading
+    from src.ui import video_tool
+    _, still = sources(tmp_path)
+    widget = dialogs("video")
+    widget._load_image_paths([str(still), str(still)])
+    path = tmp_path / "p.json"
+    save(widget, path)
+    before = path.read_bytes()
+    original_hash = read_project(path)["entries"][0]["source_sha256"]
+    moved = tmp_path / "moved.png"
+    still.rename(moved)
+    threads = []
+
+    def signature(source):
+        threads.append(threading.get_ident())
+        return source_signature(source)
+
+    with patch("src.ui.editor_project.QFileDialog.getOpenFileName", return_value=(str(moved), "")) as picker, \
+            patch("src.core.editor_projects.source_signature", side_effect=signature) as hashing:
+        widget._project.load(path)
+        wait(widget)
+    picker.assert_called_once()
+    hashing.assert_called_once()
+    assert len(threads) == 1 and threads[0] != threading.get_ident()
+    assert all(c.source_path == str(moved) and c._source_sha256 == original_hash for c in widget._clips)
+    assert widget._project.dirty
+    assert path.read_bytes() == before
+    assert "Save Project" in widget._project.status.text()
+    output = tmp_path / "export.gif"
+    widget._still_duration_spin.setValue(2)
+    with patch.object(video_tool.QFileDialog, "getSaveFileName", return_value=(str(output), "")), \
+            patch.object(video_tool.QMessageBox, "information"):
+        widget._export()
+        deadline = time.monotonic() + 15
+        while widget.is_exporting() and time.monotonic() < deadline:
+            QApplication.processEvents()
+            time.sleep(0.005)
+        assert not widget.is_exporting()
+    with Image.open(output) as image:
+        assert image.getpixel((0, 0)) is not None
+    destination = tmp_path / "saved" / "relinked.json"
+    destination.parent.mkdir()
+    save(widget, destination)
+    assert not widget._project.dirty
+    document = read_project(destination)
+    assert all(e["source"] == "../moved.png" and e["source_sha256"] == original_hash
+               for e in document["entries"])
+    assert path.read_bytes() == before
+    loaded = dialogs("video")
+    open_project(loaded, destination)
+    assert all(c.source_path == str(moved) for c in loaded._clips)
+    assert not loaded._project.dirty
+
+
+@pytest.mark.parametrize("cancel_after_first", [False, True])
+def test_relink_failure_or_later_cancel_keeps_all_live_state(dialogs, tmp_path, cancel_after_first):
+    source, still = sources(tmp_path)
+    widget = dialogs("video")
+    widget._load_image_paths([str(source), str(still)])
+    path = tmp_path / "p.json"
+    save(widget, path)
+    before = path.read_bytes()
+    source.rename(tmp_path / "moved.gif")
+    still.rename(tmp_path / "moved.png")
+    widget._brightness_slider.setValue(177)
+    clips = list(widget._clips)
+    fingerprint = widget._project.fingerprint()
+    saved, autosaved = widget._project._saved, widget._project._autosaved
+    choices = [(str(tmp_path / "moved.gif"), ""), ("", "")] if cancel_after_first else [
+        (str(tmp_path / "moved.png"), ""), (str(tmp_path / "moved.png"), "")]
+    with patch("src.ui.editor_project.QFileDialog.getOpenFileName", side_effect=choices) as picker, \
+            patch("src.ui.editor_project.QMessageBox.critical") as error:
+        widget._project.load(path)
+        wait(widget)
+    assert picker.call_count == 2
+    assert widget._clips == clips
+    assert widget._project.fingerprint() == fingerprint
+    assert (widget._project._saved, widget._project._autosaved) == (saved, autosaved)
+    assert widget._project.path == str(path) and widget._project.dirty
+    assert path.read_bytes() == before
+    assert widget._project.open_button.isEnabled() and widget._content_scroll.isEnabled()
+    if cancel_after_first:
+        error.assert_not_called()
+    else:
+        error.assert_called_once()
+        message = error.call_args.args[2]
+        assert str(path) in message and str(tmp_path / "moved.png") in message
+        assert "changed since project save" in message and "original, unchanged" in message
+
+
+def test_relink_recovery_stays_dirty_without_rewriting_snapshot(dialogs, tmp_path):
+    _, still = sources(tmp_path)
+    widget = dialogs("video")
+    widget._load_image_paths([str(still)])
+    assert widget._project.autosave()
+    wait(widget)
+    path = widget._project.recovery_path
+    before = path.read_bytes()
+    moved = tmp_path / "moved.png"
+    still.rename(moved)
+    recovered = dialogs("video")
+    with patch("src.ui.editor_project.QFileDialog.getOpenFileName", return_value=(str(moved), "")):
+        assert recovered._project.load(path, recovery=True)
+        wait(recovered)
+    assert recovered._clips[0].source_path == str(moved)
+    assert recovered._project.dirty and recovered._project.path == ""
+    assert path.read_bytes() == before
+
+
+def test_relink_same_shape_wrong_identity_rejected_before_decode(dialogs, tmp_path):
+    _, still = sources(tmp_path)
+    widget = dialogs("video")
+    widget._load_image_paths([str(still)])
+    path = tmp_path / "p.json"
+    save(widget, path)
+    before = path.read_bytes()
+    original = widget._clips[0]
+    still.unlink()
+    wrong = tmp_path / "wrong.png"
+    with Image.new("RGBA", (10, 8), "blue") as image:
+        image.save(wrong)
+    with patch("src.ui.editor_project.QFileDialog.getOpenFileName", return_value=(str(wrong), "")), \
+            patch("src.ui.video_tool._load_image_as_clip") as decode, \
+            patch("src.ui.editor_project.QMessageBox.critical") as error:
+        widget._project.load(path)
+        wait(widget)
+    decode.assert_not_called()
+    error.assert_called_once()
+    assert "changed since project save" in error.call_args.args[2]
+    assert widget._clips == [original] and path.read_bytes() == before
+    assert not widget._project.dirty
+
+
+def test_relink_media_changed_during_decode_releases_clip(dialogs, tmp_path):
+    from src.ui import video_tool
+    _, still = sources(tmp_path)
+    widget = dialogs("video")
+    widget._load_image_paths([str(still)])
+    path = tmp_path / "p.json"
+    save(widget, path)
+    original = widget._clips[0]
+    moved = tmp_path / "moved.png"
+    still.rename(moved)
+    decoded = []
+    loader = video_tool._load_image_as_clip
+
+    def load(source):
+        clip = loader(source)
+        clip.close = Mock(wraps=clip.close)
+        decoded.append(clip)
+        with Image.new("RGBA", (10, 8), "blue") as image:
+            image.save(moved)
+        return clip
+
+    with patch("src.ui.editor_project.QFileDialog.getOpenFileName", return_value=(str(moved), "")), \
+            patch.object(video_tool, "_load_image_as_clip", side_effect=load), \
+            patch("src.ui.editor_project.QMessageBox.critical") as error:
+        widget._project.load(path)
+        wait(widget)
+    error.assert_called_once()
+    assert "changed during project I/O" in error.call_args.args[2]
+    assert widget._clips == [original]
+    assert len(decoded) == 1
+    decoded[0].close.assert_called_once()
 
 
 def test_atomic_save_failure_preserves_file_and_dirty_state(dialogs, tmp_path):

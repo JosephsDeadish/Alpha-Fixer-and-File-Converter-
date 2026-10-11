@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 from src.core.app_paths import user_data_directory
 from src.core.editor_projects import (
     GIF_CONTROLS, VIDEO_CONTROLS, MAX_ENTRIES, MAX_TOTAL_PIXELS,
-    encode_png, prepare_entries, read_project, validate, write_project, source_signature, _source_stamp,
+    encode_png, missing_sources, prepare_entries, read_project, validate, write_project, source_signature, _source_stamp,
 )
 
 
@@ -205,7 +205,7 @@ class EditorProjectController(QObject):
             raise
 
     def _busy(self):
-        return self._job is not None or self.dialog.is_exporting()
+        return self._job is not None or self._loading or self.dialog.is_exporting()
 
     def _start(self, operation, finished, *, loading=False):
         self._loading = loading
@@ -368,16 +368,48 @@ class EditorProjectController(QObject):
             return False
         # Prepare first: even a discarded replacement must never destroy edits on decode failure.
         captured = self.fingerprint()
+        was_playing = self.dialog._btn_play.isChecked()
+        replacements = {}
 
         def operation():
             document = read_project(path, self.kind)
-            return document, prepare_entries(document, path)
+            return document, missing_sources(document, path)
+
+        def failed(message):
+            if was_playing:
+                self.dialog._btn_play.setChecked(True)
+            self._failure(f"Could not open project: {path}\n{message}\n"
+                          "The current project has been kept intact.")
+
+        def discovered(job):
+            if job.error:
+                failed(job.error)
+                return
+            document, missing = job.result
+            # Modal file pickers run a nested event loop; suppress autosave and other
+            # project actions until every replacement has been chosen.
+            self._loading = True
+            try:
+                for source in missing:
+                    replacement, _ = QFileDialog.getOpenFileName(
+                        self.dialog,
+                        f"Locate Missing Project Media (same original file): {source}",
+                        str(Path(source).parent), "Media files (*)")
+                    if not replacement:
+                        self.status.setText(f"Project open cancelled • missing media: {source} • current project kept")
+                        if was_playing:
+                            self.dialog._btn_play.setChecked(True)
+                        return
+                    replacements[source] = replacement
+            finally:
+                self._loading = False
+            self.status.setText("Verifying and preparing project media…")
+            self._start(lambda: (document, prepare_entries(document, path, replacements)),
+                        finished, loading=True)
 
         def finished(job):
             if job.error:
-                if self._was_playing:
-                    self.dialog._btn_play.setChecked(True)
-                self._failure(job.error)
+                failed(job.error)
                 return
             document, entries = job.result
             for name, value in document["controls"].items():
@@ -385,23 +417,27 @@ class EditorProjectController(QObject):
                 if isinstance(control, QComboBox) and control.findData(value) < 0:
                     for entry in entries:
                         entry.close()
-                    self._failure(f"Project setting unavailable in this runtime: {value}")
+                    failed(f"Project setting unavailable in this runtime: {value}")
                     return
             if captured != self.fingerprint() or not self.confirm_replace():
                 for entry in entries:
                     entry.close()
-                if self._was_playing:
+                if was_playing:
                     self.dialog._btn_play.setChecked(True)
                 return
             self._install(document, entries)
             self.path = "" if recovery else str(path)
             self._observed = self.fingerprint()
-            self._saved = self._observed if not recovery else ((), ())
-            self._autosaved = ((), ()) if recovery else self._observed
+            unsaved = recovery or bool(replacements)
+            self._saved = ((), ()) if unsaved else self._observed
+            self._autosaved = ((), ()) if unsaved else self._observed
             self._changed_at = time.monotonic()
-            self.status.setText("Recovered edits • Save Project to keep them" if recovery else f"Project: {Path(path).name} • saved")
+            self.status.setText(
+                "Recovered edits • Save Project to keep them" if recovery else
+                f"Project: {Path(path).name} • media relinked • Save Project to keep new paths" if replacements else
+                f"Project: {Path(path).name} • saved")
         self.status.setText("Preparing project media…")
-        self._start(operation, finished, loading=True)
+        self._start(operation, discovered, loading=True)
         return True
 
     def _install(self, document, entries):
@@ -537,7 +573,7 @@ class EditorProjectController(QObject):
                 self.commit_close()
             return True
 
-        if self._job is not None:
+        if self._job is not None or self._loading:
             self.status.setText("Wait for project I/O to finish before closing")
             return False
         if self.dirty:
@@ -570,6 +606,9 @@ class EditorProjectController(QObject):
             self._lock = None
 
     def allow_parent_close(self, resume):
+        if self._loading and self._job is None:
+            self.status.setText("Finish locating project media before closing")
+            return False
         if self._job is not None:
             self._parent_resume = resume
             self.status.setText("Finishing project I/O before application shutdown…")
