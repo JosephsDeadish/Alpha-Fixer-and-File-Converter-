@@ -402,6 +402,12 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Painter's shared-zone clipboard picker wraps its prompt and fits the active
+screen instead of exceeding compact displays at large fonts. Size/font/theme
+regressions cover selection and cancellation. The existing About dialog passed
+a bounded layout/keyboard audit without changes; neither audit establishes native
+screen-reader or physical display acceptance.
+
 About dialog keyboard traversal scrolls its support link into view instead of
 leaving the focused anchor offscreen. Compact/font/theme regressions cover
 forward/reverse traversal, link activation and closing using lightweight widget

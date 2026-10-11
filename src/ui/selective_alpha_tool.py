@@ -3431,19 +3431,29 @@ class SelectiveAlphaTool(QWidget):
         if len(self._shared_zones) == 1:
             zone_idx = 0
         else:
-            from PyQt6.QtWidgets import QInputDialog
+            from ._ui_utils import fit_dialog_to_screen
             items = [
                 f"Zone {i + 1}  (α = {av})"
                 for i, (av, _) in enumerate(self._shared_zones)
             ]
-            item, ok = QInputDialog.getItem(
-                self, "Select Zone",
-                "Choose a zone to copy to the clipboard:",
-                items, 0, False,
-            )
-            if not ok:
-                return
-            zone_idx = items.index(item)
+            dialog = QInputDialog(self)
+            dialog.setWindowTitle("Select Zone")
+            dialog.setLabelText("Choose a zone to copy to the clipboard:")
+            dialog.setComboBoxItems(items)
+            dialog.setComboBoxEditable(False)
+            dialog.findChild(QLabel).setWordWrap(True)
+            dialog.setSizeGripEnabled(True)
+            fit_dialog_to_screen(dialog)
+            fit_timer = QTimer(dialog)
+            fit_timer.setSingleShot(True)
+            fit_timer.timeout.connect(lambda: fit_dialog_to_screen(dialog))
+            fit_timer.start(0)
+            try:
+                if dialog.exec() != QInputDialog.DialogCode.Accepted:
+                    return
+                zone_idx = items.index(dialog.textValue())
+            finally:
+                dialog.deleteLater()
         _alpha_val, bool_mask = self._shared_zones[zone_idx]
         self._mask_clipboard = (bool_mask.astype(np_imp.uint8) * 255)
         self._ze_paste_btn.setEnabled(True)
