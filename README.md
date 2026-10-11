@@ -451,6 +451,12 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Builder project close prompts and open/save pickers block competing project I/O,
+autosave and recursive shutdown while their nested modal loops run. Generated-media
+regressions cover modal polling, cancellation and shutdown decisions alongside
+malformed/missing-source, recovery and storage-failure cases. These controlled
+widget tests do not establish physical storage or native end-to-end acceptance.
+
 Video preview audio can retry transient decoder failures on explicit recovery
 actions or device return without reloading failed media on automatic timeline
 wraps. Time without an output device does not consume the loading deadline, and

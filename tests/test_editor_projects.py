@@ -649,6 +649,123 @@ def test_close_cancel_save_and_export_guard(dialogs, tmp_path):
         picker.assert_not_called()
 
 
+@pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("provisional", [False, True])
+@pytest.mark.parametrize("answer", ["Cancel", "Discard", "Save"])
+def test_close_prompt_blocks_project_io_and_failed_save_keeps_recovery(
+        dialogs, tmp_path, kind, provisional, answer):
+    _, still = sources(tmp_path)
+    widget = dialogs(kind)
+    if kind == "gif":
+        widget._add_paths([str(still)])
+        control = widget._delay_slider
+    else:
+        widget._load_image_paths([str(still)])
+        control = widget._brightness_slider
+    project = widget._project
+    path = tmp_path / "project.json"
+    save(widget, path)
+    assert project.autosave()
+    wait(widget)
+    disk = path.read_bytes(), project.recovery_path.read_bytes()
+    saved, autosaved, lock = project._saved, project._autosaved, project._lock
+    entries = tuple(project.entries)
+    control.setValue(control.value() + 10)
+    project.poll()
+    project._changed_at -= 6
+    resumed = Mock()
+
+    def assert_modal_guard():
+        project.poll()
+        assert project._job is None
+        assert project._loading
+        assert not project.autosave()
+        assert not project._save(tmp_path / "unexpected.json")
+        assert not project.allow_close(resumed)
+        assert project._lock is lock and lock.isLocked()
+        assert project.timer.isActive()
+        assert tuple(project.entries) == entries
+
+    def question(*args):
+        assert_modal_guard()
+        return getattr(QMessageBox.StandardButton, answer)
+
+    def picker(*args):
+        assert_modal_guard()
+        return str(path), ""
+
+    with patch("src.ui.editor_project.QMessageBox.question", side_effect=question), \
+            patch("src.ui.editor_project.QFileDialog.getSaveFileName", side_effect=picker), \
+            patch("os.replace", side_effect=OSError("destination unavailable")), \
+            patch("src.ui.editor_project.QMessageBox.critical") as error:
+        assert project.allow_close(resumed, provisional=provisional) is (answer == "Discard")
+        wait(widget)
+    resumed.assert_not_called()
+    assert error.call_count == (1 if answer == "Save" else 0)
+    assert not project._loading and project._job is None
+    assert project._pending_close is None
+    assert project.dirty and project.path == str(path)
+    assert (project._saved, project._autosaved) == (saved, autosaved)
+    assert (path.read_bytes(), project.recovery_path.read_bytes()) == disk
+    assert tuple(project.entries) == entries
+    assert not (tmp_path / "unexpected.json").exists()
+    assert not list(tmp_path.rglob(".alpha_fixer_save_*"))
+    if answer == "Discard" and not provisional:
+        assert project._closing_approved and not project.timer.isActive()
+        assert project._lock is None and not lock.isLocked()
+    else:
+        assert project._closing_approved is (answer == "Discard")
+        assert project.timer.isActive() and project._lock is lock and lock.isLocked()
+        if answer != "Discard":
+            project._retry_after = 0
+            project.poll()
+            wait(widget)
+            assert project._autosaved == project.fingerprint()
+            assert project.dirty and project._lock is lock and lock.isLocked()
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("action", ["open", "save"])
+@pytest.mark.parametrize("accepted", [False, True])
+def test_project_file_picker_blocks_autosave_and_close(dialogs, tmp_path, kind, action, accepted):
+    _, still = sources(tmp_path)
+    widget = dialogs(kind)
+    if kind == "gif":
+        widget._add_paths([str(still)])
+        control = widget._delay_slider
+    else:
+        widget._load_image_paths([str(still)])
+        control = widget._brightness_slider
+    project = widget._project
+    path = tmp_path / "project.json"
+    save(widget, path)
+    control.setValue(control.value() + 10)
+    project.poll()
+    project._changed_at -= 6
+    saved = project._saved
+    entries = tuple(project.entries)
+
+    def picker(*args):
+        project.poll()
+        assert project._job is None and project._loading
+        assert not project.autosave()
+        assert not project.load(path)
+        assert not project.allow_parent_close(lambda: None)
+        return (str(path) if accepted else ""), ""
+
+    method = "getOpenFileName" if action == "open" else "getSaveFileName"
+    with patch(f"src.ui.editor_project.QFileDialog.{method}", side_effect=picker) as choose, \
+            patch("src.ui.editor_project.QMessageBox.question", return_value=QMessageBox.StandardButton.Discard):
+        getattr(project, f"{action}_project")()
+        wait(widget)
+    choose.assert_called_once()
+    assert not project._loading and project._job is None
+    assert project.timer.isActive() and not project._closing_approved
+    assert project.path == str(path) and project.dirty is not accepted
+    if not accepted:
+        assert tuple(project.entries) == entries and project._saved == saved
+
+
 def test_replacement_cancel_keeps_edits_and_prepared_resources_clean(dialogs, tmp_path):
     _, still = sources(tmp_path)
     widget = dialogs("gif")

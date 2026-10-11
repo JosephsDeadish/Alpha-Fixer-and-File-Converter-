@@ -362,16 +362,21 @@ class EditorProjectController(QObject):
     def save_project(self, _checked=False):
         if self._busy():
             return False
-        path, _ = QFileDialog.getSaveFileName(
-            self.dialog, "Save Editable Project", self.path, f"{self.kind.upper()} Project (*.{self.kind}project.json)")
-        if not path:
-            return False
-        chosen_path = path
-        if not path.lower().endswith(".json"):
-            path += f".{self.kind}project.json"
-        from ._ui_utils import confirm_normalized_save_path
-        if not confirm_normalized_save_path(self.dialog, chosen_path, path):
-            return False
+        # Native pickers/overwrite prompts pump timers too, including during shutdown.
+        self._loading = True
+        try:
+            path, _ = QFileDialog.getSaveFileName(
+                self.dialog, "Save Editable Project", self.path, f"{self.kind.upper()} Project (*.{self.kind}project.json)")
+            if not path:
+                return False
+            chosen_path = path
+            if not path.lower().endswith(".json"):
+                path += f".{self.kind}project.json"
+            from ._ui_utils import confirm_normalized_save_path
+            if not confirm_normalized_save_path(self.dialog, chosen_path, path):
+                return False
+        finally:
+            self._loading = False
         return self._save(path)
 
     def autosave(self):
@@ -389,8 +394,12 @@ class EditorProjectController(QObject):
     def open_project(self, _checked=False):
         if self._busy():
             return
-        path, _ = QFileDialog.getOpenFileName(
-            self.dialog, "Open Editable Project", self.path, f"{self.kind.upper()} Project (*.json)")
+        self._loading = True
+        try:
+            path, _ = QFileDialog.getOpenFileName(
+                self.dialog, "Open Editable Project", self.path, f"{self.kind.upper()} Project (*.json)")
+        finally:
+            self._loading = False
         if path:
             self.load(path)
 
@@ -645,10 +654,15 @@ class EditorProjectController(QObject):
             self.status.setText("Wait for project I/O to finish before closing")
             return False
         if self.dirty:
-            answer = QMessageBox.question(
-                self.dialog, "Unsaved Project", "Save editable project before closing?",
-                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
-                QMessageBox.StandardButton.Cancel)
+            # Do not let the nested modal event loop start I/O after the busy check.
+            self._loading = True
+            try:
+                answer = QMessageBox.question(
+                    self.dialog, "Unsaved Project", "Save editable project before closing?",
+                    QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+                    QMessageBox.StandardButton.Cancel)
+            finally:
+                self._loading = False
             if answer == QMessageBox.StandardButton.Cancel:
                 return False
             if answer == QMessageBox.StandardButton.Save:
