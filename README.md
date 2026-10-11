@@ -402,6 +402,16 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Bounded Linux X11 qualification used Qt's `xcb` platform with Xvfb/Openbox at
+verified device-pixel ratios 1, 1.5 and 2. Sixteen existing Alpha, Converter, GIF
+and Video layout/keyboard checks passed per scale (48 executions), including
+480×400 windows, 32px fonts and Dark/Light themes. One existing real MainWindow
+builder/queued-status teardown test also passed. Initial focus assertions raced
+X11 window activation; execution-only synchronization waited for window exposure
+and activation before event pumping. No production defect was reproduced.
+These simulated-display results do not certify physical DPI, screen readers,
+monitor hot-plug, sustained lifecycle stability or Windows/macOS behavior.
+
 Undocked comparison dialogs fit their available screen after attached controls
 and window decorations are laid out, instead of opening larger than compact
 displays. Simulated-screen/font/theme checks cover bounds and keyboard redocking;
