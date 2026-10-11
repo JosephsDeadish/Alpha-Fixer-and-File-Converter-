@@ -451,6 +451,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Video trim controls now include precise numeric entry for inclusive, zero-based
+source-frame boundaries. The timeline has a synchronized numeric entry for its
+zero-based rendered output frame. Keyboard-entry, selection, undo/redo and timing
+regressions cover these controls. Frame entry is not a full seconds/timecode
+editor or waveform navigator; synchronized audible preview/device handling,
+multipage TIFF preservation and release/accessibility qualification remain work.
+
 Opening Video projects offers to locate missing media once per unique source.
 Replacement files must match the saved SHA-256 identity; verification and decoding
 remain asynchronous. Cancellation or preparation failure keeps the current editor

@@ -3171,14 +3171,14 @@ class VideoToolDialog(QDialog):
 
         self._btn_remove = QPushButton("🗑  Remove")
         self._btn_remove.setToolTip("Remove selected clip.  Shortcut: Delete")
-        self._btn_remove.clicked.connect(self._remove_selected)
+        self._btn_remove.clicked.connect(lambda _checked: self._remove_selected())
         tb.addWidget(self._btn_remove)
 
         self._btn_split = QPushButton("✂  Split at Playhead")
         self._btn_split.setToolTip(
             "Split the clip under the current playhead so you can insert media between the two parts.  Shortcut: Ctrl+E"
         )
-        self._btn_split.clicked.connect(self._split_clip_at_playhead)
+        self._btn_split.clicked.connect(lambda _checked: self._split_clip_at_playhead())
         tb.addWidget(self._btn_split)
         left_layout.addLayout(tb)
         history_row = QHBoxLayout()
@@ -3187,7 +3187,7 @@ class VideoToolDialog(QDialog):
         self._btn_clear = QPushButton("Clear Timeline")
         for button, slot in ((self._btn_undo, self._undo), (self._btn_redo, self._redo),
                              (self._btn_clear, self._clear_all)):
-            button.clicked.connect(slot)
+            button.clicked.connect(lambda _checked, action=slot: action())
             history_row.addWidget(button)
         left_layout.addLayout(history_row)
 
@@ -3263,7 +3263,8 @@ class VideoToolDialog(QDialog):
 
         # Start trim
         start_row = QHBoxLayout()
-        start_row.addWidget(QLabel("In:"))
+        start_label = QLabel("In:")
+        start_row.addWidget(start_label)
         self._trim_start_slider = _make_hslider(0, 0, 0)
         self._trim_start_slider.setToolTip("Drag to set the clip's start (in) point.")
         self._trim_start_slider.valueChanged.connect(self._on_trim_start_changed)
@@ -3272,11 +3273,19 @@ class VideoToolDialog(QDialog):
         self._trim_start_lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._trim_start_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         start_row.addWidget(self._trim_start_lbl)
+        self._trim_start_spin = QSpinBox()
+        self._trim_start_spin.setRange(0, 0)
+        self._trim_start_spin.setKeyboardTracking(False)
+        self._trim_start_spin.setToolTip("Inclusive trim start: source frame index, starting at 0.")
+        self._trim_start_spin.valueChanged.connect(self._trim_start_slider.setValue)
+        start_label.setBuddy(self._trim_start_spin)
+        start_row.addWidget(self._trim_start_spin)
         trim_vl.addLayout(start_row)
 
         # End trim
         end_row = QHBoxLayout()
-        end_row.addWidget(QLabel("Out:"))
+        end_label = QLabel("Out:")
+        end_row.addWidget(end_label)
         self._trim_end_slider = _make_hslider(0, 0, 0)
         self._trim_end_slider.setToolTip("Drag to set the clip's end (out) point.")
         self._trim_end_slider.valueChanged.connect(self._on_trim_end_changed)
@@ -3285,7 +3294,17 @@ class VideoToolDialog(QDialog):
         self._trim_end_lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._trim_end_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         end_row.addWidget(self._trim_end_lbl)
+        self._trim_end_spin = QSpinBox()
+        self._trim_end_spin.setRange(0, 0)
+        self._trim_end_spin.setKeyboardTracking(False)
+        self._trim_end_spin.setToolTip("Inclusive trim end: source frame index, starting at 0.")
+        self._trim_end_spin.valueChanged.connect(self._trim_end_slider.setValue)
+        end_label.setBuddy(self._trim_end_spin)
+        end_row.addWidget(self._trim_end_spin)
         trim_vl.addLayout(end_row)
+        trim_units = QLabel("In / Out: source frames, 0-based; both endpoints included.")
+        trim_units.setWordWrap(True)
+        trim_vl.addWidget(trim_units)
 
         self._clip_info_lbl = QLabel("")
         self._clip_info_lbl.setProperty("toolGuidance", True)
@@ -3405,7 +3424,20 @@ class VideoToolDialog(QDialog):
         self._scrubber = _make_hslider(0, 0, 0)
         self._scrubber.setToolTip("Drag to scrub through the timeline.")
         self._scrubber.valueChanged.connect(self._on_scrub)
-        pv_layout.addWidget(self._scrubber)
+        scrub_row = QHBoxLayout()
+        scrub_label = QLabel("Output frame (0-based):")
+        scrub_label.setWordWrap(True)
+        scrub_row.addWidget(scrub_label)
+        scrub_row.addWidget(self._scrubber, 1)
+        self._playhead_spin = QSpinBox()
+        self._playhead_spin.setRange(0, 0)
+        self._playhead_spin.setKeyboardTracking(False)
+        self._playhead_spin.setToolTip(
+            "Rendered output frame index, starting at 0; includes clip speed and still-image holds.")
+        self._playhead_spin.valueChanged.connect(self._scrubber.setValue)
+        scrub_label.setBuddy(self._playhead_spin)
+        scrub_row.addWidget(self._playhead_spin)
+        pv_layout.addLayout(scrub_row)
 
         # Transport
         ctrl = QHBoxLayout()
@@ -3425,6 +3457,7 @@ class VideoToolDialog(QDialog):
 
         self._pos_lbl = QLabel("0 / 0")
         self._pos_lbl.setObjectName("subheader")
+        self._pos_lbl.setToolTip("Current frame / total frames (1-based display count).")
         ctrl.addWidget(self._pos_lbl)
         ctrl.addStretch()
         pv_layout.addLayout(ctrl)
@@ -3649,9 +3682,9 @@ class VideoToolDialog(QDialog):
         splitter.addWidget(right_inner)
         splitter.setSizes([240, 420, 260])
         self._responsive_rows = [
-            tb, insert_row, import_detail_actions, start_row, end_row,
+            tb, history_row, insert_row, import_detail_actions, start_row, end_row,
             video_stream_row, audio_stream_row, clip_speed_row, still_row,
-            ctrl, audio_row, preview_volume_row, fps_row, fl_layout, fmt_row, audio_volume_row,
+            scrub_row, ctrl, audio_row, preview_volume_row, fps_row, fl_layout, fmt_row, audio_volume_row,
         ]
         self._responsive_rows.extend(
             adj_vl.itemAt(i).layout() for i in range(adj_vl.count())
@@ -3674,9 +3707,12 @@ class VideoToolDialog(QDialog):
             (self._audio_stream_picker_combo, "Selected clip audio stream"),
             (self._trim_start_slider, "Clip trim start (frames)"),
             (self._trim_end_slider, "Clip trim end (frames)"),
+            (self._trim_start_spin, "Inclusive trim start (0-based source frame)"),
+            (self._trim_end_spin, "Inclusive trim end (0-based source frame)"),
             (self._clip_speed_slider, "Selected clip speed (percent)"),
             (self._still_duration_spin, "Still image duration (frames)"),
             (self._scrubber, "Video preview frame"),
+            (self._playhead_spin, "Playhead (0-based rendered output frame)"),
             (self._fps_slider, "Timeline frame rate (frames per second)"),
             (self._filter_combo, "Video filter"),
             (self._export_fmt_combo, "Video export format"),
@@ -3847,6 +3883,16 @@ class VideoToolDialog(QDialog):
     def event(self, event):
         if reserve_space_for_focused_control(self, event):
             return True
+        if (event.type() == QEvent.Type.KeyPress
+                and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+                and hasattr(self, "_playhead_spin")):
+            focused = QApplication.focusWidget()
+            if any(focused is spin or (focused is not None and spin.isAncestorOf(focused))
+                   for spin in (self._trim_start_spin, self._trim_end_spin, self._playhead_spin)):
+                # The spin box already committed the entry; do not activate a
+                # dialog default button when its Return event bubbles up.
+                event.accept()
+                return True
         if (event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange)
                 and hasattr(self, "_layout_timer")):
             self._layout_timer.start(0)
@@ -3869,12 +3915,15 @@ class VideoToolDialog(QDialog):
         mgr.register(self._clip_list, "video_timeline")
         mgr.register(self._trim_start_slider, "video_trim")
         mgr.register(self._trim_end_slider, "video_trim")
+        mgr.register(self._trim_start_spin, "video_trim")
+        mgr.register(self._trim_end_spin, "video_trim")
         mgr.register(self._clip_info_lbl, "video_trim")
         mgr.register(self._clip_speed_slider, "video_trim")
         mgr.register(self._still_duration_spin, "video_trim")
         mgr.register(self._timing_hint_lbl, "video_trim")
         mgr.register(self._preview_lbl, "video_preview")
         mgr.register(self._scrubber, "video_preview")
+        mgr.register(self._playhead_spin, "video_preview")
         mgr.register(self._btn_rewind, "video_preview")
         mgr.register(self._btn_play, "video_preview")
         mgr.register(self._fps_slider, "video_preview")
@@ -4578,9 +4627,11 @@ class VideoToolDialog(QDialog):
         self._btn_rewind.setEnabled(has_clips)
         self._btn_play.setEnabled(can_play)
         self._scrubber.setEnabled(can_play)
+        self._playhead_spin.setEnabled(can_play)
         self._btn_export.setEnabled(has_clips)
         self._trim_start_slider.setEnabled(has_selection)
         self._trim_end_slider.setEnabled(has_selection)
+        self._sync_trim_frame_entries()
         if not has_selection:
             self._trim_start_lbl.setText("0")
             self._trim_end_lbl.setText("0")
@@ -4957,6 +5008,7 @@ class VideoToolDialog(QDialog):
                 self._trim_start_slider.setValue(clip.trim_start)
                 self._trim_start_slider.blockSignals(False)
                 self._trim_start_lbl.setText(str(clip.trim_start))
+                self._sync_trim_frame_entries()
                 return
             clip._split_timing = None
             clip.trim_start = min(val, clip.trim_end)
@@ -4983,6 +5035,7 @@ class VideoToolDialog(QDialog):
                 self._trim_end_slider.setValue(clip.trim_end)
                 self._trim_end_slider.blockSignals(False)
                 self._trim_end_lbl.setText(str(clip.trim_end))
+                self._sync_trim_frame_entries()
                 return
             clip._split_timing = None
             clip.trim_end = max(val, clip.trim_start)
@@ -4998,6 +5051,21 @@ class VideoToolDialog(QDialog):
             self._update_ui_state()
         else:
             self._trim_end_lbl.setText(str(val))
+
+    def _sync_trim_frame_entries(self) -> None:
+        row = self._clip_list.currentRow()
+        clip = self._clips[row] if 0 <= row < len(self._clips) else None
+        for spin, minimum, maximum, value in (
+            (self._trim_start_spin, 0, clip.trim_end if clip else 0,
+             clip.trim_start if clip else 0),
+            (self._trim_end_spin, clip.trim_start if clip else 0,
+             max(0, clip.total_frames - 1) if clip else 0, clip.trim_end if clip else 0),
+        ):
+            blocked = spin.blockSignals(True)
+            spin.setRange(minimum, maximum)
+            spin.setValue(value)
+            spin.blockSignals(blocked)
+            spin.setEnabled(clip is not None)
 
     def _update_timing_controls(self) -> None:
         row = self._clip_list.currentRow()
@@ -5199,8 +5267,15 @@ class VideoToolDialog(QDialog):
         self._scrubber.setRange(0, total)
         self._scrubber.setValue(current)
         self._scrubber.blockSignals(False)
+        self._sync_playhead_frame_entry()
         self._pos_lbl.setText(f"{(current + 1) if total_frames else 0} / {total_frames}")
         self._update_export_summary()
+
+    def _sync_playhead_frame_entry(self) -> None:
+        blocked = self._playhead_spin.blockSignals(True)
+        self._playhead_spin.setRange(0, self._scrubber.maximum())
+        self._playhead_spin.setValue(self._scrubber.value())
+        self._playhead_spin.blockSignals(blocked)
 
     def _global_frame_to_clip(self, global_idx: int):
         idx = global_idx
@@ -5212,6 +5287,7 @@ class VideoToolDialog(QDialog):
         return max(0, len(self._clips) - 1), 0
 
     def _update_preview(self) -> None:
+        self._sync_playhead_frame_entry()
         if not self._preview_advancing:
             self._reset_preview_clock()
         self._sync_preview_audio(force=not self._preview_advancing)

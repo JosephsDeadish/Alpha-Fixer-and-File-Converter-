@@ -60,13 +60,17 @@ def visible(video, control):
 def controls(video):
     return [
         video._btn_add_img, video._btn_remove, video._btn_split,
+        video._btn_undo, video._btn_clear,
         video._insert_mode_combo, video._import_detail_toggle_btn,
         video._import_copy_btn, video._clip_list, video._trim_start_slider,
-        video._trim_end_slider, video._clip_speed_slider,
-        video._scrubber, video._btn_rewind, video._btn_play, video._fps_slider,
+        video._trim_start_spin, video._trim_end_slider, video._trim_end_spin,
+        video._clip_speed_slider, video._scrubber, video._playhead_spin,
+        video._btn_rewind, video._btn_play, video._preview_audio_check,
+        video._preview_mute_check, video._preview_volume_slider, video._fps_slider,
         video._brightness_slider, video._contrast_slider, video._saturation_slider,
         video._sharpness_slider, video._black_slider, video._white_slider,
-        video._filter_combo, video._export_fmt_combo, video._btn_export,
+        video._filter_combo, video._export_fmt_combo, video._audio_enable_check,
+        video._audio_mute_check, video._audio_volume_slider, video._btn_export,
     ]
 
 
@@ -87,6 +91,8 @@ def test_compact_geometry_focus_and_resize_preserves_media(app, video, theme, pi
     for control in controls(video):
         assert control.width() >= control.minimumSizeHint().width()
         assert control.height() >= control.minimumSizeHint().height()
+        if not control.isEnabled():
+            continue
         control.setFocus()
         settle(app)
         assert app.focusWidget() is control
@@ -118,6 +124,8 @@ def test_keyboard_tab_details_trim_speed_scrub_and_actions(app, video):
     settle(app)
     video._btn_add_img.setFocus()
     for control in controls(video):
+        if not control.isEnabled():
+            continue
         # Reset All is an additional focusable control between adjustments/filter.
         if control is video._filter_combo:
             QTest.keyClick(app.focusWidget(), Qt.Key.Key_Tab)
