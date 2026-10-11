@@ -8,8 +8,9 @@ import pytest
 from PIL import Image
 from PyQt6 import sip
 from PyQt6.QtCore import QPoint, Qt
+from PyQt6.QtGui import QFont
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication, QLabel
+from PyQt6.QtWidgets import QApplication, QLabel, QWidget
 
 from src.core.presets import PresetManager
 from src.core.settings_manager import SettingsManager
@@ -45,6 +46,9 @@ def alpha(app):
         widget._preview_debounce.stop()
         widget._update_compare()
         widget._btn_undo_batch.show()
+        assert not widget._advanced_toggle.isChecked()
+        assert all(control.isHidden() for control in widget._advanced_controls)
+        widget._advanced_toggle.setChecked(True)
         try:
             yield widget
         finally:
@@ -76,7 +80,8 @@ def controls(widget):
         widget._suffix_edit, widget._file_list, widget._alpha_vis_check,
         widget._atlas_detect_check, widget._compare, widget._btn_run,
         widget._btn_undo_batch, widget._clamp_min_spin, widget._clamp_max_spin,
-        widget._invert_check, widget._binary_cut_check, widget._threshold_spin,
+        widget._invert_check, widget._advanced_toggle,
+        widget._binary_cut_check, widget._threshold_spin,
         widget._red_spin, widget._green_spin, widget._blue_spin,
         widget._alpha_delta_spin, widget._apply_rgb_check, widget._log,
     ]
@@ -108,7 +113,7 @@ def test_compact_geometry_focus_resize_preserves_preview(app, alpha, theme, pixe
         if label.isVisible() and label.text():
             assert label.width() >= label.minimumSizeHint().width()
             if label.hasHeightForWidth():
-                assert label.height() >= label.heightForWidth(label.width())
+                assert label.height() >= label.heightForWidth(label.width()), label.text()
     alpha.resize(2400, 1400)
     settle(app)
     assert alpha._splitter.orientation() == Qt.Orientation.Horizontal
@@ -236,3 +241,124 @@ def test_progress_preserves_manually_scrolled_viewport(app, alpha):
             settle(app)
             assert app.focusWidget() is alpha._file_list
             assert bar.value() == position
+
+
+@pytest.mark.parametrize("size,pixels", [((480, 400), 32), ((1200, 800), 13)])
+def test_disclosure_preserves_active_settings_pixels_and_focus(app, alpha, size, pixels):
+    alpha.setStyleSheet(build_stylesheet() + f"\nQWidget {{ font-size: {pixels}px; }}")
+    alpha.resize(*size)
+    alpha.show()
+    settle(app)
+    alpha._threshold_spin.setValue(128)
+    alpha._binary_cut_check.setChecked(True)
+    alpha._red_spin.setValue(7)
+    alpha._alpha_delta_spin.setValue(-10)
+    alpha._apply_rgb_check.setChecked(True)
+    alpha._preview_debounce.stop()
+    alpha._update_compare()
+    params = alpha._build_manual_params()
+    image = alpha._compare.after_image().copy()
+    request = alpha._preview_request_id
+    stats = alpha._after_stats_lbl.text()
+    assert alpha._threshold_label.buddy() is alpha._threshold_spin
+    assert alpha._threshold_spin.accessibleName() == "Binary cutoff (0–255)"
+    assert "At 0, all pixels become opaque" in alpha._threshold_spin.accessibleDescription()
+    alpha._red_spin.setFocus()
+    alpha._advanced_toggle.setChecked(False)
+    settle(app)
+    assert app.focusWidget() is alpha._advanced_toggle
+    visible(alpha, alpha._advanced_toggle)
+    assert all(control.isHidden() for control in alpha._advanced_controls)
+    assert not alpha._advanced_status.isHidden()
+    assert "binary cut at 128" in alpha._advanced_status.text()
+    assert "RGBA R +7, A -10" in alpha._advanced_status.text()
+    assert "2 on" in alpha._advanced_toggle.text()
+    assert alpha._compare.after_image() == image
+    assert alpha._build_manual_params() == params
+    assert alpha._preview_request_id == request
+    assert alpha._after_stats_lbl.text() == stats
+    assert not alpha._preview_debounce.isActive()
+    QTest.keyClick(alpha._advanced_toggle, Qt.Key.Key_Space)
+    settle(app)
+    assert all(not control.isHidden() for control in alpha._advanced_controls)
+    assert alpha._compare.after_image() == image
+    assert alpha._build_manual_params() == params
+    assert alpha._preview_request_id == request
+    assert not alpha._preview_debounce.isActive()
+    QTest.keyClick(alpha._advanced_toggle, Qt.Key.Key_Tab)
+    assert app.focusWidget() is alpha._binary_cut_check
+    alpha._apply_rgb_check.setChecked(False)
+    alpha._binary_cut_check.setChecked(False)
+    alpha._advanced_toggle.setChecked(False)
+    assert "selective threshold 128" in alpha._advanced_status.text()
+    assert "Saved RGBA deltas (disabled): R +7, A -10" in alpha._advanced_status.text()
+    assert alpha._threshold_spin.accessibleName() == "Selective threshold (0–255)"
+
+
+def test_basic_default_and_keyboard_skips_collapsed_controls(app, alpha):
+    alpha._advanced_toggle.setChecked(False)
+    alpha.resize(640, 480)
+    alpha.show()
+    settle(app)
+    assert "no processing changes" in alpha._advanced_status.text()
+    assert "0 processes all pixels" in alpha._advanced_status.text()
+    alpha._advanced_toggle.setFocus()
+    QTest.keyClick(alpha._advanced_toggle, Qt.Key.Key_Tab)
+    assert app.focusWidget() is alpha._log
+    QTest.keyClick(alpha._log, Qt.Key.Key_Backtab)
+    assert app.focusWidget() is alpha._advanced_toggle
+
+
+def test_packaged_root_style_guidance_height(app, alpha):
+    """Use the launch font and application stylesheet, not a tab-local override."""
+    previous_font, previous_style = app.font(), app.styleSheet()
+    root = QWidget()
+    root.setFixedSize(1024, 768)
+    alpha.setParent(root)
+    alpha.setGeometry(0, 190, 1024, 556)
+    try:
+        app.setFont(QFont("Segoe UI", 10))
+        app.setStyleSheet(build_stylesheet(DEFAULT_THEME) + "\nQWidget { font-size: 13px; }")
+        alpha._advanced_toggle.setChecked(False)
+        root.show()
+        alpha.show()
+        settle(app)
+        for label in alpha._content.findChildren(QLabel):
+            if label.isVisible() and label.text():
+                assert label.hasHeightForWidth(), label.text()
+                assert label.height() >= label.heightForWidth(label.width()), label.text()
+        hint = alpha._responsive_grids[1][1][0][0]
+        assert hint.geometry().bottom() < alpha._clamp_min_spin.geometry().top()
+        assert (alpha._preview_hint_lbl.geometry().bottom()
+                < alpha._preview_helper_lbl.geometry().top())
+        assert (alpha._preview_helper_lbl.geometry().bottom()
+                < alpha._compare.geometry().top())
+    finally:
+        alpha.setParent(None)
+        root.close()
+        sip.delete(root)
+        app.setStyleSheet(previous_style)
+        app.setFont(previous_font)
+
+
+def test_wrapped_label_minimum_shrinks_after_widening_and_shorter_text(app, alpha):
+    alpha.setStyleSheet(build_stylesheet() + "\nQWidget { font-size: 32px; }")
+    label = QLabel("Wrapped guidance must remain readable. " * 20, alpha._content)
+    label.setFixedWidth(160)
+    alpha._reflow_controls()
+    narrow_height = label.minimumHeight()
+    assert narrow_height > label.fontMetrics().height() * 2
+
+    label.setFixedWidth(800)
+    alpha._reflow_controls()
+    wide_height = label.minimumHeight()
+    assert 0 < wide_height < narrow_height
+
+    label.setText("Short")
+    alpha._reflow_controls()
+    short_height = label.minimumHeight()
+    assert 0 < short_height < wide_height
+    label.setMinimumHeight(0)
+    assert short_height == label.heightForWidth(label.width())
+    alpha._reflow_controls()
+    assert label.minimumHeight() == short_height

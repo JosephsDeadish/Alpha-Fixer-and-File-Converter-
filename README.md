@@ -451,6 +451,17 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Alpha Adjuster distinguishes Basic alpha-range controls from an accessible
+Advanced disclosure for cutoff, selective processing and RGBA adjustments.
+An always-visible summary describes retained advanced settings; collapsing does
+not reset them. Wrapped guidance recomputes its height when width or text changes.
+The rebuilt Linux folder bundle passed 28 packaged self-tests. Twelve packaged
+window configurations (two sizes, three scales, two themes) were exercised before
+follow-up clipping fixes; that full matrix has not been rerun on the final artifact.
+Final source checks passed 38 tests and X11 geometry checks passed two tests.
+Final screenshot review and exact packaged Advanced keyboard activation remain
+unverified; duplicated guidance still needs visual simplification.
+
 Video trim and playhead controls offer seconds alongside exact frame indices.
 Trim seconds use source FPS; inclusive Out identifies the last retained frame's
 timestamp, not the clip duration. Playhead seconds use output FPS after timeline

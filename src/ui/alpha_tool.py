@@ -624,10 +624,13 @@ class AlphaFixerTab(QWidget):
         right = QWidget()
         rv = QVBoxLayout(right)
         rv.setContentsMargins(4, 0, 0, 0)
-        rv.setSpacing(6)
+        rv.setSpacing(10)
 
         # Run controls – at the very top so the Process button is always
         # immediately visible when the tab is opened.
+        run_heading = QLabel("Process batch")
+        run_heading.setObjectName("section")
+        rv.addWidget(run_heading)
         run_row = QHBoxLayout()
         self._btn_run = QPushButton("▶  Process  [F5]")
         self._btn_run.setObjectName("accent")
@@ -678,7 +681,7 @@ class AlphaFixerTab(QWidget):
         gt_layout.setVerticalSpacing(8)
 
         # Brief hint so users immediately understand the workflow.
-        hint_lbl = QLabel(
+        range_help = (
             "ℹ  Normalize the alpha channel to a new range.  "
             "The image's darkest pixel maps to Min, the brightest maps to Max — "
             "all others scale proportionally in between.  "
@@ -686,6 +689,11 @@ class AlphaFixerTab(QWidget):
             "clamped: below Min → Min, above Max → Max, within [Min, Max] → unchanged.  "
             "Set Min = Max to force every pixel to exactly that value."
         )
+        hint_lbl = QLabel(
+            "Basic · Set the output alpha range and optionally invert transparency. "
+            "For a fixed opacity, set Min = Max. Review the preview before processing."
+        )
+        hint_lbl.setToolTip(range_help)
         hint_lbl.setObjectName("subheader")
         hint_lbl.setWordWrap(True)
         hint_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -739,7 +747,7 @@ class AlphaFixerTab(QWidget):
         )
         gt_layout.addWidget(self._invert_check, 3, 0, 1, 2)
 
-        self._binary_cut_check = QCheckBox("Binary cut (\u2265 threshold \u2192 255, else \u2192 0)")
+        self._binary_cut_check = QCheckBox("Binary cut (hard transparent / opaque split)")
         self._binary_cut_check.setToolTip(
             "Hard cutout mask: pixels with alpha ≥ threshold become fully opaque (255),\n"
             "pixels below threshold become fully transparent (0).\n"
@@ -748,14 +756,31 @@ class AlphaFixerTab(QWidget):
         )
         gt_layout.addWidget(self._binary_cut_check, 4, 0, 1, 2)
 
-        # ── Advanced separator ──────────────────────────────────────────────────
-        adv_sep = QLabel("─── Advanced Options ───")
-        adv_sep.setObjectName("subheader")
-        adv_sep.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # ── Advanced disclosure ─────────────────────────────────────────────────
+        adv_sep = QPushButton("▶  Advanced")
+        self._advanced_toggle = adv_sep
+        adv_sep.setCheckable(True)
+        adv_sep.setAccessibleName("Show advanced alpha and RGBA settings")
+        adv_sep.setAccessibleDescription(
+            "Expand or collapse binary cut, threshold and channel adjustments. "
+            "Collapsing keeps all values and enabled processing settings."
+        )
         gt_layout.addWidget(adv_sep, 5, 0, 1, 2)
+        self._advanced_hint = QLabel(
+            "Advanced · Binary cut, selective threshold and RGBA deltas. "
+            "Collapsing only hides controls; enabled settings still apply."
+        )
+        self._advanced_hint.setWordWrap(True)
+        self._advanced_hint.setProperty("toolGuidance", True)
+        gt_layout.addWidget(self._advanced_hint, 8, 0, 1, 2)
+        self._advanced_status = QLabel()
+        self._advanced_status.setWordWrap(True)
+        self._advanced_status.setProperty("toolGuidance", True)
+        gt_layout.addWidget(self._advanced_status, 9, 0, 1, 2)
 
         # ── Threshold (advanced) ────────────────────────────────────────────────
-        lbl_thresh = QLabel("Threshold (0 = all pixels):")
+        lbl_thresh = QLabel("Selective threshold (0–255):")
+        self._threshold_label = lbl_thresh
         lbl_thresh.setMinimumHeight(24)
         lbl_thresh.setToolTip(
             "When set above 0 (and Binary cut is OFF): pixels with alpha >= threshold\n"
@@ -847,6 +872,18 @@ class AlphaFixerTab(QWidget):
             label.setBuddy(control)
             control.setAccessibleName(label.text().rstrip(":"))
         self._threshold_spin.setAccessibleDescription(lbl_thresh.toolTip())
+        self._advanced_controls = (
+            self._binary_cut_check, lbl_thresh, self._threshold_spin, rgb_sep,
+            lbl_red, self._red_spin, lbl_green, self._green_spin,
+            lbl_blue, self._blue_spin, lbl_alpha_adj, self._alpha_delta_spin,
+            self._apply_rgb_check,
+        )
+        for control in self._advanced_controls:
+            control.hide()
+        QWidget.setTabOrder(self._invert_check, self._advanced_toggle)
+        QWidget.setTabOrder(self._advanced_toggle, self._binary_cut_check)
+        QWidget.setTabOrder(self._binary_cut_check, self._threshold_spin)
+        self._advanced_toggle.toggled.connect(self._set_advanced_expanded)
 
         rv.addWidget(grp_tune)
 
@@ -877,11 +914,12 @@ class AlphaFixerTab(QWidget):
                          (lbl_suffix, self._suffix_edit))),
             (gt_layout, ((hint_lbl,), (lbl_cmin, self._clamp_min_spin),
                          (lbl_cmax, self._clamp_max_spin), (self._invert_check,),
-                         (self._binary_cut_check,), (adv_sep,),
-                         (lbl_thresh, self._threshold_spin), (self._finetune_params_lbl,),
+                         (adv_sep,), (self._advanced_hint,), (self._advanced_status,),
+                         (self._binary_cut_check,), (lbl_thresh, self._threshold_spin),
                          (rgb_sep,), (lbl_red, self._red_spin),
                          (lbl_green, self._green_spin), (lbl_blue, self._blue_spin),
-                         (lbl_alpha_adj, self._alpha_delta_spin), (self._apply_rgb_check,))),
+                         (lbl_alpha_adj, self._alpha_delta_spin), (self._apply_rgb_check,),
+                         (self._finetune_params_lbl,))),
         )
         self._compact_texts = (
             (self._invert_check, "Invert alpha"),
@@ -999,12 +1037,80 @@ class AlphaFixerTab(QWidget):
                 control.setMinimumHeight(control.minimumSizeHint().height())
             elif isinstance(control, QLabel):
                 control.setWordWrap(True)
-                control.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+                policy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+                policy.setHeightForWidth(True)
+                control.setSizePolicy(policy)
+                # Splitter/scroll layouts can shrink wrapped labels below their
+                # height-for-width hint; keep the text's current width protected.
+                # QLabel clamps its hint to the existing minimum, so clear it first.
+                control.setMinimumHeight(0)
+                control.setMinimumHeight(max(0, control.heightForWidth(control.width())))
+                control.installEventFilter(self)
         # Compact overflow belongs to the outer scroll, not tiny nested viewports.
         for scroll in (self._left_scroll, self._right_scroll):
             scroll.setMinimumHeight(scroll.widget().minimumSizeHint().height() if compact else 0)
         if self._reveal_after_reflow:
             self._focus_timer.start(0)
+
+    def _set_advanced_expanded(self, expanded: bool) -> None:
+        focused = QApplication.focusWidget()
+        if not expanded and any(
+            focused is control or (focused is not None and control.isAncestorOf(focused))
+            for control in self._advanced_controls
+        ):
+            self._advanced_toggle.setFocus()
+        for control in self._advanced_controls:
+            control.setVisible(expanded)
+        self._refresh_advanced_status()
+        self._layout_timer.start(0)
+
+    def _refresh_advanced_status(self) -> None:
+        binary = self._binary_cut_check.isChecked()
+        threshold = self._threshold_spin.value()
+        label = "Binary cutoff (0–255):" if binary else "Selective threshold (0–255):"
+        self._threshold_label.setText(label)
+        self._threshold_spin.setAccessibleName(label.rstrip(":"))
+        meaning = (
+            "Alpha at or above the cutoff becomes 255; below it becomes 0, "
+            "before the output range clamp. At 0, all pixels become opaque."
+            if binary else
+            "0 processes all pixels. Above 0, alpha at or above the threshold "
+            "is protected; only lower values are inverted or scaled."
+        )
+        self._threshold_spin.setAccessibleDescription(meaning)
+        active = []
+        if binary:
+            active.append(f"binary cut at {threshold}")
+        elif threshold:
+            active.append(f"selective threshold {threshold}")
+        deltas = ", ".join(
+            f"{name} {spin.value():+d}"
+            for name, spin in (("R", self._red_spin), ("G", self._green_spin),
+                               ("B", self._blue_spin), ("A", self._alpha_delta_spin))
+            if spin.value()
+        )
+        if self._apply_rgb_check.isChecked():
+            active.append(f"RGBA {deltas}" if deltas else "RGBA enabled (zero deltas)")
+        retained = (
+            f" Saved RGBA deltas (disabled): {deltas}."
+            if deltas and not self._apply_rgb_check.isChecked() else ""
+        )
+        self._advanced_status.setText(
+            ("Advanced active: " + "; ".join(active) + "." if active
+             else "Advanced: no processing changes.") + retained + " " + meaning
+        )
+        expanded = self._advanced_toggle.isChecked()
+        self._advanced_toggle.setText(
+            f"{'▼' if expanded else '▶'}  Advanced"
+            + (f" · {len(active)} on" if active else "")
+        )
+        self._advanced_toggle.setAccessibleName(
+            ("Hide" if expanded else "Show") + " advanced alpha and RGBA settings"
+        )
+        self._advanced_toggle.setAccessibleDescription(
+            "Collapsing only hides controls; enabled settings still apply. "
+            + self._advanced_status.text()
+        )
 
     def _schedule_focus_reveal(self, _previous, current):
         if current is not None and self._content.isAncestorOf(current):
@@ -1375,6 +1481,7 @@ class AlphaFixerTab(QWidget):
         if self._binary_cut_check.isChecked():
             parts.append("binary_cut=yes")
         self._finetune_params_lbl.setText("  ·  ".join(parts))
+        self._refresh_advanced_status()
 
     @pyqtSlot()
     def _on_finetune_changed(self, *args):
