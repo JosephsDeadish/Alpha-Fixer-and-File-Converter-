@@ -760,6 +760,7 @@ class AlphaFixerTab(QWidget):
         adv_sep = QPushButton("▶  Advanced")
         self._advanced_toggle = adv_sep
         adv_sep.setCheckable(True)
+        adv_sep.installEventFilter(self)
         adv_sep.setAccessibleName("Show advanced alpha and RGBA settings")
         adv_sep.setAccessibleDescription(
             "Expand or collapse binary cut, threshold and channel adjustments. "
@@ -1139,6 +1140,13 @@ class AlphaFixerTab(QWidget):
                     bar.setValue(bar.value() + delta)
 
     def eventFilter(self, watched, event):
+        if (watched is getattr(self, "_advanced_toggle", None)
+                and event.type() == QEvent.Type.KeyPress
+                and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+                and event.modifiers() == Qt.KeyboardModifier.NoModifier):
+            if not event.isAutoRepeat():
+                self._advanced_toggle.click()
+            return True
         if hasattr(self, "_layout_timer"):
             if event.type() in (QEvent.Type.Resize, QEvent.Type.FontChange, QEvent.Type.StyleChange):
                 # Child resizes from status text must not undo manual scrolling.

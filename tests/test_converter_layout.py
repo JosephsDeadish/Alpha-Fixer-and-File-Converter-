@@ -369,3 +369,23 @@ def test_compact_collapsed_disclosure_wraps_and_is_keyboard_reachable(app, conve
         visible(converter, control)
     assert converter._lbl_fmt.buddy() is converter._fmt_combo
     assert converter._fmt_combo.accessibleName() == "Output format"
+
+
+@pytest.mark.parametrize("attribute", ["_advanced_hint", "_advanced_status"])
+def test_disclosure_guidance_shrinks_after_widening_and_shorter_text(app, converter, attribute):
+    converter.setStyleSheet(build_stylesheet() + "\nQWidget { font-size: 32px; }")
+    label = getattr(converter, attribute)
+    label.setText("Wrapped guidance must remain readable. " * 20)
+    label.setFixedWidth(160)
+    converter._reflow_controls()
+    narrow_height = label.minimumHeight()
+    label.setFixedWidth(800)
+    converter._reflow_controls()
+    wide_height = label.minimumHeight()
+    assert 0 < wide_height < narrow_height
+    label.setText("Short")
+    converter._reflow_controls()
+    short_height = label.minimumHeight()
+    assert 0 < short_height < wide_height
+    label.setMinimumHeight(0)
+    assert short_height == label.heightForWidth(label.width())

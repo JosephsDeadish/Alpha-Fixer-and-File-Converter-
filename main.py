@@ -1809,6 +1809,7 @@ def _unattended_validation_requested() -> bool:
         _runtime_selftest_iterations() > 0
         or _runtime_capability_dump_requested()
         or _smoke_test_duration_ms() > 0
+        or bool(os.environ.get("ALPHA_FIXER_GUI_ACCEPTANCE_OUT"))
     )
 
 
@@ -2271,6 +2272,9 @@ def main():
         QTimer.singleShot(2800, lambda: splash.finish_and_close(window))
 
     window.show()
+    if gui_acceptance_out := os.environ.get("ALPHA_FIXER_GUI_ACCEPTANCE_OUT"):
+        from src.core.gui_acceptance import run_gui_acceptance
+        QTimer.singleShot(1000, lambda: run_gui_acceptance(app, window, gui_acceptance_out))
 
     runtime_notice = str(runtime_capabilities.get("packaged_runtime_notice") or "")
     if runtime_notice:

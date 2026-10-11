@@ -883,6 +883,7 @@ class ConverterTab(QWidget):
             policy = label.sizePolicy()
             policy.setHeightForWidth(True)
             label.setSizePolicy(policy)
+            label.setMinimumHeight(0)
             label.setMinimumHeight(max(0, label.heightForWidth(label.width())))
         # Let the outer scroll area carry compact overflow instead of squeezing
         # the two inner viewports into unusable slivers above the preview.

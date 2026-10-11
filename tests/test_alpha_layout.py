@@ -309,6 +309,42 @@ def test_basic_default_and_keyboard_skips_collapsed_controls(app, alpha):
     assert app.focusWidget() is alpha._advanced_toggle
 
 
+@pytest.mark.parametrize("key", [Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter])
+def test_disclosure_activation_keys_do_not_change_processing(app, alpha, key):
+    alpha.resize(640, 480)
+    alpha.show()
+    alpha._advanced_toggle.setChecked(False)
+    alpha._preview_debounce.stop()
+    settle(app)
+    before = (alpha._build_manual_params(), alpha._preview_request_id,
+              alpha._compare.after_image().copy())
+    alpha._advanced_toggle.setFocus()
+    with patch.object(alpha._settings, "set") as write:
+        for expanded in (True, False):
+            QTest.keyClick(alpha._advanced_toggle, key)
+            settle(app)
+            assert alpha._advanced_toggle.isChecked() is expanded
+            assert app.focusWidget() is alpha._advanced_toggle
+            assert all(control.isHidden() is not expanded
+                       for control in alpha._advanced_controls)
+        write.assert_not_called()
+    assert not alpha._preview_debounce.isActive()
+    assert before == (alpha._build_manual_params(), alpha._preview_request_id,
+                      alpha._compare.after_image())
+
+
+@pytest.mark.parametrize("key", [Qt.Key.Key_Return, Qt.Key.Key_Enter])
+@pytest.mark.parametrize("modifier", [
+    Qt.KeyboardModifier.ControlModifier, Qt.KeyboardModifier.AltModifier,
+    Qt.KeyboardModifier.ShiftModifier, Qt.KeyboardModifier.MetaModifier,
+])
+def test_modified_return_does_not_activate_disclosure(app, alpha, key, modifier):
+    alpha._advanced_toggle.setChecked(False)
+    alpha._advanced_toggle.setFocus()
+    QTest.keyClick(alpha._advanced_toggle, key, modifier)
+    assert not alpha._advanced_toggle.isChecked()
+
+
 def test_packaged_root_style_guidance_height(app, alpha):
     """Use the launch font and application stylesheet, not a tab-local override."""
     previous_font, previous_style = app.font(), app.styleSheet()

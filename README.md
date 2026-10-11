@@ -451,6 +451,26 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Basic/Advanced usability checks now cover Enter/Return activation in Alpha and
+shrinking Converter guidance after widening a window or shortening its text.
+The opt-in `ALPHA_FIXER_GUI_ACCEPTANCE_OUT` launch hook exercises the actual
+application window and writes screenshots/assertion results using private settings.
+Its report cannot certify teardown: acceptance also requires an externally observed
+zero process exit; a signal, timeout or missing report is failure.
+
+A Linux folder bundle built from these changes passed 28 runtime checks and
+eight packaged Alpha/Converter GUI cases at scale 1 on Xvfb/X11, with Dark/Light
+themes, 900×700/1200×800 windows, 16 screenshots and a clean external exit.
+An earlier artifact exercised 24 GUI cases across scales 1/1.5/2, but crashed
+during final teardown at scale 2 (exit 139). The final artifact was only checked
+at scale 1; the higher-scale shutdown failure remains unresolved. Screenshot
+review also leaves further reduction of repeated status/guidance and compact
+scrolling density desirable. These are bounded checks, not release certification.
+Physical audio output, synchronized playback/device behavior, waveform navigation,
+full timecode/export presets, multipage editing and real-corpus qualification
+remain separate work, alongside installers/licensing/signing, physical DPI and
+screen readers, and broader formats with explicit supported limits.
+
 Converter keeps output format and conversion actions in Basic view, with an
 explicit Advanced disclosure for quality, DDS, metadata and resizing. Collapsing
 does not disable options: a summary explains active and retained settings, and

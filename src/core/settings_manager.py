@@ -26,11 +26,17 @@ SELECTIVE_ALPHA_UI_ZONE_COUNT = 7
 def _settings_ini_path() -> str:
     """Return the absolute path to the INI file that stores all settings.
 
-    Priority:
+    GUI acceptance mode uses a private, process-lifetime directory under its
+    report output instead, including writes made during window teardown.
+
+    Normal-launch priority:
     1. Next to the frozen executable (sys.frozen / PyInstaller).
     2. Next to main.py when running from source (three levels up from this
        file: src/core/settings_manager.py → src/core → src → project root).
     """
+    if output_directory := os.environ.get("ALPHA_FIXER_GUI_ACCEPTANCE_OUT"):
+        from .gui_acceptance import acceptance_settings_ini_path
+        return acceptance_settings_ini_path(output_directory)
     if getattr(sys, "frozen", False):
         # Running as a PyInstaller bundle – place the INI next to the .exe
         exe_dir = os.path.dirname(sys.executable)
