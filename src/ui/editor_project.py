@@ -50,7 +50,7 @@ class _ProjectJob(QThread):
         try:
             self.result = self.operation()
         except Exception as error:
-            self.error = str(error)
+            self.error = str(error) or type(error).__name__
 
 
 class EditorProjectController(QObject):
@@ -284,7 +284,13 @@ class EditorProjectController(QObject):
         self.dialog.status_notice.emit(self.status.text(), 10000)
         self._retry_after = time.monotonic() + 30
         if not automatic:
-            QMessageBox.critical(self.dialog, "Project Error", message)
+            # Error dialogs also pump timers and project/close actions.
+            loading = self._loading
+            self._loading = True
+            try:
+                QMessageBox.critical(self.dialog, "Project Error", message)
+            finally:
+                self._loading = loading
 
     def _save(self, destination, *, automatic=False):
         if self._busy():

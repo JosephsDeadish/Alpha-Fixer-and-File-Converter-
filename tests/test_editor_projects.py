@@ -959,6 +959,100 @@ def test_storage_failure_preserves_project_recovery_and_retries(dialogs, tmp_pat
 
 
 @pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("failure", ["missing_directory", "full_write", "empty_error",
+                                    "truncated_project", "truncated_recovery"])
+def test_project_error_modal_blocks_reentry_and_preserves_retry(dialogs, tmp_path, kind, failure):
+    import errno
+    from contextlib import nullcontext
+    from PyQt6.QtCore import QLockFile
+    from src.ui import editor_project
+
+    _, still = sources(tmp_path)
+    widget = dialogs(kind)
+    if kind == "gif":
+        widget._add_paths([str(still)])
+        control = widget._delay_slider
+    else:
+        widget._load_image_paths([str(still)])
+        control = widget._brightness_slider
+    project = widget._project
+    path = tmp_path / "saved.json"
+    save(widget, path)
+    assert project.autosave()
+    wait(widget)
+    control.setValue(control.value() + 10)
+    project.poll()
+    entries = tuple(project.entries)
+    history = tuple(widget._undo_stack), tuple(widget._redo_stack)
+    state = project.path, project._saved, project._autosaved, project._lock
+    before = path.read_bytes(), project.recovery_path.read_bytes()
+    resumed = Mock()
+    project._pending_close = resumed
+    destination = path
+    injection = nullcontext()
+    if failure == "missing_directory":
+        destination = tmp_path / "missing" / "project.json"
+    elif failure in ("full_write", "empty_error"):
+        error = OSError(errno.ENOSPC, "injected full write") if failure == "full_write" else OSError()
+        injection = patch("os.fsync", side_effect=error)
+    else:
+        destination = tmp_path / "truncated.json"
+        destination.write_bytes(b'{"format":')
+        project._pending_close = None
+
+    modal_state = {}
+
+    def error_dialog(*args):
+        modal_state["guarded"] = project._loading and project._job is None
+        if not modal_state["guarded"]:
+            return
+        modal_state["actions"] = [
+            project.autosave(), project._save(tmp_path / "unexpected.json"),
+            project.load(path), project.allow_close(resumed), project.allow_parent_close(resumed),
+        ]
+        # A timer tick must not undo the I/O error by starting another save.
+        project._changed_at -= 6
+        project._retry_after = 0
+        project.poll()
+        modal_state["idle_after_poll"] = project._job is None
+        if failure == "truncated_recovery":
+            probe = QLockFile(str(destination) + ".lock")
+            probe.setStaleLockTime(0)
+            modal_state["recovery_unlocked"] = probe.tryLock(0)
+            probe.unlock()
+
+    with injection, patch.object(editor_project.QMessageBox, "critical", side_effect=error_dialog) as modal:
+        if failure.startswith("truncated"):
+            assert project.load(destination, recovery=failure == "truncated_recovery")
+        else:
+            assert project._save(destination)
+        wait(widget)
+    modal.assert_called_once()
+    assert modal_state["guarded"]
+    assert modal_state["actions"] == [False] * 5
+    assert modal_state["idle_after_poll"]
+    if failure == "truncated_recovery":
+        assert modal_state["recovery_unlocked"]
+    if failure == "empty_error":
+        assert modal.call_args.args[2] == "OSError"
+    resumed.assert_not_called()
+    assert project._pending_close is None
+    assert not project._loading and project.timer.isActive() and project.dirty
+    assert (project.path, project._saved, project._autosaved, project._lock) == state
+    assert tuple(project.entries) == entries
+    assert (tuple(widget._undo_stack), tuple(widget._redo_stack)) == history
+    assert (path.read_bytes(), project.recovery_path.read_bytes()) == before
+    assert project._lock.isLocked()
+    assert not (tmp_path / "unexpected.json").exists()
+    assert not list(tmp_path.rglob(".alpha_fixer_save_*"))
+    assert project._save(path)
+    wait(widget)
+    assert not project.dirty
+    assert tuple(project.entries) == entries
+    assert (tuple(widget._undo_stack), tuple(widget._redo_stack)) == history
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
 def test_malformed_recovery_media_keeps_live_unsaved_session(dialogs, tmp_path, kind):
     source, still = sources(tmp_path)
     writer, reader = dialogs(kind), dialogs(kind)

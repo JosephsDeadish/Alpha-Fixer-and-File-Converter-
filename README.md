@@ -451,6 +451,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Builder project failures retain an error even when an exception has no message,
+and modal error reporting blocks reentrant project/close operations while
+preserving the prior loading state. Generated-media regressions cover missing
+destinations, injected disk-full errors, truncated projects/recoveries, retained
+edits/history/session locks and successful retry. These checks do not qualify
+physical full disks, disconnected storage or complete native recovery workflows.
+
 Builder project close prompts and open/save pickers block competing project I/O,
 autosave and recursive shutdown while their nested modal loops run. Generated-media
 regressions cover modal polling, cancellation and shutdown decisions alongside
