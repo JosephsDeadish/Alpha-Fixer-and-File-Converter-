@@ -553,6 +553,8 @@ class BeforeAfterWidget(QWidget):
         pointing to a hidden dialog, allowing a new one to be opened on the
         next click instead of re-using the existing reference.
         """
+        from ._ui_utils import fit_dialog_to_screen
+
         # If a pop-out dialog is already visible, dock it back.
         if self._popout_dialog is not None and not self._popout_dialog.isHidden():
             self._popout_dialog.close()
@@ -607,6 +609,12 @@ class BeforeAfterWidget(QWidget):
         # Emit signal so the parent tool can attach extra widgets (e.g. checkboxes)
         self.popout_requested.emit()
         dlg.show()
+        fit_dialog_to_screen(dlg)
+        # Recheck once native decorations and attached tool controls are laid out.
+        fit_timer = QTimer(dlg)
+        fit_timer.setSingleShot(True)
+        fit_timer.timeout.connect(lambda: fit_dialog_to_screen(dlg))
+        fit_timer.start(0)
         self._refresh_overlays()
 
     # ------------------------------------------------------------------

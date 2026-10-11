@@ -402,6 +402,12 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Undocked comparison dialogs fit their available screen after attached controls
+and window decorations are laid out, instead of opening larger than compact
+displays. Simulated-screen/font/theme checks cover bounds and keyboard redocking;
+existing About/support-link and tutorial checks also pass. These checks do not
+replace physical multi-monitor/DPI or native screen-reader qualification.
+
 Painter's shared-zone clipboard picker wraps its prompt and fits the active
 screen instead of exceeding compact displays at large fonts. Size/font/theme
 regressions cover selection and cancellation. The existing About dialog passed

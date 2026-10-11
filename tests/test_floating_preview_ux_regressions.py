@@ -1,12 +1,12 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from PIL import Image
 from PyQt6 import sip
-from PyQt6.QtCore import QCoreApplication, QEvent, QObject, QPoint, Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QEvent, QObject, QPoint, QRect, Qt, pyqtSignal
 from PyQt6.QtGui import QImage, QColor, QPalette, QPainter, QFontMetrics
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QPushButton
+from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QPushButton, QWidget
 
 from src.core.presets import PresetManager
 from src.core.settings_manager import SettingsManager
@@ -184,6 +184,67 @@ def test_floating_comparison_inherits_keyboard_divider_and_zoom(app):
         widget.close_popout_dialog()
         widget.close()
         sip.delete(widget)
+        dispose_events()
+
+
+@pytest.mark.parametrize("size", [(480, 400), (640, 480)])
+@pytest.mark.parametrize("pixels", [13, 24, 32])
+@pytest.mark.parametrize("name", ["Panda Dark", "Panda Light"])
+def test_undocked_comparison_fits_screen_and_keyboard_controls(app, size, pixels, name):
+    host = QWidget()
+    widget = BeforeAfterWidget(host)
+    screen = Mock()
+    available = QRect(170, 90, *size)
+    screen.availableGeometry.return_value = available
+    try:
+        host.setStyleSheet(build_stylesheet(PRESET_THEMES[name])
+                          + f"\nQWidget {{ font-size: {pixels}px; }}")
+        widget.resize(420, 300)
+        image = QImage(16, 16, QImage.Format.Format_RGBA8888)
+        image.fill(QColor("green"))
+        widget.set_before(image)
+        widget.set_after(image)
+        host.show()
+        host.activateWindow()
+        app.processEvents()
+        with patch.object(QWidget, "screen", return_value=screen):
+            widget._popout_btn.setFocus()
+            QTest.keyClick(widget._popout_btn, Qt.Key.Key_Space)
+            dialog = widget._popout_dialog
+            assert dialog is not None
+            dialog.activateWindow()
+            for _ in range(8):
+                app.processEvents()
+            assert available.adjusted(8, 8, -8, -8).contains(dialog.frameGeometry())
+            compare = dialog.findChild(BeforeAfterWidget)
+            assert dialog.rect().contains(compare.geometry())
+            assert compare.font().pixelSize() == pixels
+            assert compare.accessibleName() == "Comparison divider"
+            assert compare.rect().contains(compare._zoom_bar.geometry())
+            assert compare.rect().contains(compare._popout_btn.geometry())
+            assert not compare._zoom_bar.geometry().intersects(compare._popout_btn.geometry())
+            buttons = compare._zoom_bar.findChildren(QPushButton)
+            for button in buttons + [compare._popout_btn]:
+                assert button.width() >= button.minimumSizeHint().width()
+                assert button.height() >= button.minimumSizeHint().height()
+            compare.setFocus(Qt.FocusReason.TabFocusReason)
+            QTest.keyClick(compare, Qt.Key.Key_Right)
+            assert compare._split == pytest.approx(0.52)
+            QTest.keyClick(compare, Qt.Key.Key_Tab)
+            assert isinstance(app.focusWidget(), QPushButton)
+            buttons[2].setFocus()
+            QTest.keyClick(buttons[2], Qt.Key.Key_Space)
+            assert compare._zoom > 1
+            assert widget._zoom == 1 and widget._split == 0.5
+            QTest.keyClick(buttons[2], Qt.Key.Key_Escape)
+            app.processEvents()
+            assert widget._popout_dialog is None
+            assert not dialog.isVisible()
+            assert widget._popout_btn.text() == "⇗ Undock"
+    finally:
+        widget.close_popout_dialog()
+        host.close()
+        sip.delete(host)
         dispose_events()
 
 
