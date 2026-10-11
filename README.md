@@ -451,6 +451,20 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Converter keeps output format and conversion actions in Basic view, with an
+explicit Advanced disclosure for quality, DDS, metadata and resizing. Collapsing
+does not disable options: a summary explains active and retained settings, and
+keyboard disclosure preserves preferences and preview state.
+
+A freshly built Linux folder bundle passed 28 strict packaged runtime checks.
+Its actual MainWindow was exercised under Xvfb/Openbox at scales 1, 1.5 and 2,
+Dark/Light themes and logical sizes 900×700 and 1280×900 (12 combinations),
+including Basic/Advanced disclosure and scrolling. Two further keyboard
+collapse/reopen/close runs passed. A preliminary Light run segfaulted during SIP
+teardown after reporting exit 0; it was not reproduced, and remains an unresolved
+stability observation. This bounded packaged-window evidence is not an exhaustive
+clipping audit, physical-device qualification or Windows/macOS release certificate.
+
 Alpha Adjuster distinguishes Basic alpha-range controls from an accessible
 Advanced disclosure for cutoff, selective processing and RGBA adjustments.
 An always-visible summary describes retained advanced settings; collapsing does

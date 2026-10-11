@@ -479,7 +479,7 @@ class ConverterTab(QWidget):
         rv.addWidget(self._status_lbl)
 
         # Output format
-        grp_fmt = QGroupBox("Output Format")
+        grp_fmt = QGroupBox("Basic · Output Format")
         self._grp_fmt = grp_fmt
         gf_layout = QGridLayout(grp_fmt)
         gf_layout.setContentsMargins(8, 12, 8, 10)
@@ -514,21 +514,44 @@ class ConverterTab(QWidget):
         if idx >= 0:
             self._fmt_combo.setCurrentIndex(idx)
 
+        rv.addWidget(grp_fmt)
+        self._advanced_toggle = QPushButton("▶  Advanced")
+        self._advanced_toggle.setCheckable(True)
+        self._advanced_toggle.installEventFilter(self)
+        rv.addWidget(self._advanced_toggle)
+        self._advanced_hint = QLabel(
+            "Advanced · Quality, DDS variant, metadata and resize. "
+            "Collapsing only hides controls; enabled settings still apply."
+        )
+        self._advanced_hint.setWordWrap(True)
+        self._advanced_hint.setProperty("toolGuidance", True)
+        rv.addWidget(self._advanced_hint)
+        self._advanced_status = QLabel()
+        self._advanced_status.setWordWrap(True)
+        self._advanced_status.setProperty("toolGuidance", True)
+        rv.addWidget(self._advanced_status)
+        self._grp_encoding = QGroupBox("Encoding & Metadata")
+        ge_layout = QGridLayout(self._grp_encoding)
+        ge_layout.setContentsMargins(8, 12, 8, 10)
+        ge_layout.setHorizontalSpacing(12)
+        ge_layout.setVerticalSpacing(10)
+        ge_layout.setColumnStretch(1, 1)
+
         lbl_quality = QLabel("Quality (JPEG/WEBP/AVIF/JPEG2000):")
         lbl_quality.setWordWrap(True)
         lbl_quality.setMinimumHeight(24)
         self._lbl_quality = lbl_quality
-        gf_layout.addWidget(lbl_quality, 1, 0)
+        ge_layout.addWidget(lbl_quality, 0, 0)
         self._quality_spin = QSpinBox()
         self._quality_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._quality_spin.setRange(1, 100)
         self._quality_spin.setMinimumHeight(28)
         self._quality_spin.setValue(self._settings.get("last_converter_quality", 90))
-        gf_layout.addWidget(self._quality_spin, 1, 1)
+        ge_layout.addWidget(self._quality_spin, 0, 1)
 
         self._lbl_dds_variant = QLabel("DDS variant:")
         self._lbl_dds_variant.setMinimumHeight(24)
-        gf_layout.addWidget(self._lbl_dds_variant, 2, 0)
+        ge_layout.addWidget(self._lbl_dds_variant, 1, 0)
         self._dds_variant_combo = QComboBox()
         self._dds_variant_combo.setSizeAdjustPolicy(
             QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
@@ -553,7 +576,7 @@ class ConverterTab(QWidget):
             "Auto keeps opaque images as RGB DDS and images with transparency as RGBA DDS.\n"
             "Compressed BC1/DXT1, BC2/DXT3, and BC3/DXT5 variants need ImageMagick/wand."
         )
-        gf_layout.addWidget(self._dds_variant_combo, 2, 1)
+        ge_layout.addWidget(self._dds_variant_combo, 1, 1)
 
         self._keep_metadata_check = QCheckBox("Preserve metadata (EXIF/ICC)")
         self._keep_metadata_check.setAccessibleName("Preserve metadata (EXIF/ICC)")
@@ -567,9 +590,8 @@ class ConverterTab(QWidget):
             "Other outputs export page 1 only. Previews show page 1 only.\n"
             "Private TIFF tags and original compression/layout are not guaranteed."
         )
-        gf_layout.addWidget(self._keep_metadata_check, 3, 0, 1, 2)
-
-        rv.addWidget(grp_fmt)
+        ge_layout.addWidget(self._keep_metadata_check, 2, 0, 1, 2)
+        rv.addWidget(self._grp_encoding)
 
         # Resize (optional)
         grp_resize = QGroupBox("Resize (optional)")
@@ -622,6 +644,11 @@ class ConverterTab(QWidget):
             control.setAccessibleName(name)
 
         rv.addWidget(grp_resize)
+        self._advanced_controls = (self._grp_encoding, grp_resize)
+        for control in self._advanced_controls:
+            control.hide()
+        QWidget.setTabOrder(self._fmt_combo, self._advanced_toggle)
+        QWidget.setTabOrder(self._advanced_toggle, self._quality_spin)
 
         # Log
         log_btn_row = QHBoxLayout()
@@ -680,7 +707,8 @@ class ConverterTab(QWidget):
         self._responsive_grids = (
             (go_layout, [(lbl_out, self._out_dir_edit, self._btn_out_dir),
                          (lbl_suffix, self._suffix_edit)]),
-            (gf_layout, [(lbl_fmt, self._fmt_combo), (lbl_quality, self._quality_spin),
+            (gf_layout, [(lbl_fmt, self._fmt_combo)]),
+            (ge_layout, [(lbl_quality, self._quality_spin),
                          (self._lbl_dds_variant, self._dds_variant_combo),
                          (self._keep_metadata_check,)]),
             (gr_layout, [(self._resize_check,), (lbl_w, self._width_spin),
@@ -740,6 +768,13 @@ class ConverterTab(QWidget):
         self._keep_metadata_check.toggled.connect(
             lambda v: self._settings.set("converter_keep_metadata", v)
         )
+        self._advanced_toggle.toggled.connect(self._set_advanced_expanded)
+        for signal in (self._quality_spin.valueChanged,
+                       self._dds_variant_combo.currentIndexChanged,
+                       self._keep_metadata_check.toggled, self._resize_check.toggled,
+                       self._width_spin.valueChanged, self._height_spin.valueChanged,
+                       self._lock_aspect_check.toggled):
+            signal.connect(self._refresh_advanced_status)
         # Persist recursive checkbox and suffix on change
         self._recursive_check.toggled.connect(
             lambda v: self._settings.set("converter_recursive", v)
@@ -755,6 +790,53 @@ class ConverterTab(QWidget):
         self._on_format_changed(self._fmt_combo.currentIndex())
         # Pop-out/dock-back for compare widget (item 15)
         self._compare.popout_requested.connect(self._on_compare_popout)
+
+    def _set_advanced_expanded(self, expanded: bool) -> None:
+        focused = QApplication.focusWidget()
+        if not expanded and focused is not None and any(
+            control is focused or control.isAncestorOf(focused)
+            for control in self._advanced_controls
+        ):
+            self._advanced_toggle.setFocus()
+        for control in self._advanced_controls:
+            control.setVisible(expanded)
+        self._refresh_advanced_status()
+        self._layout_timer.start(0)
+
+    def _refresh_advanced_status(self, *_args) -> None:
+        fmt_data = self._fmt_combo.currentData()
+        fmt = fmt_data[0] if fmt_data else ""
+        quality = self._quality_spin.value()
+        variant = self._dds_variant_combo.currentText()
+        metadata = "metadata not copied"
+        if self._keep_metadata_check.isChecked():
+            metadata = (
+                "preserve supported metadata"
+                if fmt in ("JPEG", "PNG", "WEBP", "TIFF", "AVIF")
+                else f"metadata enabled, retained (not supported for {fmt})"
+            )
+        parts = [
+            f"quality {quality}" if fmt in ("JPEG", "WEBP", "AVIF", "JPEG2000")
+            else f"quality {quality} retained (not used for {fmt})",
+            f"DDS {variant}" if fmt == "DDS" else f"DDS {variant} retained (not used for {fmt})",
+            metadata,
+            (f"resize {self._width_spin.value()} × {self._height_spin.value()} px"
+             + (" (aspect locked)" if self._lock_aspect_check.isChecked() else "")
+             if self._resize_check.isChecked() else "resize off (original dimensions)"),
+        ]
+        prefix = ("Retained settings (GIF Builder uses its own settings): "
+                  if fmt == "GIF" else "Advanced settings: ")
+        self._advanced_status.setText(prefix + "; ".join(parts) + ".")
+        expanded = self._advanced_toggle.isChecked()
+        self._advanced_toggle.setText(f"{'▼' if expanded else '▶'}  Advanced")
+        self._advanced_toggle.setAccessibleName(
+            ("Hide" if expanded else "Show") + " advanced conversion settings"
+        )
+        self._advanced_toggle.setAccessibleDescription(
+            self._advanced_hint.text() + " " + self._advanced_status.text()
+        )
+        if hasattr(self, "_layout_timer"):
+            self._layout_timer.start(0)
 
     def _reflow_controls(self):
         available = self._content_scroll.viewport().width()
@@ -797,6 +879,11 @@ class ConverterTab(QWidget):
                 control.setMinimumContentsLength(10)
             if isinstance(control, QLabel):
                 control.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        for label in (self._advanced_hint, self._advanced_status):
+            policy = label.sizePolicy()
+            policy.setHeightForWidth(True)
+            label.setSizePolicy(policy)
+            label.setMinimumHeight(max(0, label.heightForWidth(label.width())))
         # Let the outer scroll area carry compact overflow instead of squeezing
         # the two inner viewports into unusable slivers above the preview.
         for scroll in (self._left_scroll, self._right_scroll):
@@ -831,6 +918,12 @@ class ConverterTab(QWidget):
                     bar.setValue(bar.value() + delta)
 
     def eventFilter(self, watched, event):
+        if (watched is getattr(self, "_advanced_toggle", None)
+                and event.type() == QEvent.Type.KeyPress
+                and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)):
+            if not event.isAutoRepeat():
+                self._advanced_toggle.click()
+            return True
         if hasattr(self, "_layout_timer"):
             if event.type() in (QEvent.Type.Resize, QEvent.Type.FontChange, QEvent.Type.StyleChange):
                 # Child resizes from status text must not undo manual scrolling.
@@ -1130,6 +1223,7 @@ class ConverterTab(QWidget):
         dds_selected = fmt == "DDS"
         self._lbl_dds_variant.setVisible(dds_selected)
         self._dds_variant_combo.setVisible(dds_selected)
+        self._refresh_advanced_status()
         format_unavailable = output_format_unavailable_reason(fmt)
         self._fmt_combo.setToolTip(format_unavailable or "")
         busy = not self._btn_run.isEnabled()

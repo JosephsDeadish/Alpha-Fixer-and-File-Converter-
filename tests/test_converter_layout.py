@@ -12,6 +12,7 @@ from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
 
 from src.core.settings_manager import SettingsManager
+from src.core.worker import ConverterWorker
 from src.ui.converter_tool import ConverterTab
 from src.ui.preview_pane import _ConverterPreviewLoader
 from src.ui.theme_engine import DEFAULT_THEME, LIGHT_THEME, build_stylesheet
@@ -39,6 +40,7 @@ def converter(app):
         settings = SettingsManager()
     with patch("src.ui.converter_tool._ConverterPreviewLoader", ImmediatePreview):
         widget = ConverterTab(settings)
+        widget._advanced_toggle.setChecked(True)
         widget._file_list.addItem(str(source))
         widget._file_list.setCurrentRow(0)
         widget._resize_check.setChecked(True)
@@ -78,7 +80,8 @@ def controls(widget):
         widget._btn_add_files, widget._btn_add_folder, widget._btn_clear,
         widget._recursive_check, widget._out_dir_edit, widget._btn_out_dir,
         widget._suffix_edit, widget._file_list, widget._compare, widget._btn_run,
-        widget._fmt_combo, widget._keep_metadata_check, widget._resize_check,
+        widget._fmt_combo, widget._advanced_toggle,
+        widget._keep_metadata_check, widget._resize_check,
         widget._width_spin, widget._height_spin, widget._lock_aspect_check,
         widget._btn_retry_failed, widget._btn_keep_failed, widget._btn_skip_failed,
         widget._btn_export_failures,
@@ -220,3 +223,149 @@ def test_progress_preserves_manually_scrolled_viewport(app, converter):
             settle(app)
             assert app.focusWidget() is converter._file_list
             assert bar.value() == position
+
+
+@pytest.mark.parametrize("key", [Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter])
+def test_disclosure_keys_preserve_generated_preview_and_preferences(app, converter, key):
+    converter.resize(480, 400)
+    converter.show()
+    converter._advanced_toggle.setChecked(False)
+    converter._preview_debounce.stop()
+    settle(app)
+    before = (converter._current_preview_path, converter._preview_request_id,
+              converter._width_spin.value(), converter._height_spin.value(),
+              converter._compare._raw_after)
+    assert "resize 60 × 30 px (aspect locked)" in converter._advanced_status.text()
+    assert "retained (not used for PNG)" in converter._advanced_status.text()
+    assert not converter._grp_resize.isVisible()
+    assert converter._fmt_combo.isVisible()
+    assert converter._btn_run.isVisible()
+    converter._fmt_combo.setFocus()
+    QTest.keyClick(converter._fmt_combo, Qt.Key.Key_Tab)
+    assert app.focusWidget() is converter._advanced_toggle
+    with patch.object(converter._settings, "set") as write:
+        QTest.keyClick(converter._advanced_toggle, key)
+        settle(app)
+        assert converter._grp_resize.isVisible()
+        assert converter._grp_encoding.isVisible()
+        assert converter._advanced_toggle.accessibleName().startswith("Hide")
+        QTest.keyClick(converter._advanced_toggle, key)
+        settle(app)
+        assert not converter._grp_resize.isVisible()
+        assert converter._advanced_toggle.accessibleName().startswith("Show")
+        QTest.keyClick(converter._advanced_toggle, Qt.Key.Key_Tab)
+        assert app.focusWidget() is converter._btn_retry_failed
+        converter.resize(640, 480)
+        settle(app)
+        write.assert_not_called()
+    assert not converter._preview_debounce.isActive()
+    assert before == (converter._current_preview_path, converter._preview_request_id,
+                      converter._width_spin.value(), converter._height_spin.value(),
+                      converter._compare._raw_after)
+
+
+def test_saved_options_initially_collapsed_and_format_aware(app, converter):
+    settings = converter._settings
+    settings.set("last_converter_format", "JPEG")
+    settings.set("last_converter_quality", 73)
+    settings.set("last_converter_dds_variant", "rgba")
+    settings.set("converter_keep_metadata", True)
+    with patch.object(settings, "set") as write:
+        restored = ConverterTab(settings)
+        restored.resize(480, 400)
+        restored.show()
+        settle(app)
+        write.assert_not_called()
+    try:
+        assert not restored._advanced_toggle.isChecked()
+        assert not restored._grp_encoding.isVisible()
+        assert not restored._grp_resize.isVisible()
+        assert restored._fmt_combo.currentData()[0] == "JPEG"
+        summary = restored._advanced_status.text()
+        assert "quality 73;" in summary
+        assert "preserve supported metadata" in summary
+        assert "resize off (original dimensions)" in summary
+        assert "retained (not used for JPEG)" in summary
+        restored._advanced_toggle.setChecked(True)
+        restored._keep_metadata_check.setChecked(False)
+        assert "metadata not copied" in restored._advanced_status.text()
+        restored._dds_variant_combo.setCurrentIndex(restored._dds_variant_combo.findData("rgb"))
+        dds_index = next(i for i in range(restored._fmt_combo.count())
+                         if restored._fmt_combo.itemData(i)[0] == "DDS")
+        restored._fmt_combo.setCurrentIndex(dds_index)
+        restored._preview_debounce.stop()
+        assert "quality 73 retained (not used for DDS)" in restored._advanced_status.text()
+        restored._keep_metadata_check.setChecked(True)
+        assert "metadata enabled, retained (not supported for DDS)" in restored._advanced_status.text()
+        assert restored._dds_variant_combo.isVisible()
+        restored._dds_variant_combo.setFocus()
+        settle(app)
+        restored._advanced_toggle.setChecked(False)
+        settle(app)
+        assert app.focusWidget() is restored._advanced_toggle
+        assert restored._dds_variant_combo.currentData() == "rgb"
+        assert restored._quality_spin.value() == 73
+        assert not restored._dds_variant_combo.isVisible()
+        visible(restored, restored._advanced_toggle)
+        assert "enabled settings still apply" in restored._advanced_toggle.accessibleDescription()
+        gif_index = next(i for i in range(restored._fmt_combo.count())
+                         if restored._fmt_combo.itemData(i)[0] == "GIF")
+        restored._fmt_combo.setCurrentIndex(gif_index)
+        restored._preview_debounce.stop()
+        assert "GIF Builder uses its own settings" in restored._advanced_status.text()
+    finally:
+        restored.close()
+        sip.delete(restored)
+        app.processEvents()
+
+
+@pytest.mark.parametrize("resize_enabled", [False, True], ids=["basic", "retained-resize"])
+def test_collapsed_run_exports_generated_image_with_retained_options(
+        app, converter, resize_enabled):
+    class ImmediateWorker(ConverterWorker):
+        def start(self):
+            self.run()
+
+    converter._resize_check.setChecked(resize_enabled)
+    converter._advanced_toggle.setChecked(False)
+    converter._out_dir_edit.setText("build/converter-layout-tests/output")
+    converter._suffix_edit.setText("_converted")
+    converter._preview_debounce.stop()
+    converter.resize(480, 400)
+    converter.show()
+    settle(app)
+    with patch("src.ui.converter_tool.ConverterWorker", ImmediateWorker), \
+            patch.object(converter, "_offer_delete_originals"), \
+            patch.object(converter, "_refresh_preview"):
+        converter._btn_run.setFocus()
+        settle(app)
+        visible(converter, converter._btn_run)
+        QTest.keyClick(converter._btn_run, Qt.Key.Key_Space)
+    assert converter._btn_run.isEnabled()
+    assert converter._progress.value() == 100
+    with Image.open("build/converter-layout-tests/output/generated_converted.png") as output:
+        assert output.size == ((60, 30) if resize_enabled else (80, 40))
+        assert output.getpixel((0, 0))[3] == 120
+    assert not converter._advanced_toggle.isChecked()
+    assert not converter._grp_resize.isVisible()
+
+
+@pytest.mark.parametrize("theme", [DEFAULT_THEME, LIGHT_THEME], ids=["dark", "light"])
+def test_compact_collapsed_disclosure_wraps_and_is_keyboard_reachable(app, converter, theme):
+    converter._advanced_toggle.setChecked(False)
+    converter.setStyleSheet(build_stylesheet(theme) + "\nQWidget { font-size: 32px; }")
+    converter.resize(480, 400)
+    converter.show()
+    settle(app)
+    for scroll in (converter._content_scroll, converter._left_scroll, converter._right_scroll):
+        assert scroll.horizontalScrollBar().maximum() == 0
+    for label in (converter._advanced_hint, converter._advanced_status):
+        assert label.wordWrap()
+        assert label.height() >= label.heightForWidth(label.width())
+    for control in (converter._fmt_combo, converter._advanced_toggle, converter._btn_run):
+        control.setFocus()
+        settle(app)
+        assert app.focusWidget() is control
+        visible(converter, control)
+    assert converter._lbl_fmt.buddy() is converter._fmt_combo
+    assert converter._fmt_combo.accessibleName() == "Output format"
