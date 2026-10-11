@@ -4827,6 +4827,12 @@ class MainWindow(QMainWindow):
             for dialog in newly_pending:
                 dialog.request_export_cancel()
             return
+        from .editor_project import approve_parent_projects
+        if not approve_parent_projects(
+                [getattr(self, attr, None) for attr in ("_gif_builder_dlg", "_video_tool_dlg")],
+                self.close):
+            event.ignore()
+            return
         self._shutdown_complete = True
         # Remove the global keyboard-secret event filter so it cannot fire
         # against partially-torn-down widgets after close begins.

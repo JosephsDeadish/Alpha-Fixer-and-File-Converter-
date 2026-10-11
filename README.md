@@ -50,6 +50,55 @@ Confirmed builder exports pause preview playback. Canceling the save dialog leav
 Video Builder also renders, encodes and muxes audio on a background worker, using independent render sources rather than the preview decoder. Editing/import and duplicate exports are disabled until cleanup. Cancellation during native encoding discards the staged result after the current codec call returns; FFmpeg audio muxing is polled for cancellation and its process is stopped before cleanup. Accepted cancellation preserves existing output and records no successful export. Audio-mux failure still permits a silent MP4 recovery with explicit completion/history notes. Builder/application closure waits for both GIF and Video export workers without forcibly terminating their threads; cancel requests arriving after atomic publication begins cannot undo that completed export.
 Video snapshots retain only the selected trim/speed frames for in-memory sources, so unreadable discarded frames do not prevent export. Closing or accepting/rejecting Video Builder releases its sources and resets the timeline/preview; reopening starts with a consistent empty session.
 GIF Builder reordering preserves the playing frame and refreshes the selected frame's delay controls. Frames using global timing show the current global delay; enabling an override starts from that value.
+
+**Editable projects and recovery:** Both builders provide **Save Project…**, **Open Project…**
+and **Recover…** buttons, separate from media export (**Ctrl+S still exports media**).
+Version-1, strictly validated JSON projects retain timeline order, timing, selection,
+playhead and export settings. GIF projects embed lossless PNG frames, including generated
+frames and original per-frame holds; they do not need their import sources. Video projects
+reference original media relative to the project (absolute paths across Windows drives),
+retaining stream choices, trim/speed, split video sampling and continuous audio spans,
+still duration, adjustments and audio settings. Streaming SHA-256 signatures identify
+source contents at save/open in the project worker (not on polling ticks). Loaded and
+successfully saved clips retain their validated hash; saves/autosaves reject changed
+content rather than silently adopting replacements. Before the first save, imports
+retain device/inode/size/mtime/ctime identity across decoding and worker hashing.
+This detects ordinary replacement but is not a content guarantee on filesystems
+with unreliable timestamps or against metadata-spoofing writers. No file lock spans
+hashing and publication; concurrent changes after validation remain possible.
+Keep original media available; changed,
+missing, corrupt or unsupported media abort opening without replacing current edits.
+
+Project encoding, disk I/O and media preparation run in a background worker. Project
+opening temporarily disables editing; saves capture a bounded snapshot and allow further
+edits, which remain unsaved. Atomic sibling-file replacement preserves an existing project
+on write failure. Dirty replacement/closure requires confirmation; choosing Save on close
+waits for successful project publication. Application shutdown keeps every editor's
+recovery session and media resources active if another editor cancels; all media is
+released only after every editor approves shutdown and pending I/O finishes.
+Supplied imports, including imports
+into a reopened builder, remain unsaved and eligible for recovery without further edits.
+Export workers retain their existing cancellation
+and asynchronous-close lifecycle.
+
+Autosave polls lightweight metadata every 2 seconds, writing after approximately 5 seconds
+of inactivity or 30 seconds of continuous editing; it never encodes images on each slider
+tick. Each editor session has a unique locked recovery file in the per-user
+`AlphaFixerConverter/editor-recovery` directory. **Recover…** lists retained closed/crashed
+sessions (not live writers), with timestamps and identities, without startup popups.
+Recovered edits require Save Project. Last complete recovery copies remain after save,
+close and failed writes; errors appear in project status, with retries no sooner than
+30 seconds. Remove old copies manually from that directory when no longer needed.
+
+Honest project limits: 512 entries, 64 MiB JSON, 8 MiB per embedded PNG, dimensions
+up to 8192 per axis, and 8,388,608 total initial decoded pixels (32 MiB RGBA;
+for Video, each still/GIF frame and the initial frame of each video clip count).
+Video timelines are capped at 10,000,000 output frames, source FPS at 0.1–1000,
+and still duration at 1–3600 frames. GIF inherited delay is 10–3000 ms; stored
+individual source/override holds support 1–3,600,000 ms. Recovery discovery lists
+at most 1000 files per editor type. These bounds apply to project persistence, not
+the general import/export workflow; oversized sessions report a save error rather
+than silently omitting frames.
 Floating comparisons release their windows when redocked or closed. Alpha helper switches stay synchronized only with the currently open comparison, and Converter restores GIF speed controls on redock without resetting playback speed. Clearing a Converter preview also closes its floating comparison.
 Open floating comparisons also follow new preview images, processing state, statistics, overlays, and divider theme changes. GIF frames continue to mirror the current source animation after preview refreshes without starting a second decoder; floating zoom and divider position remain independent.
 Settings asks before replacing a named custom theme on save or import, with No selected by default; declining keeps the saved theme and active appearance unchanged. Theme deletion also defaults to No. JSON theme exports use staged writes and confirm overwrites after an automatic extension is added.

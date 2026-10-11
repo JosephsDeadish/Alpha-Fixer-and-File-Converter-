@@ -485,10 +485,12 @@ class GifBuilderDialog(QDialog):
         mgr = self._resolve_tooltip_mgr()
         if mgr is not None:
             self.register_tooltips(mgr)
-        if initial_files:
-            self._add_paths(initial_files)
         self._setup_shortcuts()
         self._refresh_session_status()
+        from .editor_project import EditorProjectController
+        self._project = EditorProjectController(self, "gif")
+        if initial_files:
+            self._add_paths(initial_files)
 
     def add_media_paths(self, paths: list[str]) -> None:
         """Append media files to the current builder session."""
@@ -1795,6 +1797,8 @@ class GifBuilderDialog(QDialog):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
+        if hasattr(self, "_project"):
+            self._project.resume_session()
         fit_dialog_to_screen(self)
         QTimer.singleShot(0, lambda: fit_dialog_to_screen(self))
         self.queue_status_changed.emit(self.get_queue_status_text())
@@ -1813,6 +1817,9 @@ class GifBuilderDialog(QDialog):
             self._cancel_export()
             event.ignore()
             return
+        if hasattr(self, "_project") and not self._project.allow_close(self.close):
+            event.ignore()
+            return
         self._preview_timer.stop()
         for entry in self._frames:
             entry.close()
@@ -1825,4 +1832,11 @@ class GifBuilderDialog(QDialog):
             self._close_after_export = True
             self._cancel_export()
             return
+        if hasattr(self, "_project") and not self._project.allow_close(lambda: self.done(result)):
+            return
+        self._preview_timer.stop()
+        for entry in self._frames:
+            entry.close()
+        self._frames.clear()
+        self._frame_list.clear()
         super().done(result)

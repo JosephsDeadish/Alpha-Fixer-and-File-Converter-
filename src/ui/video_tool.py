@@ -2553,6 +2553,12 @@ class _ClipEntry:
                  preferred_audio_stream_index: Optional[int] = None):
         self.path = path
         self.source_path = source_path or path
+        from src.core.editor_projects import _source_stamp
+        try:
+            self._source_stamp = _source_stamp(os.stat(self.source_path))
+        except OSError:
+            self._source_stamp = None
+        self._source_sha256 = None
         self.total_frames = total_frames
         self.fps = fps
         self._get_frame = get_frame_fn   # callable(frame_idx) → PIL RGBA image
@@ -2664,6 +2670,35 @@ _ADJUSTMENT_DEFAULT_VALUES = {
 
 
 def _load_video_clip(
+    path: str,
+    *,
+    preferred_video_stream_index: Optional[int] = None,
+    preferred_audio_stream_index: Optional[int] = None,
+) -> Optional["_ClipEntry"]:
+    return _load_identified_clip(path, lambda: _decode_video_clip(
+        path, preferred_video_stream_index=preferred_video_stream_index,
+        preferred_audio_stream_index=preferred_audio_stream_index))
+
+
+def _load_identified_clip(path, decode):
+    from src.core.editor_projects import _source_stamp
+    try:
+        stamp = _source_stamp(os.stat(path))
+    except OSError:
+        stamp = None
+    clip = decode()
+    if clip is not None:
+        try:
+            if stamp is not None and stamp != _source_stamp(os.stat(path)):
+                raise ValueError("Media changed during import")
+            clip._source_stamp = stamp
+        except (OSError, ValueError):
+            clip.close()
+            return None
+    return clip
+
+
+def _decode_video_clip(
     path: str,
     *,
     preferred_video_stream_index: Optional[int] = None,
@@ -2784,6 +2819,10 @@ def _load_video_clip(
 
 
 def _load_image_as_clip(path: str) -> Optional["_ClipEntry"]:
+    return _load_identified_clip(path, lambda: _decode_image_as_clip(path))
+
+
+def _decode_image_as_clip(path: str) -> Optional["_ClipEntry"]:
     """Wrap a still image or animated GIF file as a clip."""
     try:
         from PIL import Image
@@ -2981,6 +3020,8 @@ class VideoToolDialog(QDialog):
             self.register_tooltips(mgr)
         self._setup_shortcuts()
         self._refresh_session_status()
+        from .editor_project import EditorProjectController
+        self._project = EditorProjectController(self, "video")
 
     # ------------------------------------------------------------------
     # UI construction
@@ -4206,6 +4247,14 @@ class VideoToolDialog(QDialog):
         preferred_video_stream_index=_KEEP_STREAM_SELECTION,
         preferred_audio_stream_index=_KEEP_STREAM_SELECTION,
     ) -> Optional["_ClipEntry"]:
+        from src.core.editor_projects import _source_stamp
+        source_stamp = clip._source_stamp
+        if source_stamp is not None:
+            try:
+                if source_stamp != _source_stamp(os.stat(clip.source_path)):
+                    return None
+            except OSError:
+                return None
         if clip.clip_type == "video":
             video_index = (
                 clip.preferred_video_stream_index
@@ -4226,6 +4275,16 @@ class VideoToolDialog(QDialog):
             new_clip = _load_image_as_clip(clip.source_path)
         if new_clip is None:
             return None
+        if source_stamp is not None:
+            try:
+                if source_stamp != _source_stamp(os.stat(clip.source_path)):
+                    new_clip.close()
+                    return None
+            except OSError:
+                new_clip.close()
+                return None
+        new_clip._source_sha256 = clip._source_sha256
+        new_clip._source_stamp = source_stamp
         new_clip.speed_percent = clip.speed_percent
         new_clip.still_duration_frames = clip.still_duration_frames
         new_clip.trim_start = max(0, min(clip.trim_start, new_clip.total_frames - 1))
@@ -5147,6 +5206,8 @@ class VideoToolDialog(QDialog):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
+        if hasattr(self, "_project"):
+            self._project.resume_session()
         fit_dialog_to_screen(self)
         QTimer.singleShot(0, lambda: fit_dialog_to_screen(self))
         self.queue_status_changed.emit(self.get_queue_status_text())
@@ -5248,6 +5309,9 @@ class VideoToolDialog(QDialog):
             self.request_export_cancel()
             event.ignore()
             return
+        if hasattr(self, "_project") and not self._project.allow_close(self.close):
+            event.ignore()
+            return
         self._release_clips()
         super().closeEvent(event)
 
@@ -5255,6 +5319,8 @@ class VideoToolDialog(QDialog):
         if self.is_exporting():
             self._export_deferred_result = result
             self.request_export_cancel()
+            return
+        if hasattr(self, "_project") and not self._project.allow_close(lambda: self.done(result)):
             return
         self._release_clips()
         super().done(result)

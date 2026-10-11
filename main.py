@@ -2117,6 +2117,28 @@ def _run_gui_event_loop(app, window, watchdog, splash=None) -> int:
                 dialog.export_finished.disconnect(check_exports_finished)
             if not sip.isdeleted(window):
                 window.close()
+        projects = [
+            project for attr in ("_gif_builder_dlg", "_video_tool_dlg")
+            if not sip.isdeleted(window)
+            and (dialog := getattr(window, attr, None)) is not None
+            and (project := getattr(dialog, "_project", None)) is not None
+            and project._job is not None
+        ]
+        if projects:
+            # Direct app.exit bypasses close prompts, but must not destroy project
+            # threads before their atomic writes and prepared-source cleanup finish.
+            project_loop = QEventLoop()
+            project_poll = QTimer()
+            project_poll.setInterval(25)
+
+            def check_projects_finished():
+                if all(project._job is None for project in projects):
+                    project_loop.quit()
+
+            project_poll.timeout.connect(check_projects_finished)
+            project_poll.start()
+            project_loop.exec()
+            project_poll.stop()
         # Do not force-delete the widget tree: a bounded closeEvent wait may
         # have timed out while a cooperative worker is still using its objects.
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
