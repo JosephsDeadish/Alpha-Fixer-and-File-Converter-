@@ -40,6 +40,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from threading import Lock
 from typing import Callable, Optional
 
@@ -48,6 +49,7 @@ from src.core.video_export import (
     VideoExportSettings, VideoExportWorker, mux_mp4_audio,
     source_frame_index, source_frame_indices,
 )
+from .video_preview_audio import PreviewAudioController, QtAudioBackend, clip_audio_target
 
 from PyQt6.QtCore import (
     Qt, QTimer, QSize, QEvent, QItemSelectionModel, pyqtSignal,
@@ -2596,7 +2598,9 @@ class _ClipEntry:
                  load_strategy: str = "",
                  source_probe: Optional[dict[str, object]] = None,
                  preferred_video_stream_index: Optional[int] = None,
-                 preferred_audio_stream_index: Optional[int] = None):
+                 preferred_audio_stream_index: Optional[int] = None,
+                 preview_audio_probe: Optional[dict[str, object]] = None,
+                 preview_audio_selection_valid: bool = True):
         self.path = path
         self.source_path = source_path or path
         from src.core.editor_projects import _source_stamp
@@ -2614,6 +2618,9 @@ class _ClipEntry:
         self.load_note = load_note
         self.load_strategy = load_strategy or ("direct" if not load_note else load_note)
         self.source_probe = source_probe
+        self.preview_audio_probe = preview_audio_probe if preview_audio_probe is not None else (
+            source_probe if self.path == self.source_path else None)
+        self.preview_audio_selection_valid = preview_audio_selection_valid
         self.preferred_video_stream_index = _coerce_optional_stream_index(preferred_video_stream_index)
         self.preferred_audio_stream_index = _coerce_optional_stream_index(preferred_audio_stream_index)
         self.speed_percent: int = 100
@@ -2781,6 +2788,7 @@ def _decode_video_clip(
                     load_note=note,
                     load_strategy=note or "direct",
                     source_probe=probe,
+                    preview_audio_probe=probe,
                     preferred_video_stream_index=preferred_video_stream_index if preferred_video_stream_index is not None else _coerce_optional_stream_index(probe.get("video_stream_index") if probe else None),
                     preferred_audio_stream_index=preferred_audio_stream_index if preferred_audio_stream_index is not None else _coerce_optional_stream_index(probe.get("audio_stream_index") if probe else None),
                 )
@@ -2805,6 +2813,7 @@ def _decode_video_clip(
                     recovered_path = None
                 else:
                     active_probe = recovery_probe or probe
+                    playable_probe = _probe_media_details(recovered_path)
                     note = _join_note_parts(source_retry_note, manual_stream_note, recovery_note)
                     return _ClipEntry(
                         recovered_path,
@@ -2813,13 +2822,18 @@ def _decode_video_clip(
                         fps,
                         frame_size=frame_size,
                         clip_type="video",
-                        has_audio=_video_has_audio_stream(recovered_path),
+                        has_audio=bool(playable_probe.get("has_audio")) if playable_probe else _video_has_audio_stream(recovered_path),
                         source_path=path,
                         load_note=note,
                         load_strategy=note,
                         source_probe=active_probe,
                         preferred_video_stream_index=preferred_video_stream_index if preferred_video_stream_index is not None else _coerce_optional_stream_index(active_probe.get("video_stream_index") if active_probe else None),
                         preferred_audio_stream_index=preferred_audio_stream_index if preferred_audio_stream_index is not None else _coerce_optional_stream_index(active_probe.get("audio_stream_index") if active_probe else None),
+                        preview_audio_probe=playable_probe,
+                        preview_audio_selection_valid=(
+                            preferred_audio_stream_index is None or
+                            preferred_audio_stream_index == _coerce_optional_stream_index(
+                                active_probe.get("audio_stream_index") if active_probe else None)),
                     )
             except Exception:
                 _unlink_file_safely(recovered_path)
@@ -3056,6 +3070,14 @@ class VideoToolDialog(QDialog):
         self._preview_timer = QTimer(self)
         self._preview_timer.timeout.connect(self._advance_preview)
         self._is_playing: bool = False
+        self._preview_clock = time.monotonic
+        self._preview_anchor = self._preview_clock()
+        self._preview_anchor_frame = 0
+        self._preview_loop = 0
+        self._preview_advancing = False
+        self._preview_audio = None
+        self._preview_audio_clip = None
+        self._preview_audio_error = ""
         self._ffmpeg_available = _has_ffmpeg()
         self._imageio_available = _has_imageio()
         self._imageio_ffmpeg_available = _has_imageio_ffmpeg()
@@ -3407,6 +3429,33 @@ class VideoToolDialog(QDialog):
         ctrl.addStretch()
         pv_layout.addLayout(ctrl)
 
+        audio_row = QHBoxLayout()
+        self._preview_audio_check = QCheckBox("Preview audio")
+        self._preview_audio_check.setToolTip(
+            "Opt in to source audio while playing. Independent of MP4 export audio. "
+            "Unverified multi-track sources stay silent; select a stream and reload first.")
+        self._preview_mute_check = QCheckBox("Mute")
+        self._preview_volume_slider = _make_hslider(0, 100, 70)
+        self._preview_volume_slider.setAccessibleName("Preview audio volume")
+        self._preview_volume_slider.setToolTip("Preview volume only; does not change export volume.")
+        self._preview_volume_lbl = QLabel("70%")
+        self._preview_volume_lbl.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        self._preview_volume_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        audio_row.addWidget(self._preview_audio_check)
+        audio_row.addWidget(self._preview_mute_check)
+        audio_row.addStretch()
+        pv_layout.addLayout(audio_row)
+        preview_volume_row = QHBoxLayout()
+        preview_volume_row.addWidget(self._preview_volume_slider, 1)
+        preview_volume_row.addWidget(self._preview_volume_lbl)
+        pv_layout.addLayout(preview_volume_row)
+        self._preview_audio_status = QLabel("Preview audio off (export audio unchanged).")
+        self._preview_audio_status.setWordWrap(True)
+        pv_layout.addWidget(self._preview_audio_status)
+        self._preview_audio_check.toggled.connect(self._configure_preview_audio)
+        self._preview_mute_check.toggled.connect(self._configure_preview_audio)
+        self._preview_volume_slider.valueChanged.connect(self._configure_preview_audio)
+
         # FPS row
         fps_row = QHBoxLayout()
         fps_row.addWidget(QLabel("Preview FPS:"))
@@ -3602,7 +3651,7 @@ class VideoToolDialog(QDialog):
         self._responsive_rows = [
             tb, insert_row, import_detail_actions, start_row, end_row,
             video_stream_row, audio_stream_row, clip_speed_row, still_row,
-            ctrl, fps_row, fl_layout, fmt_row, audio_volume_row,
+            ctrl, audio_row, preview_volume_row, fps_row, fl_layout, fmt_row, audio_volume_row,
         ]
         self._responsive_rows.extend(
             adj_vl.itemAt(i).layout() for i in range(adj_vl.count())
@@ -4523,6 +4572,7 @@ class VideoToolDialog(QDialog):
             self._btn_play.setChecked(False)
             self._btn_play.blockSignals(False)
             self._btn_play.setText("▶  Play")
+            self._sync_preview_audio(force=True)
 
         self._btn_remove.setEnabled(has_selection)
         self._btn_rewind.setEnabled(has_clips)
@@ -5162,6 +5212,9 @@ class VideoToolDialog(QDialog):
         return max(0, len(self._clips) - 1), 0
 
     def _update_preview(self) -> None:
+        if not self._preview_advancing:
+            self._reset_preview_clock()
+        self._sync_preview_audio(force=not self._preview_advancing)
         total = self._total_preview_frames()
         if total == 0 or not self._clips:
             self._preview_pixmap = None
@@ -5229,6 +5282,7 @@ class VideoToolDialog(QDialog):
 
     def _on_play_toggled(self, playing: bool) -> None:
         self._is_playing = playing
+        self._reset_preview_clock()
         if playing:
             if self._total_preview_frames() < 2:
                 self._btn_play.setChecked(False)
@@ -5239,27 +5293,80 @@ class VideoToolDialog(QDialog):
         else:
             self._preview_timer.stop()
             self._btn_play.setText("▶  Play")
+        self._sync_preview_audio(force=True)
         self.queue_status_changed.emit(self.get_queue_status_text())
 
     def _on_preview_fps_changed(self, value: int) -> None:
+        self._reset_preview_clock()
         self._fps_val_lbl.setText(f"{value} fps")
         if self._preview_timer.isActive():
             self._preview_timer.setInterval(max(1, int(1000 / max(1, value))))
         self._update_timing_controls()
         self._update_timeline_summary()
         self._update_export_summary()
+        self._sync_preview_audio(force=True)
 
     def _advance_preview(self) -> None:
         total = self._total_preview_frames()
         if total == 0:
             return
-        nxt = (self._scrubber.value() + 1) % total
-        self._scrubber.setValue(nxt)
-        self._update_preview()
+        elapsed = max(0.0, self._preview_clock() - self._preview_anchor)
+        absolute = self._preview_anchor_frame + int(elapsed * self._fps_slider.value())
+        nxt = absolute % total
+        loop = absolute // total
+        wrapped = loop != self._preview_loop
+        self._preview_loop = loop
+        self._preview_advancing = True
+        try:
+            self._scrubber.blockSignals(True)
+            self._scrubber.setValue(nxt)
+            self._scrubber.blockSignals(False)
+            self._update_preview()
+            if wrapped:
+                self._sync_preview_audio(force=True)
+        finally:
+            self._preview_advancing = False
 
     def _rewind(self) -> None:
         self._scrubber.setValue(0)
         self._update_preview()
+
+    def _reset_preview_clock(self) -> None:
+        self._preview_anchor = self._preview_clock()
+        self._preview_anchor_frame = self._scrubber.value()
+        self._preview_loop = 0
+
+    def _configure_preview_audio(self, *_args) -> None:
+        self._preview_volume_lbl.setText(f"{self._preview_volume_slider.value()}%")
+        if self._preview_audio is None and self._preview_audio_check.isChecked():
+            try:
+                self._preview_audio = PreviewAudioController(
+                    QtAudioBackend(self), self._preview_audio_status.setText, self._preview_clock)
+            except Exception as exc:
+                self._preview_audio_error = f"Preview audio unavailable: {exc}. Video continues silently."
+        if self._preview_audio is not None:
+            self._preview_audio.configure(
+                self._preview_audio_check.isChecked(),
+                self._preview_volume_slider.value() / 100.0,
+                self._preview_mute_check.isChecked())
+        self._sync_preview_audio(force=True)
+
+    def _sync_preview_audio(self, force=False) -> None:
+        if self._preview_audio is None:
+            if self._preview_audio_check.isChecked() and self._preview_audio_error:
+                self._preview_audio_status.setText(self._preview_audio_error)
+            elif not self._preview_audio_check.isChecked():
+                self._preview_audio_status.setText("Preview audio off (export audio unchanged).")
+            return
+        target = None
+        clip = None
+        if self._clips and self._total_preview_frames():
+            row, frame = self._global_frame_to_clip(self._scrubber.value())
+            clip = self._clips[row]
+            target = clip_audio_target(clip, frame, self._fps_slider.value())
+        force = force or clip is not self._preview_audio_clip
+        self._preview_audio_clip = clip
+        self._preview_audio.sync(target, self._is_playing, force=force)
 
     # ------------------------------------------------------------------
     # Export
@@ -5631,6 +5738,10 @@ class VideoToolDialog(QDialog):
     def _release_clips(self) -> None:
         self._preview_timer.stop()
         self._btn_play.setChecked(False)
+        if self._preview_audio is not None:
+            self._preview_audio.close()
+            self._preview_audio = None
+        self._preview_audio_check.setChecked(False)
         self._history_entries.update(self._clips)
         self._clips.clear()
         self._clip_list.clear()

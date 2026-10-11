@@ -451,6 +451,18 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Video Builder now offers opt-in **Preview audio** with independent volume/mute.
+Audio follows the visual timeline through playback, scrubbing, trims, split
+segments, speed/FPS changes and looping. Loading is asynchronous; missing devices,
+unsupported/failed media and short audio tails leave video running silently with
+inline status. Sources must expose one verified, seekable audio track; unverified
+multi-stream routes stay silent. Playback rates outside 0.1–10× are unavailable.
+Generated-media Qt decoding/seeking and deterministic timing/device/lifecycle
+tests cover the implementation, not physical audibility or cross-platform sync.
+Native audio-device, latency, codec and Windows media-handle cleanup acceptance
+remain outstanding. A generated-media compact-layout probe also retained a
+107px horizontal overflow already present on the baseline; this needs follow-up.
+
 Video Builder provides Undo/Redo for timeline edits and editor settings, including
 imports, removal, reordering, splitting, trims, speed and still duration. Slider
 gestures form one edit; no-ops preserve redo. History retains media references
@@ -458,7 +470,7 @@ rather than copying decoded frames and is bounded by edit/resource budgets.
 Opening a project resets edit history. Undo/Redo defaults yield to existing saved
 shortcut assignments and remain customizable. Generated-media regressions cover
 timing, resource cleanup, projects and shortcuts; native and sustained-stress
-acceptance, including synchronized audible preview, remains outstanding.
+acceptance, including physical audible-preview synchronization, remains outstanding.
 
 GIF Builder provides Undo/Redo for adding, removing, clearing and reordering
 frames and editing per-frame delay overrides. Buttons and configurable Ctrl+Z /
@@ -666,7 +678,8 @@ Retain platform-specific evidence for these remaining gates:
 - **Native visual consistency:** final layout and usability checks across every
   theme/dialog, including clipping, focus, scaling and input-device behavior.
 - **Optional feature expansion:** DDS multi-surface/DX10 coverage, disc-image
-  extraction, broader TIM/XNB and SVG support, and audible video preview. These
+  extraction and broader TIM/XNB and SVG support. Audible preview now requires
+  native device/codec/synchronization qualification. These
   documented boundaries are distinct from acceptance of currently supported
   features; they are not silently treated as completed features.
 
