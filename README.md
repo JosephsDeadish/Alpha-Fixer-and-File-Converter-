@@ -402,6 +402,12 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+History guidance and actions remain reachable by vertical scrolling on compact
+windows and at large fonts, with at least two usable tree rows. Local Ctrl+Tab
+navigation works across history sub-tabs without conflicting with configured
+global shortcuts. Compact/theme/font and keyboard regressions are offscreen
+checks, not physical display or screen-reader certification.
+
 Painter's controls shrink proportionally on compact windows rather than forcing
 the window beyond the available width, preserving usable canvas space. Oversized
 controls remain scrollable in both directions; keyboard focus reveals complete

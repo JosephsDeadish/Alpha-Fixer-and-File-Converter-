@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QBoxLayout, QLabel, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QMessageBox,
     QTabWidget, QFileDialog, QLineEdit, QStyledItemDelegate, QStyleOptionViewItem, QSizePolicy,
+    QScrollArea,
 )
 
 _THUMB_SIZE = 32  # thumbnail icon size (pixels, square)
@@ -476,7 +477,19 @@ class HistoryTab(QWidget):
         self._refresh_session_status()
 
     def _setup_ui(self):
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._content = QWidget()
+        self._content.installEventFilter(self)
+        self._scroll.setWidget(self._content)
+        outer.addWidget(self._scroll)
+        self._scroll.viewport().installEventFilter(self)
+        layout = QVBoxLayout(self._content)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
 
@@ -690,6 +703,8 @@ class HistoryTab(QWidget):
         self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(vid_widget), "Video Builder history")
 
         layout.addWidget(self._sub_tabs, 1)
+        for widget in [self._sub_tabs, *self._sub_tabs.findChildren(QWidget)]:
+            widget.installEventFilter(self)
 
         # Connections
         self._btn_export.clicked.connect(self._export_history)
@@ -721,14 +736,49 @@ class HistoryTab(QWidget):
         row = getattr(self, "_action_layout", None)
         if row is None:
             return
-        margins = self.layout().contentsMargins()
         needed = (sum(max(button.minimumWidth(), button.sizeHint().width())
                       for button in (self._btn_export, self._btn_clear))
-                  + 2 * row.spacing() + margins.left() + margins.right() + 16)
-        direction = (QBoxLayout.Direction.TopToBottom if self.width() < needed
+                  + 2 * row.spacing() + 16)
+        direction = (QBoxLayout.Direction.TopToBottom if row.parentWidget().width() < needed
                      else QBoxLayout.Direction.LeftToRight)
         if row.direction() != direction:
             row.setDirection(direction)
+        # Keep wrapped guidance and at least two history rows available via scrolling.
+        for label in self._content.findChildren(QLabel):
+            if label.wordWrap():
+                label.setMinimumHeight(max(0, label.heightForWidth(label.width())))
+        for tree in (self._conv_tree, self._alpha_tree, self._sel_tree,
+                     self._gif_tree, self._vid_tree):
+            row_height = max(_THUMB_SIZE, tree.fontMetrics().height() + 8)
+            tree.setMinimumHeight(
+                tree.header().sizeHint().height() + 2 * row_height
+                + tree.horizontalScrollBar().sizeHint().height() + 2 * tree.frameWidth()
+            )
+
+    def eventFilter(self, watched, event):
+        # Handle only delivered key presses so configured global shortcuts win first.
+        if (event.type() == QEvent.Type.KeyPress
+                and (watched is self._sub_tabs or self._sub_tabs.isAncestorOf(watched))):
+            modifiers = event.modifiers()
+            if (event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Backtab)
+                    and modifiers in (
+                        Qt.KeyboardModifier.ControlModifier,
+                        Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier,
+                    )):
+                step = (-1 if event.key() == Qt.Key.Key_Backtab
+                        or modifiers & Qt.KeyboardModifier.ShiftModifier else 1)
+                self._sub_tabs.setCurrentIndex(
+                    (self._sub_tabs.currentIndex() + step) % self._sub_tabs.count()
+                )
+                event.accept()
+                return True
+        timer = getattr(self, "_action_update_timer", None)
+        if timer is not None and (
+            (watched is self._scroll.viewport() and event.type() == QEvent.Type.Resize)
+            or (watched is self._content and event.type() == QEvent.Type.LayoutRequest)
+        ):
+            timer.start(0)
+        return super().eventFilter(watched, event)
 
     def resizeEvent(self, event):  # noqa: N802
         super().resizeEvent(event)
