@@ -7,6 +7,8 @@ import json
 import hashlib
 import io
 import tempfile
+import warnings
+from contextlib import nullcontext
 import unittest
 from unittest import mock
 import types
@@ -1470,7 +1472,7 @@ class TestConversionMetadata(unittest.TestCase):
                                             self.assertEqual(preview.size, reduced.size)
                                             self.assertEqual(preview.tobytes(), reduced.tobytes())
                                             self.assertNotIn(274, preview.getexif())
-                                    targets = ("PNG", "JPEG", "TIFF") if compression == "raw" else ("PNG", "JPEG")
+                                    targets = ("PNG", "JPEG", "TIFF")
                                     for target in targets:
                                         for resize in (None, (20, 12)):
                                             output = Path(directory) / ("output" + SUPPORTED_OUTPUT_FORMATS[target])
@@ -1706,15 +1708,20 @@ class TestMultipageTiffBoundary(unittest.TestCase):
             ((22, 16), "purple", "white", 1),
         ]
         profiles = (profile,) * len(specs) if profiles is None else profiles
-        with TiffImagePlugin.AppendingTiffWriter(str(source), True) as writer:
+        class FixtureWriter(TiffImagePlugin.AppendingTiffWriter):
+            # Nested dimensions use inline values; relocate their parent pointer.
+            Tags = TiffImagePlugin.AppendingTiffWriter.Tags | {34665}
+
+        with FixtureWriter(str(source), True) as writer:
             for index, (size, left, right, orientation) in enumerate(specs):
                 exif = Image.Exif()
                 exif[274] = orientation
                 exif[297] = (index, len(specs))
                 exif[305] = f"page-{index + 1}-metadata"
+                exif[34665] = {40962: size[0], 40963: size[1]}
                 with Image.new("RGB", size, left) as page:
                     page.paste(right, (size[0] // 2, 0, *size))
-                    page.save(writer, format="TIFF", exif=exif,
+                    page.save(writer, format="TIFF", exif=exif.tobytes(),
                               icc_profile=profiles[index], dpi=(100 + index, 100 + index))
                 writer.newFrame()
         with Image.open(source) as pages:
@@ -1761,7 +1768,8 @@ class TestMultipageTiffBoundary(unittest.TestCase):
                             with self.subTest(first_icc=profile is not None, fmt=fmt,
                                               keep=keep, resize=resize):
                                 output = Path(directory) / ("mixed" + SUPPORTED_OUTPUT_FORMATS[fmt])
-                                with self.assertWarns(UserWarning):
+                                with (self.assertWarns(UserWarning) if fmt != "TIFF"
+                                      else nullcontext()):
                                     convert_file(str(source), str(output), fmt,
                                                  keep_metadata=keep, resize=resize)
                                 with Image.open(output) as saved:
@@ -1918,7 +1926,7 @@ class TestMultipageTiffBoundary(unittest.TestCase):
             with _open_image(str(source)) as native:
                 expected = native.copy()
             try:
-                for fmt in ("PNG", "TIFF"):
+                for fmt in ("PNG",):
                     for keep in (False, True):
                         for resize in (None, (12, 20)):
                             with self.subTest(fmt=fmt, keep=keep, resize=resize):
@@ -1963,9 +1971,11 @@ class TestMultipageTiffBoundary(unittest.TestCase):
                         self.assertEqual(len(results), 1)
                         for text in results[0][2:]:
                             self.assertIn("page 1 of 3 only", text)
-                            self.assertIn("metadata are not exported", text)
+                            self.assertIn("TIFF export preserves" if fmt == "TIFF"
+                                          else "metadata are not exported", text)
                         output = Path(directory) / ("export" + SUPPORTED_OUTPUT_FORMATS[fmt])
-                        with self.assertWarns(UserWarning):
+                        with (self.assertWarns(UserWarning) if fmt != "TIFF"
+                              else nullcontext()):
                             convert_file(str(source), str(output), fmt, resize=resize)
                         with _open_image(str(output)) as saved:
                             self.assertEqual(results[0][1], _pil_to_qimage(saved))
@@ -1978,7 +1988,7 @@ class TestMultipageTiffBoundary(unittest.TestCase):
             self.assertEqual(len(thumbnails), 1)
             self.assertIn("page 1 of 3 only", thumbnails[0][1])
 
-    def test_worker_success_reports_page_loss_without_changing_output_path(self):
+    def test_worker_tiff_success_preserves_all_pages_without_page_loss_note(self):
         with tempfile.TemporaryDirectory(dir=".") as directory:
             source, _ = self._make_source(directory)
             worker = ConverterWorker([str(source)], "TIFF", ".tiff",
@@ -1986,15 +1996,268 @@ class TestMultipageTiffBoundary(unittest.TestCase):
                                      keep_metadata=True)
             results = []
             worker.file_done.connect(lambda *args: results.append(args))
-            with mock.patch("src.core.worker._LARGE_BATCH_THRESHOLD", 1), self.assertWarns(UserWarning):
+            with mock.patch("src.core.worker._LARGE_BATCH_THRESHOLD", 100):
                 worker.run()
             self.assertEqual(len(results), 1)
             self.assertTrue(results[0][1])
-            destination, note = results[0][2].split("\n", 1)
+            destination = results[0][2]
             self.assertTrue(Path(destination).is_file())
-            self.assertIn("page 1 of 3 only", note)
+            self.assertNotIn("\n", destination)
             with Image.open(destination) as saved:
-                self.assertEqual(saved.n_frames, 1)
+                self.assertEqual(saved.n_frames, 3)
+
+    def test_all_pages_preserve_pixels_orientation_metadata_and_resize(self):
+        first_profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+        later_profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("LAB")).tobytes()
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            profiles = (first_profile, later_profile, None)
+            source, _ = self._make_source(directory, profiles)
+            for keep in (False, True):
+                for resize in (None, (12, 20)):
+                    output = Path(directory) / "preserved.tiff"
+                    with warnings.catch_warnings(record=True) as caught:
+                        warnings.simplefilter("always")
+                        convert_file(str(source), str(output), "TIFF", keep_metadata=keep, resize=resize)
+                    self.assertFalse(caught)
+                    with Image.open(source) as original, Image.open(output) as saved:
+                        self.assertEqual(saved.n_frames, 3)
+                        for index in range(3):
+                            with self.subTest(keep=keep, resize=resize, page=index):
+                                original.seek(index)
+                                original.load()
+                                saved.seek(index)
+                                saved.load()
+                                with (original.resize(resize, Image.LANCZOS) if resize
+                                      else original.copy()) as reference:
+                                    self.assertEqual(saved.size, reference.size)
+                                    self.assertEqual(saved.mode, reference.mode)
+                                    self.assertEqual(saved.tobytes(), reference.tobytes())
+                                self.assertIn(saved.getexif().get(274), (None, 1))
+                                if keep:
+                                    self.assertEqual(saved.getexif()[305], f"page-{index + 1}-metadata")
+                                    details = saved.getexif().get_ifd(34665)
+                                    self.assertEqual((details[40962], details[40963]), saved.size)
+                                    self.assertEqual(saved.tag_v2.get(34675), profiles[index])
+                                    self.assertEqual(tuple(map(float, saved.info["dpi"])), (100 + index,) * 2)
+                                    self.assertEqual((saved.tag_v2[256], saved.tag_v2[257]), saved.size)
+                                else:
+                                    self.assertNotIn(305, saved.getexif())
+                                    self.assertNotIn(34675, saved.tag_v2)
+
+    def test_mixed_native_modes_and_compressed_pages(self):
+        specs = [("1", (11, 9), 1), ("L", (13, 7), 97),
+                 ("RGB", (8, 15), (20, 80, 160)), ("RGBA", (14, 6), (40, 50, 60, 73)),
+                 ("I;16", (7, 12), 12345), ("F", (9, 8), 1.25),
+                 ("I", (8, 6), -123456),
+                 ("LA", (6, 11), (120, 81)), ("CMYK", (10, 7), (15, 25, 35, 45)),
+                 ("P", (12, 9), 2)]
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, output = Path(directory) / "mixed.tif", Path(directory) / "out.tif"
+            with TiffImagePlugin.AppendingTiffWriter(str(source), True) as writer:
+                for mode, size, color in specs:
+                    with Image.new(mode, size, color) as page:
+                        if mode == "P":
+                            page.putpalette([value for value in range(256) for _ in range(3)])
+                        page.save(writer, format="TIFF", compression="tiff_lzw")
+                    writer.newFrame()
+            for resize in (None, (5, 4)):
+                convert_file(str(source), str(output), "TIFF", resize=resize)
+                with Image.open(source) as original, Image.open(output) as saved:
+                    self.assertEqual(saved.n_frames, len(specs))
+                    for index, (mode, size, _) in enumerate(specs):
+                        with self.subTest(page=index, resize=resize):
+                            original.palette = None
+                            saved.palette = None
+                            original.seek(index)
+                            original.load()
+                            saved.seek(index)
+                            saved.load()
+                            with (original.resize(resize, Image.LANCZOS) if resize
+                                  else original.copy()) as reference:
+                                self.assertEqual(saved.mode, mode)
+                                self.assertEqual(saved.size, resize or size)
+                                self.assertEqual(saved.tobytes(), reference.tobytes())
+                                if mode == "P":
+                                    self.assertEqual(saved.getpalette(), reference.getpalette())
+
+    def test_mixed_bigendian_pages_preserve_unsigned16_samples(self):
+        samples = [0, 1, 255, 256, 12345, 32768, 65535, 4097] * 3
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, output = Path(directory) / "bigendian.tif", Path(directory) / "out.tif"
+            for modes in (("I;16B", "RGB", "L"), ("RGB", "L", "I;16B")):
+                with TiffImagePlugin.AppendingTiffWriter(str(source), True) as writer:
+                    for index, mode in enumerate(modes):
+                        with Image.new(mode, (8, 3)) as page:
+                            if mode == "I;16B":
+                                for position, value in enumerate(samples):
+                                   page.putpixel((position % 8, position // 8), value)
+                            else:
+                                page.paste((20, 80, 160) if mode == "RGB" else 97,
+                                          (0, 0, 8, 3))
+                            # Construct genuine MM pages with Pillow's IFD
+                            # serializer, including its strip-offset adjustment.
+                            ifd = TiffImagePlugin.ImageFileDirectory_v2(prefix=b"MM")
+                            ifd[256], ifd[257] = page.size
+                            ifd[258] = (16,) if mode == "I;16B" else (
+                                (8, 8, 8) if mode == "RGB" else (8,))
+                            ifd[259], ifd[262] = 1, 2 if mode == "RGB" else 1
+                            ifd[273], ifd[278], ifd[279] = (0,), page.height, len(page.tobytes())
+                            if mode == "RGB":
+                                ifd[277], ifd[284] = 3, 1
+                            ifd[305] = f"bigendian-page-{index}"
+                            ifd.save(writer)
+                            writer.write(page.tobytes())
+                        writer.newFrame()
+                self.assertEqual(source.read_bytes()[:4], b"MM\x00\x2a")
+                for keep in (False, True):
+                    for resize in (None, (5, 4)):
+                        convert_file(str(source), str(output), "TIFF",
+                                    keep_metadata=keep, resize=resize)
+                        self.assertEqual(output.read_bytes()[:4], b"II\x2a\x00")
+                        with Image.open(source) as original, Image.open(output) as saved:
+                            self.assertEqual(original.n_frames, len(modes))
+                            self.assertEqual(saved.n_frames, len(modes))
+                            for index, mode in enumerate(modes):
+                                with self.subTest(modes=modes, keep=keep, resize=resize, page=index):
+                                   original.seek(index)
+                                   original.load()
+                                   saved.seek(index)
+                                   saved.load()
+                                   self.assertEqual(original.mode, mode)
+                                   self.assertEqual(saved.mode, "I;16" if mode == "I;16B" else mode)
+                                   with (original.resize(resize, Image.LANCZOS) if resize
+                                         else original.copy()) as reference:
+                                       self.assertEqual(saved.size, reference.size)
+                                       for y in range(reference.height):
+                                           for x in range(reference.width):
+                                               self.assertEqual(saved.getpixel((x, y)),
+                                                                reference.getpixel((x, y)))
+                                       if mode == "I;16B":
+                                           self.assertEqual(saved.tag_v2[258], (16,))
+                                           self.assertEqual(saved.tag_v2.get(339, (1,)), (1,))
+                                           if resize is None:
+                                               self.assertEqual(
+                                                   [original.getpixel((x, y))
+                                                    for y in range(3) for x in range(8)], samples)
+                                   self.assertEqual(saved.getexif().get(305),
+                                                    f"bigendian-page-{index}" if keep else None)
+
+    def test_tiff_cancel_and_later_decode_failure_close_resources_and_rollback(self):
+        from src.core.file_converter import _load_image_pixels
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, _ = self._make_source(directory)
+            output = Path(directory) / "existing.tiff"
+            original_bytes = b"existing destination"
+            output.write_bytes(original_bytes)
+            real_open, real_copy = Image.open, Image.Image.copy
+            for failure in ("cancel", "decode", "save", "memory"):
+                handles, pages = [], []
+
+                def tracked_open(*args, **kwargs):
+                    image = real_open(*args, **kwargs)
+                    handles.append(image.fp)
+                    return image
+
+                def tracked_copy(image):
+                    page = real_copy(image)
+                    pages.append(page)
+                    return page
+
+                def decode(image):
+                    if image.tell() == 1:
+                        raise (MemoryError if failure == "memory" else OSError)("later page failed")
+                    return _load_image_pixels(image)
+
+                checks = iter((False, False, False, True))
+                extra = {"cancel_check": lambda: next(checks)} if failure == "cancel" else {}
+                patch = (mock.patch("src.core.file_converter._load_image_pixels", side_effect=decode)
+                         if failure in ("decode", "memory") else
+                         mock.patch.object(Image.Image, "save", side_effect=OSError("save failed"))
+                         if failure == "save" else nullcontext())
+                with self.subTest(failure=failure), \
+                        mock.patch("src.core.file_converter.Image.open", side_effect=tracked_open), \
+                        mock.patch.object(Image.Image, "copy", tracked_copy), patch:
+                    with self.assertRaises((OSError, MemoryError)):
+                        convert_file(str(source), str(output), "TIFF", **extra)
+                self.assertTrue(all(handle.closed for handle in handles))
+                for page in pages:
+                    with self.assertRaises(ValueError):
+                        page.getpixel((0, 0))
+                self.assertEqual(output.read_bytes(), original_bytes)
+                self.assertEqual(set(Path(directory).iterdir()), {source, output})
+
+    def test_direct_tiff_overwrite_is_safe_and_preserves_all_pages(self):
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, _ = self._make_source(directory)
+            self.assertEqual(convert_file(str(source), str(source), "TIFF", resize=(10, 8)),
+                             str(source))
+            with Image.open(source) as pages:
+                self.assertEqual(pages.n_frames, 3)
+                for index in range(3):
+                    pages.seek(index)
+                    pages.load()
+                    self.assertEqual(pages.size, (10, 8))
+            self.assertEqual(list(Path(directory).iterdir()), [source])
+
+    def test_pages_are_closed_before_decoding_the_next_page(self):
+        from src.core.file_converter import _load_image_pixels
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, _ = self._make_source(directory)
+            pages = []
+            real_copy = Image.Image.copy
+
+            def copy(image):
+                page = real_copy(image)
+                pages.append(page)
+                return page
+
+            def decode(image):
+                for page in pages:
+                    with self.assertRaises(ValueError):
+                        page.getpixel((0, 0))
+                return _load_image_pixels(image)
+
+            with mock.patch.object(Image.Image, "copy", copy), \
+                    mock.patch("src.core.file_converter._load_image_pixels", side_effect=decode):
+                convert_file(str(source), str(Path(directory) / "out.tiff"), "TIFF")
+            self.assertEqual(len(pages), 3)
+
+    def test_worker_tiff_abort_does_not_replace_existing_output(self):
+        from src.core.file_converter import _load_image_pixels
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, _ = self._make_source(directory)
+            for threshold in (1, 100):
+                output_dir = Path(directory) / f"converted-{threshold}"
+                output_dir.mkdir()
+                destination = output_dir / source.name
+                destination.write_bytes(b"existing destination")
+                worker = ConverterWorker([str(source)], "TIFF", ".tiff", output_dir=str(output_dir))
+                results = []
+                worker.file_done.connect(lambda *args: results.append(args))
+
+                def decode(image):
+                    _load_image_pixels(image)
+                    worker._abort = True
+
+                with mock.patch("src.core.worker._LARGE_BATCH_THRESHOLD", threshold), \
+                        mock.patch("src.core.file_converter._load_image_pixels", side_effect=decode):
+                    worker.run()
+                self.assertEqual(len(results), 1)
+                self.assertFalse(results[0][1])
+                self.assertIn("cancelled", results[0][2])
+                self.assertEqual(destination.read_bytes(), b"existing destination")
+                self.assertEqual(list(output_dir.iterdir()), [destination])
+
+    def test_unknown_page_count_tiff_fails_instead_of_silent_page_loss(self):
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, _ = self._make_source(directory)
+            output = Path(directory) / "out.tiff"
+            with mock.patch.object(TiffImagePlugin.TiffImageFile, "n_frames",
+                                   new_callable=mock.PropertyMock,
+                                   side_effect=SyntaxError("unsupported later IFD")):
+                with self.assertRaisesRegex(SyntaxError, "unsupported later IFD"):
+                    convert_file(str(source), str(output), "TIFF")
+            self.assertFalse(output.exists())
 
     def test_page_loss_warning_as_error_closes_source_without_writing(self):
         import warnings

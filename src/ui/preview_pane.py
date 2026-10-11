@@ -197,7 +197,7 @@ class _ThumbLoader(QThread):
         img = None
         try:
             from PIL import Image
-            from src.core.file_converter import _open_image_for_preview, tiff_first_page_note
+            from src.core.file_converter import _open_image_for_preview, tiff_preview_note
             img = _open_image_for_preview(self._path, self._max_size)
             mode = img.mode
             width, height = img.size
@@ -234,7 +234,7 @@ class _ThumbLoader(QThread):
                 f"{width} × {height}  ·  {mode}{alpha_note}\n"
                 f"{_fmt_size(file_size)}{meta_note}"
             )
-            page_note = tiff_first_page_note(img.info.get("tiff_page_count", 1))
+            page_note = tiff_preview_note(img.info.get("tiff_page_count", 1))
             if page_note:
                 meta_text += "\n" + page_note
             if not self._abort:
@@ -1150,6 +1150,13 @@ class _ConverterPreviewLoader(QThread):
             orig_w, orig_h = img.size
             src_file_size = os.path.getsize(self._path)
             page_note = tiff_first_page_note(img.info.get("tiff_page_count", 1))
+            if page_note and self._target_fmt == "TIFF":
+                count = img.info.get("tiff_page_count")
+                total = f" of {count}" if count is not None else " (total page count unavailable)"
+                page_note = (
+                    f"TIFF preview: page 1{total} only — TIFF export preserves all decodable pages; "
+                    "size estimate is for page 1 only."
+                )
 
             # Early abort: if the request is already stale (user moved to a
             # different file before we even decoded the header), skip all work.

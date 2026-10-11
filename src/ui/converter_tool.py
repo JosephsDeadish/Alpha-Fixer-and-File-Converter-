@@ -563,8 +563,9 @@ class ConverterTab(QWidget):
         self._keep_metadata_check.setToolTip(
             "Copy EXIF, ICC profile, and DPI data from the source file to the output.\n"
             "Supported for JPEG, PNG, WEBP, TIFF, and AVIF outputs.\n"
-            "Multipage TIFF: only page 1 and its metadata are exported;\n"
-            "additional pages are not preserved."
+            "TIFF-to-TIFF preserves all decodable pages and supported per-page metadata.\n"
+            "Other outputs export page 1 only. Previews show page 1 only.\n"
+            "Private TIFF tags and original compression/layout are not guaranteed."
         )
         gf_layout.addWidget(self._keep_metadata_check, 3, 0, 1, 2)
 

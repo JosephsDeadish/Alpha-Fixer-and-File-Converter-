@@ -465,7 +465,7 @@ source-frame boundaries. The timeline has a synchronized numeric entry for its
 zero-based rendered output frame. Keyboard-entry, selection, undo/redo and timing
 regressions cover these controls. Frame entry is not a full seconds/timecode
 editor or waveform navigator; synchronized audible preview/device handling,
-multipage TIFF preservation and release/accessibility qualification remain work.
+release/accessibility qualification remain work.
 
 Opening Video projects offers to locate missing media once per unique source.
 Replacement files must match the saved SHA-256 identity; verification and decoding
@@ -475,13 +475,24 @@ Recovery files are not rewritten by opening them. Changed media must be imported
 anew rather than silently substituted; embedded GIF project frames need no relink.
 Generated-media tests cover relinking, cancellation, identity rejection and saving.
 
-Multipage TIFF conversion and previews explicitly use page 1 only, including
-TIFF-to-TIFF output; additional pages are not preserved. Preview details, direct
-conversion warnings and batch logs disclose this limit. Page counting uses a
-separate handle to prevent later-page ICC contamination; damaged later pages
-leave the total unavailable without blocking a readable first page. Generated
-fixtures cover first-page orientation, EXIF/ICC/DPI, resize parity and cleanup.
-Full multipage editing/export remains unsupported and needs separate development.
+TIFF-to-TIFF conversion preserves all decodable pages in order, their native
+Pillow-supported modes and dimensions, and applies an enabled resize to every
+page. **Keep metadata** copies supported per-page EXIF/ICC/DPI; disabling it
+omits these source metadata fields. Applied decoder orientation is not applied
+twice. Compression and storage layout are rebuilt; arbitrary private tags,
+SubIFDs, original compression and byte-identical archival preservation are not
+guaranteed. Pages are decoded/written sequentially, not collected as raster
+copies for the entire document (Pillow still indexes page offsets).
+
+Other outputs export page 1 only; direct warnings and batch logs disclose this
+limit. Previews/thumbnails still show page 1 only, and TIFF preview size estimates
+are for that page, not the complete output. An unavailable page count does not
+block a readable first-page preview or single-image export; TIFF export instead
+fails rather than silently losing later pages. Sibling staging protects existing
+destinations on decode/write failure and cooperative cancellation between pages.
+Generated fixtures cover mixed modes, raw/LZW input, per-page metadata,
+orientation, resize, in-place conversion and resource cleanup. Multipage editing,
+real-corpus scale and packaged-codec qualification remain separate work.
 
 Video Builder now offers opt-in **Preview audio** with independent volume/mute.
 Audio follows the visual timeline through playback, scrubbing, trims, split
@@ -518,8 +529,9 @@ interoperability tags, TIFF metadata/storage-tag separation, AVIF ICC copying
 and disabled-metadata stripping. Applied TIFF decoder orientation is normalized
 without transposing unapplied JPEG pixels again. Generated roundtrips cover five
 output formats; legacy TIFF behavior is simulated, not tested in a Pillow 10
-runtime. An existing LZW-to-TIFF encoder failure and metadata-aware TIFF preview
-parity remain follow-up work, alongside real-corpus and packaged-codec coverage.
+runtime. LZW-to-TIFF output now uses detached pages with rebuilt storage tags;
+metadata-aware TIFF preview parity remains follow-up work, alongside real-corpus
+and packaged-codec coverage.
 
 Bounded Linux X11 qualification used Qt's `xcb` platform with Xvfb/Openbox at
 verified device-pixel ratios 1, 1.5 and 2. Sixteen existing Alpha, Converter, GIF

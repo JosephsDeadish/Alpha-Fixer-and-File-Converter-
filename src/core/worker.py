@@ -424,7 +424,8 @@ class ConverterWorker(QThread):
             try:
                 logical_src = self._source_aliases.get(src, src)
                 actual_target_format, actual_target_ext, note = self._resolve_effective_target(src)
-                page_note = tiff_first_page_note(get_tiff_page_count(src))
+                page_note = (tiff_first_page_note(get_tiff_page_count(src))
+                             if actual_target_format != "TIFF" else "")
                 note = "\n".join(part for part in (note, page_note) if part)
                 dest = build_output_path(
                     logical_src,
@@ -446,6 +447,7 @@ class ConverterWorker(QThread):
                     destinations.update((dest_name, dest_key))
                 os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
                 with staged_output_path(dest, preserve_existing_mode=True) as staged:
+                    extra = {"cancel_check": lambda: self._abort} if actual_target_format == "TIFF" else {}
                     convert_file(
                         src,
                         staged,
@@ -454,7 +456,10 @@ class ConverterWorker(QThread):
                         resize=self._resize,
                         keep_metadata=self._keep_metadata,
                         dds_variant=self._dds_variant,
+                        **extra,
                     )
+                    if actual_target_format == "TIFF" and self._abort:
+                        raise InterruptedError("TIFF conversion cancelled.")
                 return idx, src, True, f"{dest}\n{note}" if note else dest
             except MemoryError as exc:
                 return idx, src, False, f"Out of memory — {exc}"

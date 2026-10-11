@@ -1818,7 +1818,7 @@ class TestConverterMetadata(unittest.TestCase):
         """PNG branch of _meta_kwargs should copy icc_profile."""
         source = self._converter_source()
         # Find the _meta_kwargs function body
-        meta_idx = source.find("def _meta_kwargs")
+        meta_idx = source.find("def _image_metadata")
         self.assertGreater(meta_idx, 0, "_meta_kwargs function not found in converter source")
         meta_body = source[meta_idx: meta_idx + 800]
         # Find the PNG-specific branch within the function
@@ -1831,7 +1831,7 @@ class TestConverterMetadata(unittest.TestCase):
     def test_webp_icc_profile_in_meta_kwargs(self):
         """WEBP branch of _meta_kwargs should copy icc_profile."""
         source = self._converter_source()
-        meta_idx = source.find("def _meta_kwargs")
+        meta_idx = source.find("def _image_metadata")
         self.assertGreater(meta_idx, 0, "_meta_kwargs function not found in converter source")
         meta_body = source[meta_idx: meta_idx + 800]
         webp_idx = meta_body.find('".webp"')

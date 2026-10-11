@@ -25,10 +25,11 @@ import io
 import os
 import logging
 import math
+import struct
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from PIL import Image
 
@@ -296,8 +297,9 @@ FORMAT_DESCRIPTIONS = {
         "Tagged Image File Format — flexible lossless/compressed format.\n"
         "Used in professional print, photography, and scientific imaging.\n"
         "Supports alpha and various colour depths.\n"
-        "This converter previews and exports only the first page of multipage TIFFs;\n"
-        "additional pages and their metadata are not preserved."
+        "TIFF-to-TIFF preserves all decodable pages and supported per-page metadata.\n"
+        "Other outputs and previews use page 1 only; private tags and original layout\n"
+        "or compression are not guaranteed."
     ),
     "WEBP": (
         "Google WebP — modern lossy/lossless format for the web.\n"
@@ -619,7 +621,7 @@ def _count_tiff_pages(img: Image.Image) -> int | None:
 
 
 def tiff_first_page_note(page_count: int | None) -> str:
-    """Describe the converter's single-image boundary for multipage TIFFs."""
+    """Describe page loss when exporting TIFF to a single-image output."""
     if page_count is None:
         return (
             "TIFF: page 1 only — total page count unavailable; additional pages "
@@ -638,6 +640,14 @@ def get_tiff_page_count(path: str) -> int | None:
         return 1
     with Image.open(path) as img:
         return _count_tiff_pages(img) if img.format == "TIFF" else 1
+
+
+def tiff_preview_note(page_count: int | None) -> str:
+    if page_count is not None and page_count <= 1:
+        return ""
+    total = f" of {page_count}" if page_count is not None else ""
+    unknown = " (total page count unavailable)" if page_count is None else ""
+    return f"TIFF preview: page 1{total} only{unknown} — other pages are not previewed."
 
 
 def _flatten_alpha(img: Image.Image, bg_rgb: tuple[int, int, int] = (255, 255, 255)) -> Image.Image:
@@ -686,6 +696,148 @@ def _ensure_rgba(img: Image.Image) -> Image.Image:
     return img.convert("RGBA")
 
 
+def _image_metadata(src_img: Image.Image, img: Image.Image, fmt_ext: str,
+                    keep_metadata: bool) -> dict:
+    if not keep_metadata:
+        return {}
+    kw: dict = {}
+    try:
+        if fmt_ext not in (".jpg", ".jpeg", ".jfif", ".jpe",
+                           ".png", ".tiff", ".tif", ".webp", ".avif"):
+            return kw
+        for key in ("icc_profile", "dpi"):
+            if key == "dpi" and fmt_ext in (".webp", ".avif"):
+                continue
+            if key in src_img.info:
+                kw[key] = src_img.info[key]
+        source_exif = src_img.getexif()
+        if source_exif:
+            exif = Image.Exif()
+            exif.load(source_exif.tobytes())
+            # Rebuild storage/layout tags for the output raster.
+            for tag in (254, 255, 258, 259, 262, 266, 273, 277, 278,
+                        279, 284, 288, 289, 292, 293, 297, 301, 317, 320,
+                        322, 323, 324, 325, 330, 338, 339, 347, 34675):
+                exif.pop(tag, None)
+            for tag, value in ((256, img.width), (257, img.height),
+                               (40962, img.width), (40963, img.height)):
+                if tag in exif:
+                    exif[tag] = value
+            if 34665 in exif:
+                # Keep offsets until nested interoperability IFDs are cached.
+                details = exif.get_ifd(34665)
+                for tag, value in ((40962, img.width), (40963, img.height)):
+                    if tag in details:
+                        details[tag] = value
+                if fmt_ext in (".tiff", ".tif") and 40965 in details:
+                    details[40965] = exif.get_ifd(40965)
+            serialized = exif.tobytes()
+            kw["exif"] = exif if fmt_ext in (".tiff", ".tif") else serialized
+    except Exception:
+        pass
+    return kw
+
+
+def _convert_tiff_pages(source: Image.Image, output_path: str,
+                        resize: Optional[tuple[int, int]], keep_metadata: bool,
+                        cancel_check: Optional[Callable[[], bool]]) -> str:
+    from PIL.TiffImagePlugin import AppendingTiffWriter
+
+    class MetadataTiffWriter(AppendingTiffWriter):
+        def fixIFD(self):
+            start = self.f.tell()
+            super().fixIFD()
+            end = self.f.tell()
+            # Pillow relocates strip/payload offsets, but not nested EXIF/GPS
+            # pointers. Relocate those IFDs and their own payloads as well.
+            self.f.seek(start)
+            count = self._read(8 if self._bigtiff else 2)
+            entry_size = 20 if self._bigtiff else 12
+            value_size = 8 if self._bigtiff else 4
+            for index in range(count):
+                self.f.seek(start + (8 if self._bigtiff else 2) + index * entry_size)
+                tag, field_type, length = struct.unpack(
+                    self.tagFormat, self.f.read(12 if self._bigtiff else 8)
+                )
+                if tag not in (34665, 34853, 40965) or length != 1:
+                    continue
+                offset = self._read(value_size)
+                if offset:
+                    offset += self.offsetOfNewPage
+                    self._rewriteLast(offset, value_size)
+                    self.f.seek(offset)
+                    self.fixIFD()
+            self.f.seek(end)
+
+    if cancel_check and cancel_check():
+        raise InterruptedError("TIFF conversion cancelled.")
+    # Preflight IFDs: an unreadable later page must fail, not silently lose pages.
+    first_info = source.info.copy()
+    first_palette = source.palette.copy() if source.palette else None
+    count = source.n_frames
+    source.seek(0)
+    source.palette = first_palette
+    source.info.clear()
+    source.info.update(first_info)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    with MetadataTiffWriter(output_path, new=True) as writer:
+        for index in range(count):
+            if cancel_check and cancel_check():
+                raise InterruptedError("TIFF conversion cancelled.")
+            if index:
+                # Pillow retains info keys absent on subsequent pages.
+                source.info.clear()
+                source.palette = None
+                source.seek(index)
+            try:
+                exif = source.getexif()
+                if 40965 in exif.get_ifd(34665):
+                    exif.get_ifd(40965)
+            except MemoryError:
+                raise
+            except Exception:
+                pass
+            _load_image_pixels(source)
+            page = source.resize(resize, Image.LANCZOS) if resize else source.copy()
+            try:
+                if page.mode == "I;16B":
+                    # All appended pages need II headers. Decode the byte order
+                    # explicitly: convert("I;16") can clip samples to 255.
+                    normalized = Image.frombytes(
+                        "I;16", page.size, page.tobytes(), "raw", "I;16B"
+                    )
+                    page.close()
+                    page = normalized
+                # Detached pages avoid implicit source layout/compression tags.
+                page.info.clear()
+                page.save(writer, format="TIFF",
+                          **_image_metadata(source, page, ".tiff", keep_metadata))
+                writer.newFrame()
+            finally:
+                page.close()
+            if cancel_check and cancel_check():
+                raise InterruptedError("TIFF conversion cancelled.")
+    return output_path
+
+
+def _validated_resize(resize: tuple[int, int]) -> tuple[int, int]:
+    try:
+        w, h = int(resize[0]), int(resize[1])
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"Invalid resize value: {resize!r}. Both width and height must be integers."
+        )
+    if w < 1 or h < 1:
+        raise ValueError(
+            f"Invalid resize dimensions: {w}×{h}. Both width and height must be at least 1 pixel."
+        )
+    if w > 65535 or h > 65535:
+        raise ValueError(
+            f"Resize dimensions too large: {w}×{h}. Maximum supported size is 65535×65535 pixels."
+        )
+    return w, h
+
+
 def convert_file(
     input_path: str,
     output_path: str,
@@ -694,12 +846,13 @@ def convert_file(
     resize: Optional[tuple[int, int]] = None,
     keep_metadata: bool = False,
     dds_variant: str = "auto",
+    cancel_check: Optional[Callable[[], bool]] = None,
 ) -> str:
     """
     Convert a single image file.
 
-    Multipage TIFF input exports only page 1 and its supported metadata,
-    with a UserWarning; additional pages are not preserved, even to TIFF.
+    TIFF-to-TIFF preserves every decodable page and supported per-page metadata.
+    Other outputs export page 1 only, with a UserWarning for multipage inputs.
 
     The image's native colour mode is preserved where the target format
     supports it.  For targets that cannot store an alpha channel (JPEG, BMP,
@@ -716,6 +869,22 @@ def convert_file(
     :returns: output_path on success.
     :raises:  Exception on failure.
     """
+    if (Path(output_path).suffix.lower() in (".tif", ".tiff")
+            and Path(input_path).suffix.lower() not in (".dds", ".svg", ".xnb", ".tim")):
+        with Image.open(input_path) as source:
+            if source.format == "TIFF":
+                if resize:
+                    resize = _validated_resize(resize)
+                # Direct callers may overwrite the input. Close its handle before
+                # committing a complete sibling output, as the worker also does.
+                from src.ui._ui_utils import staged_output_path
+                os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+                with staged_output_path(output_path, preserve_existing_mode=True) as staged:
+                    try:
+                        _convert_tiff_pages(source, staged, resize, keep_metadata, cancel_check)
+                    finally:
+                        source.close()
+                return output_path
     src_img = _open_image(input_path)
     try:
         img = src_img
@@ -724,28 +893,7 @@ def convert_file(
             warnings.warn(page_note, UserWarning, stacklevel=2)
 
         if resize:
-            try:
-                # int() intentionally truncates floats (e.g. 100.9 → 100).
-                # Image dimensions are always whole pixels; callers should pass
-                # integer values, but fractional values are silently floored here
-                # to be lenient with minor rounding errors from UI spinboxes or
-                # computed aspect-ratio widths/heights.
-                w, h = int(resize[0]), int(resize[1])
-            except (TypeError, ValueError):
-                raise ValueError(
-                    f"Invalid resize value: {resize!r}. "
-                    "Both width and height must be integers."
-                )
-            if w < 1 or h < 1:
-                raise ValueError(
-                    f"Invalid resize dimensions: {w}×{h}. "
-                    "Both width and height must be at least 1 pixel."
-                )
-            if w > 65535 or h > 65535:
-                raise ValueError(
-                    f"Resize dimensions too large: {w}×{h}. "
-                    "Maximum supported size is 65535×65535 pixels."
-                )
+            w, h = _validated_resize(resize)
             try:
                 img = img.resize((w, h), Image.LANCZOS)
             except MemoryError:
@@ -769,47 +917,7 @@ def convert_file(
 
         # Helper: inject metadata kwargs into save calls
         def _meta_kwargs(fmt_ext: str) -> dict:
-            if not keep_metadata:
-                return {}
-            kw: dict = {}
-            try:
-                if fmt_ext not in (".jpg", ".jpeg", ".jfif", ".jpe",
-                                   ".png", ".tiff", ".tif", ".webp", ".avif"):
-                    return kw
-                for key in ("icc_profile", "dpi"):
-                    if key == "dpi" and fmt_ext in (".webp", ".avif"):
-                        continue
-                    if key in src_img.info:
-                        kw[key] = src_img.info[key]
-                source_exif = src_img.getexif()
-                if source_exif:
-                    exif = Image.Exif()
-                    exif.load(source_exif.tobytes())
-                    # Storage/layout tags from TIFF describe the source raster,
-                    # not the output's mode, strips, compression, or palette.
-                    for tag in (254, 255, 258, 259, 262, 266, 273, 277, 278,
-                                279, 284, 288, 289, 292, 293, 297, 301, 317, 320,
-                                322, 323, 324, 325, 330, 338, 339, 347, 34675):
-                        exif.pop(tag, None)
-                    for tag, value in ((256, img.width), (257, img.height),
-                                       (40962, img.width), (40963, img.height)):
-                        if tag in exif:
-                            exif[tag] = value
-                    if 34665 in exif:
-                        # Update the cache without replacing the offset: Pillow
-                        # needs it to resolve nested interoperability IFDs.
-                        details = exif.get_ifd(34665)
-                        for tag, value in ((40962, img.width), (40963, img.height)):
-                            if tag in details:
-                                details[tag] = value
-                        if fmt_ext in (".tiff", ".tif") and 40965 in details:
-                            # TIFF's writer uses get_ifd directly, not tobytes.
-                            details[40965] = exif.get_ifd(40965)
-                    serialized = exif.tobytes()
-                    kw["exif"] = exif if fmt_ext in (".tiff", ".tif") else serialized
-            except Exception:
-                pass
-            return kw
+            return _image_metadata(src_img, img, fmt_ext, keep_metadata)
 
         # Capture final image dimensions before format-specific conversions may
         # change the image object, so any MemoryError message has accurate context.
