@@ -158,18 +158,32 @@ class PreviewAudioController:
             self.ended = False
         if force or not playing:
             self.backend.pause()
+            if self.failed:
+                return
+        # Qt transport calls can emit errorOccurred synchronously. Do not resume
+        # the player or overwrite the failure status after that callback stops it.
         self.backend.volume(self.volume, self.muted or not playing)
+        if self.failed:
+            return
         self.backend.rate(target.rate)
+        if self.failed:
+            return
         now = self.clock()
         drift = abs(self.backend.position() - target.seconds)
         if force or (drift > max(0.12, 0.12 * target.rate) and now - self.last_seek >= 0.35):
             self.backend.seek(target.seconds)
+            if self.failed:
+                return
             self.last_seek = now
         if playing and not self.muted and self.volume > 0:
             self.backend.play()
+            if self.failed:
+                return
             self.status("Preview audio on (export audio unchanged).")
         else:
             self.backend.pause()
+            if self.failed:
+                return
             self.status("Preview audio: muted." if self.muted or self.volume == 0 else "Preview audio: paused.")
 
 

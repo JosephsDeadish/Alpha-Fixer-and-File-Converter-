@@ -567,6 +567,47 @@ def test_qt_seek_after_eof_discards_queued_same_player_end(follower, qt_backend)
     assert not c.ended
 
 
+@pytest.mark.parametrize("operation,playing,force", [
+    ("pause", True, True), ("volume", True, True), ("rate", True, True),
+    ("seek", True, True), ("play", True, True), ("pause", False, False),
+])
+def test_qt_reentrant_error_aborts_transport_sync(follower, qt_backend, operation, playing, force):
+    c, fake, messages, _ = follower
+    backend, _ = qt_backend
+    backend.event = c.media_event
+    fake.load = backend.load
+    c, fake = ready(follower)
+    player = backend.player
+    fake.calls.clear()
+    messages.clear()
+    original = getattr(fake, operation)
+
+    def fail(*args):
+        fake.calls.append((operation, *args))
+        if playing or fake.calls.count(("pause",)) == 2:
+            player.errorOccurred.callback(None, f"{operation} failed")
+
+    setattr(fake, operation, fail)
+    c.sync(AudioTarget("clip.mp4", 4, 1), playing, force=force)
+
+    assert c.failed
+    assert fake.calls[-1] == ("stop",)
+    assert messages == [
+        f"Preview audio unavailable: {operation} failed. Video continues silently."
+    ]
+    if operation != "play":
+        assert ("play",) not in fake.calls
+    if operation == "rate":
+        assert not any(call[0] == "seek" for call in fake.calls)
+
+    setattr(fake, operation, original)
+    c.sync(AudioTarget("clip.mp4", 6, 1), playing, force=True, retry=True)
+    backend.player.mediaStatusChanged.callback(backend.player.MediaStatus.LoadedMedia)
+    assert not c.failed
+    assert ("seek", 6) in fake.calls
+    assert fake.calls[-1] == (("play",) if playing else ("pause",))
+
+
 def test_release_clips_clears_all_player_sources_before_temp_cleanup(video, qt_backend):
     from types import SimpleNamespace
     widget, _ = video

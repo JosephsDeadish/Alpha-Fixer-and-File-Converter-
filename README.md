@@ -451,6 +451,14 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Audio-preview synchronization stops immediately when a transport call reports a
+synchronous backend error, preserving the failure status instead of restarting
+playback. Deterministic transport-failure/retry regressions and a generated
+headless Qt load/seek/shutdown check pass. Native FFmpeg-dependent checks were
+skipped in this pass; physical audible sync, device changes and latency still
+require qualification. A combined preview/split/timing run reached its 120-second
+limit and was not counted as completed validation.
+
 Builder project failures retain an error even when an exception has no message,
 and modal error reporting blocks reentrant project/close operations while
 preserving the prior loading state. Generated-media regressions cover missing
