@@ -49,7 +49,7 @@ from src.core.video_export import (
 )
 
 from PyQt6.QtCore import (
-    Qt, QTimer, QSize, pyqtSignal,
+    Qt, QTimer, QSize, QEvent, pyqtSignal,
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QKeySequence, QShortcut, QIcon,
@@ -60,7 +60,7 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QFileDialog, QSlider,
     QCheckBox, QComboBox, QGroupBox, QGridLayout, QSpinBox,
     QMessageBox, QProgressDialog, QSplitter, QWidget, QApplication,
-    QFrame, QPlainTextEdit, QScrollArea, QSizePolicy, QLayout,
+    QFrame, QPlainTextEdit, QScrollArea, QSizePolicy, QLayout, QBoxLayout,
 )
 
 _VIDEO_EXTS = {
@@ -3018,6 +3018,8 @@ class VideoToolDialog(QDialog):
             root.addWidget(warn)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._splitter = splitter
+        splitter.setChildrenCollapsible(False)
         root.addWidget(splitter, 1)
 
         # ── Left: clip list ──────────────────────────────────────────────
@@ -3160,25 +3162,29 @@ class VideoToolDialog(QDialog):
         self._stream_summary_lbl.setWordWrap(True)
         self._stream_summary_lbl.setProperty("toolGuidance", True)
         stream_vl.addWidget(self._stream_summary_lbl)
-        stream_row = QGridLayout()
-        stream_row.addWidget(QLabel("Video stream:"), 0, 0)
+        stream_row = QVBoxLayout()
+        video_stream_row = QHBoxLayout()
+        video_stream_row.addWidget(QLabel("Video stream:"))
         self._stream_picker_combo = QComboBox()
         self._stream_picker_combo.setToolTip(
             "Choose which detected video stream to reload for the selected clip.\n"
             "Auto keeps the probe-preferred stream; explicit picks force a remux/transcode path when needed."
         )
         self._stream_picker_combo.currentIndexChanged.connect(self._on_stream_picker_changed)
-        stream_row.addWidget(self._stream_picker_combo, 0, 1)
-        stream_row.addWidget(QLabel("Audio stream:"), 1, 0)
+        video_stream_row.addWidget(self._stream_picker_combo, 1)
+        stream_row.addLayout(video_stream_row)
+        audio_stream_row = QHBoxLayout()
+        audio_stream_row.addWidget(QLabel("Audio stream:"))
         self._audio_stream_picker_combo = QComboBox()
         self._audio_stream_picker_combo.setToolTip(
             "Choose which detected audio stream should stay attached to the selected clip.\n"
             "Auto keeps the probe-preferred audio stream; explicit picks are preserved through reload/export when possible."
         )
         self._audio_stream_picker_combo.currentIndexChanged.connect(self._on_stream_picker_changed)
-        stream_row.addWidget(self._audio_stream_picker_combo, 1, 1)
+        audio_stream_row.addWidget(self._audio_stream_picker_combo, 1)
+        stream_row.addLayout(audio_stream_row)
         stream_vl.addLayout(stream_row)
-        self._btn_apply_stream = QPushButton("Reload Selected Streams")
+        self._btn_apply_stream = QPushButton("Reload Streams")
         self._btn_apply_stream.setToolTip(
             "Reload the selected clip from the chosen video/audio stream combination while preserving trim and timing settings when possible."
         )
@@ -3248,7 +3254,11 @@ class VideoToolDialog(QDialog):
 
         self._preview_lbl = QLabel()
         self._preview_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview_lbl.setMinimumSize(_PREVIEW_MAX_W, _PREVIEW_MAX_H)
+        self._preview_lbl.setMinimumSize(160, 120)
+        self._preview_lbl.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
+        self._preview_lbl.setWordWrap(True)
+        self._preview_pixmap = None
+        self._preview_lbl.installEventFilter(self)
         self._preview_lbl.setFrameShape(QFrame.Shape.StyledPanel)
         self._preview_lbl.setText("Add clips to preview and export.")
         pv_layout.addWidget(self._preview_lbl, 1)
@@ -3298,14 +3308,10 @@ class VideoToolDialog(QDialog):
         splitter.addWidget(centre)
 
         # ── Right: adjustments + export ──────────────────────────────────
-        right_scroll = QScrollArea()
-        right_scroll.setWidgetResizable(True)
-        right_scroll.setFrameShape(QFrame.Shape.NoFrame)
         right_inner = QWidget()
         right_layout = QVBoxLayout(right_inner)
         right_layout.setContentsMargins(2, 0, 2, 0)
         right_layout.setSpacing(5)
-        right_scroll.setWidget(right_inner)
 
         grp_adj = QGroupBox("Visual Adjustments")
         adj_vl = QVBoxLayout(grp_adj)
@@ -3367,7 +3373,8 @@ class VideoToolDialog(QDialog):
             tooltip="Input level mapped to white — pulls down highlights"
         )
 
-        btn_reset = QPushButton("↺  Reset All Adjustments")
+        btn_reset = QPushButton("↺  Reset All")
+        btn_reset.setAccessibleName("Reset all video adjustments")
         btn_reset.clicked.connect(self._reset_adjustments)
         adj_vl.addWidget(btn_reset)
 
@@ -3415,7 +3422,7 @@ class VideoToolDialog(QDialog):
         self._export_pad_lbl.setProperty("toolGuidance", True)
         ex_vl.addWidget(self._export_pad_lbl)
 
-        self._audio_group = QGroupBox("Audio (MP4 export only)")
+        self._audio_group = QGroupBox("MP4 Audio")
         audio_vl = QVBoxLayout(self._audio_group)
         audio_vl.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         audio_vl.setSpacing(5)
@@ -3427,7 +3434,7 @@ class VideoToolDialog(QDialog):
         self._audio_scope_lbl.setProperty("toolGuidance", True)
         audio_vl.addWidget(self._audio_scope_lbl)
 
-        self._audio_enable_check = QCheckBox("Keep source audio in MP4 export")
+        self._audio_enable_check = QCheckBox("Keep source audio")
         self._audio_enable_check.setChecked(True)
         self._audio_enable_check.setToolTip(
             "When enabled, MP4 export keeps audio from source video clips where available.\n"
@@ -3474,8 +3481,28 @@ class VideoToolDialog(QDialog):
         right_layout.addWidget(grp_export)
         right_layout.addStretch()
 
-        splitter.addWidget(right_scroll)
+        splitter.addWidget(right_inner)
         splitter.setSizes([240, 420, 260])
+        self._responsive_rows = [
+            tb, insert_row, import_detail_actions, start_row, end_row,
+            video_stream_row, audio_stream_row, clip_speed_row, still_row,
+            ctrl, fps_row, fl_layout, fmt_row, audio_volume_row,
+        ]
+        self._responsive_rows.extend(
+            adj_vl.itemAt(i).layout() for i in range(adj_vl.count())
+            if adj_vl.itemAt(i).layout() is not None
+        )
+        self._layout_timer = QTimer(self)
+        self._layout_timer.setSingleShot(True)
+        self._layout_timer.timeout.connect(self._reflow_controls)
+        self._focus_timer = QTimer(self)
+        self._focus_timer.setSingleShot(True)
+        self._focus_timer.timeout.connect(self._reveal_focused_control)
+        self._content_scroll = self.findChild(QScrollArea, "dialogContentScroll")
+        self._content_scroll.viewport().installEventFilter(self)
+        self._export_content.installEventFilter(self)
+        QApplication.instance().focusChanged.connect(self._schedule_focus_reveal)
+        self._layout_timer.start(0)
         for control, name in (
             (self._insert_mode_combo, "New clip insertion position"),
             (self._stream_picker_combo, "Selected clip video stream"),
@@ -3495,6 +3522,81 @@ class VideoToolDialog(QDialog):
         self._update_audio_controls()
         self._refresh_stream_controls()
         self._update_ui_state()
+
+    def _reflow_controls(self) -> None:
+        available = self._content_scroll.viewport().width()
+        for control in self._export_content.findChildren(QWidget):
+            if isinstance(control, (QPushButton, QCheckBox, QComboBox, QSpinBox)):
+                control.setMaximumHeight(16777215)
+                control.setMinimumHeight(control.minimumSizeHint().height())
+        # Stack before measuring pane minima, otherwise a wide toolbar keeps
+        # the splitter permanently horizontal after increasing the font.
+        for row in self._responsive_rows:
+            widgets = [row.itemAt(i).widget() for i in range(row.count())
+                       if row.itemAt(i).widget() is not None]
+            required = sum(w.minimumSizeHint().width() for w in widgets)
+            required += max(0, len(widgets) - 1) * row.spacing()
+            row.setDirection(
+                QBoxLayout.Direction.LeftToRight if required <= available - 48
+                else QBoxLayout.Direction.TopToBottom
+            )
+        required = sum(self._splitter.widget(i).minimumSizeHint().width() for i in range(3))
+        self._splitter.setOrientation(
+            Qt.Orientation.Horizontal if required + 2 * self._splitter.handleWidth() <= available
+            else Qt.Orientation.Vertical
+        )
+        for row in self._responsive_rows:
+            widgets = [row.itemAt(i).widget() for i in range(row.count())
+                       if row.itemAt(i).widget() is not None]
+            required = sum(w.minimumSizeHint().width() for w in widgets)
+            required += max(0, len(widgets) - 1) * row.spacing()
+            row.setDirection(
+                QBoxLayout.Direction.LeftToRight
+                if required <= min(available, row.parentWidget().width()) - 48
+                else QBoxLayout.Direction.TopToBottom
+            )
+        self._focus_timer.start(0)
+
+    def _schedule_focus_reveal(self, _previous, current) -> None:
+        if current is not None and self._export_content.isAncestorOf(current):
+            self._focus_timer.start(0)
+
+    def _reveal_focused_control(self) -> None:
+        current = QApplication.focusWidget()
+        if current is None or not self._export_content.isAncestorOf(current):
+            return
+        viewport = self._content_scroll.viewport()
+        rect = current.rect()
+        rect.moveTopLeft(current.mapTo(viewport, rect.topLeft()))
+        for bar, leading, trailing, extent in (
+            (self._content_scroll.horizontalScrollBar(), rect.left(), rect.right(), viewport.width()),
+            (self._content_scroll.verticalScrollBar(), rect.top(), rect.bottom(), viewport.height()),
+        ):
+            delta = leading if leading < 0 else max(0, trailing - extent + 1)
+            bar.setValue(bar.value() + delta)
+
+    def _fit_preview_pixmap(self) -> None:
+        if self._preview_pixmap is not None:
+            size = self._preview_lbl.contentsRect().size().boundedTo(
+                QSize(_PREVIEW_MAX_W, _PREVIEW_MAX_H)
+            )
+            self._preview_lbl.setPixmap(self._preview_pixmap.scaled(
+                size,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            ))
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Type.Resize:
+            if watched is self._preview_lbl:
+                self._fit_preview_pixmap()
+            elif hasattr(self, "_content_scroll") and watched is self._content_scroll.viewport():
+                self._layout_timer.start(0)
+        if (watched is getattr(self, "_export_content", None)
+                and event.type() in (QEvent.Type.Resize, QEvent.Type.LayoutRequest)
+                and hasattr(self, "_focus_timer")):
+            self._focus_timer.start(0)
+        return super().eventFilter(watched, event)
 
     def _resolve_tooltip_mgr(self):
         if self._tooltip_mgr is not None:
@@ -3536,6 +3638,9 @@ class VideoToolDialog(QDialog):
     def event(self, event):
         if reserve_space_for_focused_control(self, event):
             return True
+        if (event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange)
+                and hasattr(self, "_layout_timer")):
+            self._layout_timer.start(0)
         return super().event(event)
 
     def _bind_shortcut(self, shortcut_id: str, default: str, slot) -> None:
@@ -4667,6 +4772,7 @@ class VideoToolDialog(QDialog):
     def _update_preview(self) -> None:
         total = self._total_preview_frames()
         if total == 0 or not self._clips:
+            self._preview_pixmap = None
             if self._preview_video_getter is not None:
                 self._preview_video_getter._close_reader()
                 self._preview_video_getter = None
@@ -4702,8 +4808,10 @@ class VideoToolDialog(QDialog):
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
-            self._preview_lbl.setPixmap(pix)
+            self._preview_pixmap = pix
+            self._fit_preview_pixmap()
         except Exception as exc:
+            self._preview_pixmap = None
             self._preview_lbl.setText(f"(preview error: {exc})")
         finally:
             if filtered is not None and filtered is not adjusted:

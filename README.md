@@ -402,6 +402,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Video Builder panes and control rows reflow for compact screens and large fonts.
+Focused controls scroll into view, controls retain font-safe heights, and cached
+preview images resize to their available area without decoding another frame.
+Generated-image layout/action and timing regressions cover this behavior.
+Native playback/export, physical DPI and screen-reader qualification remain
+outstanding.
+
 GIF Builder panes and control rows reflow on compact windows and at large fonts.
 Buttons retain theme-sized heights, panes cannot collapse completely, and keyboard
 focus scrolls controls into view. Compact/theme/font and generated-frame action
