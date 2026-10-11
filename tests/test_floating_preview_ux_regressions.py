@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 from PIL import Image
 from PyQt6 import sip
-from PyQt6.QtCore import QCoreApplication, QEvent, QObject, Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QEvent, QObject, QPoint, Qt, pyqtSignal
 from PyQt6.QtGui import QImage, QColor, QPalette, QPainter, QFontMetrics
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QPushButton
@@ -62,6 +62,129 @@ def tool(request, app, tmp_path):
 
 def dispose_events():
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+@pytest.mark.parametrize("size", [(180, 120), (320, 240)])
+@pytest.mark.parametrize("pixels", [13, 24, 32])
+def test_compact_comparison_keyboard_divider_and_contained_controls(app, size, pixels):
+    widget = BeforeAfterWidget()
+    try:
+        widget.setStyleSheet(build_stylesheet(PRESET_THEMES["Panda Dark"])
+                            + f"\nQWidget {{ font-size: {pixels}px; }}")
+        widget.resize(*size)
+        before = QImage(32, 24, QImage.Format.Format_RGBA8888)
+        before.fill(QColor("red"))
+        after = QImage(32, 24, QImage.Format.Format_RGBA8888)
+        after.fill(QColor("blue"))
+        widget.set_before(before)
+        widget.set_after(after)
+        before_pixmap = widget._pix_before.toImage()
+        after_pixmap = widget._pix_after.toImage()
+        widget.show()
+        widget.activateWindow()
+        for _ in range(10):
+            app.processEvents()
+        assert widget.rect().contains(widget._zoom_bar.geometry())
+        assert widget.rect().contains(widget._popout_btn.geometry())
+        assert not widget._zoom_bar.geometry().intersects(widget._popout_btn.geometry())
+        assert widget._zoom_bar.y() == widget._popout_btn.y()
+        label_font = widget.font()
+        label_font.setBold(True)
+        label_height = QFontMetrics(label_font).height() + 4
+        for control in [widget._popout_btn, widget._zoom_bar]:
+            assert control.geometry().bottom() + 6 + label_height <= widget.height()
+
+        widget._popout_btn.setFocus()
+        app.processEvents()
+        unfocused = widget.grab().toImage()
+        widget.setFocus(Qt.FocusReason.TabFocusReason)
+        app.processEvents()
+        assert widget.hasFocus()
+        assert widget.accessibleName() == "Comparison divider"
+        assert "Home and End" in widget.accessibleDescription()
+        assert widget.grab().toImage() != unfocused
+        QTest.keyClick(widget, Qt.Key.Key_Right)
+        assert widget._split == pytest.approx(0.52)
+        QTest.keyClick(widget, Qt.Key.Key_Left)
+        assert widget._split == pytest.approx(0.5)
+        QTest.keyClick(widget, Qt.Key.Key_Home)
+        assert widget._split == 0.02
+        QTest.keyClick(widget, Qt.Key.Key_Left)
+        assert widget._split == 0.02
+        QTest.keyClick(widget, Qt.Key.Key_End)
+        assert widget._split == 0.98
+        QTest.keyClick(widget, Qt.Key.Key_Right)
+        assert widget._split == 0.98
+        for modifiers in [Qt.KeyboardModifier.ControlModifier,
+                          Qt.KeyboardModifier.ShiftModifier,
+                          Qt.KeyboardModifier.AltModifier]:
+            QTest.keyClick(widget, Qt.Key.Key_Left, modifiers)
+            assert widget._split == 0.98
+        QTest.keyClick(widget, Qt.Key.Key_Tab)
+        assert not widget.hasFocus()
+        button = app.focusWidget()
+        assert isinstance(button, QPushButton)
+        QTest.keyClick(button, Qt.Key.Key_Left)
+        assert widget._split == 0.98
+        zoom_buttons = widget._zoom_bar.findChildren(QPushButton)
+        zoom_buttons[2].setFocus()
+        QTest.keyClick(zoom_buttons[2], Qt.Key.Key_Space)
+        assert widget._zoom > 1
+        QTest.mousePress(widget, Qt.MouseButton.MiddleButton, pos=QPoint(60, 90))
+        QTest.mouseMove(widget, QPoint(70, 95))
+        QTest.mouseRelease(widget, Qt.MouseButton.MiddleButton, pos=QPoint(70, 95))
+        assert widget._pan_x != 0
+        zoom_buttons[1].setFocus()
+        QTest.keyClick(zoom_buttons[1], Qt.Key.Key_Space)
+        assert (widget._zoom, widget._pan_x, widget._pan_y) == (1, 0, 0)
+        widget._update_split(widget.width() / 2)
+        QTest.mousePress(widget, Qt.MouseButton.LeftButton,
+                         pos=QPoint(widget.width() // 2, widget.height() // 2))
+        QTest.mouseMove(widget, QPoint(widget.width() * 3 // 4, widget.height() // 2))
+        QTest.mouseRelease(widget, Qt.MouseButton.LeftButton,
+                           pos=QPoint(widget.width() * 3 // 4, widget.height() // 2))
+        assert widget._split == pytest.approx(0.75)
+        assert widget._pix_before.toImage() == before_pixmap
+        assert widget._pix_after.toImage() == after_pixmap
+    finally:
+        widget.close()
+        sip.delete(widget)
+        dispose_events()
+
+
+def test_floating_comparison_inherits_keyboard_divider_and_zoom(app):
+    widget = BeforeAfterWidget()
+    try:
+        image = QImage(16, 16, QImage.Format.Format_RGBA8888)
+        image.fill(QColor("green"))
+        widget.set_before(image)
+        widget.set_after(image)
+        widget.show()
+        widget.activateWindow()
+        widget._popout_btn.setFocus()
+        QTest.keyClick(widget._popout_btn, Qt.Key.Key_Space)
+        dialog = widget._popout_dialog
+        assert dialog is not None
+        compare = dialog.findChild(BeforeAfterWidget)
+        dialog.activateWindow()
+        compare.setFocus(Qt.FocusReason.TabFocusReason)
+        app.processEvents()
+        QTest.keyClick(compare, Qt.Key.Key_Right)
+        assert compare._split == pytest.approx(0.52)
+        assert widget._split == 0.5
+        buttons = compare._zoom_bar.findChildren(QPushButton)
+        buttons[2].setFocus()
+        QTest.keyClick(buttons[2], Qt.Key.Key_Space)
+        assert compare._zoom > 1
+        assert widget._zoom == 1
+        QTest.keyClick(buttons[2], Qt.Key.Key_Escape)
+        app.processEvents()
+        assert widget._popout_dialog is None
+    finally:
+        widget.close_popout_dialog()
+        widget.close()
+        sip.delete(widget)
+        dispose_events()
 
 
 @pytest.mark.parametrize("pixels", [13, 24, 32])

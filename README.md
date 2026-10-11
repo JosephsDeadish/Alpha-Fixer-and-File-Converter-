@@ -402,6 +402,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Comparison previews support keyboard divider control: Tab to the comparison,
+use Left/Right to adjust it and Home/End to reveal either side. A visible focus
+ring and accessible guidance apply to docked and floating previews. Compact
+overlays prefer a named icon button when full undock text would crowd zoom controls.
+Generated-image keyboard/mouse/layout checks preserve image pixels; physical
+display and native screen-reader acceptance remain outstanding.
+
 History guidance and actions remain reachable by vertical scrolling on compact
 windows and at large fonts, with at least two usable tree rows. Local Ctrl+Tab
 navigation works across history sub-tabs without conflicting with configured

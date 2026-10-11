@@ -387,6 +387,7 @@ class BeforeAfterWidget(QWidget):
     """
     Drag the central handle left/right to reveal more of the 'before'
     (original) image or the 'after' (processed) image.
+    Tab to the comparison, then use Left/Right or Home/End to move the divider.
 
     Public API
     ----------
@@ -452,8 +453,15 @@ class BeforeAfterWidget(QWidget):
             QSizePolicy.Policy.Expanding,
         )
         self.setMouseTracking(True)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setAccessibleName("Comparison divider")
+        self.setAccessibleDescription(
+            "Use Left and Right to move the divider; Home and End reveal each side. "
+            "Tab to the zoom and undock buttons; Space activates them."
+        )
         self.setToolTip(
             "Drag the ◀▶ handle to compare original and processed image.\n"
+            "Tab to the comparison; Left/Right move the divider, Home/End reveal each side.\n"
             "Ctrl+Scroll to zoom; middle-drag to pan when zoomed.\n"
             "Click ⤢ (top-left) to pop out a resizable floating window."
         )
@@ -513,8 +521,10 @@ class BeforeAfterWidget(QWidget):
         self._zoom_bar.adjustSize()
         self._zoom_bar.reposition(self.size())
         undocked = self._popout_dialog is not None and not self._popout_dialog.isHidden()
+        # Prefer a named icon button to a second row covering compact previews.
         self._apply_popout_button_state(
-            self._popout_btn, undocked=undocked, available_width=self.width() - 12,
+            self._popout_btn, undocked=undocked,
+            available_width=max(0, self.width() - self._zoom_bar.width() - 18),
         )
         self._reposition_popout_btn()
         if (not self._popout_btn.isHidden()
@@ -793,6 +803,30 @@ class BeforeAfterWidget(QWidget):
         else:
             event.ignore()
 
+    def keyPressEvent(self, event):  # noqa: N802
+        if self.hasFocus() and event.modifiers() == Qt.KeyboardModifier.NoModifier:
+            key = event.key()
+            if key in (Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Home, Qt.Key.Key_End):
+                if key == Qt.Key.Key_Home:
+                    x = 0
+                elif key == Qt.Key.Key_End:
+                    x = self.width()
+                else:
+                    step = -0.02 if key == Qt.Key.Key_Left else 0.02
+                    x = (self._split + step) * self.width()
+                self._update_split(x)
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def focusInEvent(self, event):  # noqa: N802
+        super().focusInEvent(event)
+        self.update()
+
+    def focusOutEvent(self, event):  # noqa: N802
+        super().focusOutEvent(event)
+        self.update()
+
     def paintEvent(self, event):  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -947,6 +981,15 @@ class BeforeAfterWidget(QWidget):
         painter.drawLine(split_x + 2, hy, split_x + aw_v, hy)
         painter.drawLine(split_x + aw_v, hy, split_x + aw_v - ah_v, hy - ah_v)
         painter.drawLine(split_x + aw_v, hy, split_x + aw_v - ah_v, hy + ah_v)
+
+        if self.hasFocus():
+            # A two-tone inset ring stays visible over both light and dark images.
+            focus_rect = self.rect().adjusted(2, 2, -3, -3)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor("#000000"), 3))
+            painter.drawRect(focus_rect)
+            painter.setPen(QPen(QColor("#ffffff"), 1, Qt.PenStyle.DashLine))
+            painter.drawRect(focus_rect)
 
         painter.end()
 
