@@ -4091,8 +4091,8 @@ class MainWindow(QMainWindow):
             QTableWidget, QTableWidgetItem, QHeaderView, QDialogButtonBox,
             QSizePolicy, QScrollArea,
         )
-        from PyQt6.QtCore import Qt as _Qt, QTimer as _QTimer
-        from ._ui_utils import fit_dialog_to_screen
+        from PyQt6.QtCore import Qt as _Qt, QTimer as _QTimer, QEvent
+        from ._ui_utils import fit_dialog_to_screen, scrollable_dialog_layout
 
         dlg = QDialog(self)
         dlg.setWindowTitle("⌨  Keyboard Shortcuts")
@@ -4114,9 +4114,7 @@ class MainWindow(QMainWindow):
             self.y() + (self.height() - init_h) // 2,
         )
 
-        outer = QVBoxLayout(dlg)
-        outer.setContentsMargins(12, 12, 12, 8)
-        outer.setSpacing(8)
+        outer = scrollable_dialog_layout(dlg)
 
         heading = QLabel(
             "<b>⌨  Customizable Shortcuts</b>  — click <i>Change</i> to remap any shortcut.<br>"
@@ -4127,17 +4125,30 @@ class MainWindow(QMainWindow):
 
         # Editable shortcuts table
         table = QTableWidget(0, 4)
+        table.setAccessibleName("Customizable keyboard shortcuts")
+        table.setAccessibleDescription("Use Tab to reach Change and Reset for each action.")
         table.setHorizontalHeaderLabels(["Group", "Action", "Shortcut", "Controls"])
         table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
         table.verticalHeader().setVisible(False)
+        table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         table.setAlternatingRowColors(True)
         table.setWordWrap(True)
         table.setColumnWidth(2, 150)
+        table.setMinimumHeight(180)
+
+        class ShortcutButton(QPushButton):
+            def keyPressEvent(self, event):
+                if (event.key() in (_Qt.Key.Key_Return, _Qt.Key.Key_Enter)
+                        and event.modifiers() == _Qt.KeyboardModifier.NoModifier):
+                    self.click()
+                    event.accept()
+                    return
+                super().keyPressEvent(event)
 
         def _populate_table():
             table.setRowCount(0)
@@ -4163,13 +4174,17 @@ class MainWindow(QMainWindow):
                 ctrl_h = QHBoxLayout(ctrl_w)
                 ctrl_h.setContentsMargins(4, 2, 4, 2)
                 ctrl_h.setSpacing(6)
-                btn_change = QPushButton("Change")
+                btn_change = ShortcutButton("Change")
+                btn_change.setAutoDefault(False)
+                btn_change.setAccessibleName(f"Change {info['desc']} ({info['group']})")
                 btn_change.setMinimumWidth(86)
                 btn_change.setMinimumHeight(28)
                 btn_change.setToolTip(
                     "Click then press any key combination to reassign this shortcut."
                 )
-                btn_reset = QPushButton("Reset")
+                btn_reset = ShortcutButton("Reset")
+                btn_reset.setAutoDefault(False)
+                btn_reset.setAccessibleName(f"Reset {info['desc']} ({info['group']})")
                 btn_reset.setMinimumWidth(76)
                 btn_reset.setMinimumHeight(28)
                 btn_reset.setEnabled(is_custom)
@@ -4186,7 +4201,14 @@ class MainWindow(QMainWindow):
                         _btn_c.setEnabled(False)
 
                         # Create a temporary key-capture dialog
-                        cap_dlg = QDialog(dlg)
+                        class CaptureDialog(QDialog):
+                            def event(self, event):
+                                if event.type() == QEvent.Type.ShortcutOverride:
+                                    event.accept()
+                                    return True
+                                return super().event(event)
+
+                        cap_dlg = CaptureDialog(dlg)
                         cap_dlg.setWindowTitle("Press a Key Combination")
                         cap_dlg.setWindowFlags(
                             cap_dlg.windowFlags()
@@ -4195,21 +4217,24 @@ class MainWindow(QMainWindow):
                         cap_dlg.setModal(True)
                         cap_dlg.resize(420, 200)
                         cap_dlg.setSizeGripEnabled(True)
-                        cap_v = QVBoxLayout(cap_dlg)
+                        cap_v = scrollable_dialog_layout(cap_dlg)
                         cap_lbl = QLabel(
-                            "<b>Press the key combination you want to use.</b>\n"
+                            "<b>Press the key combination you want to use.</b><br>"
                             "Press Esc to cancel."
                         )
                         cap_lbl.setWordWrap(True)
                         cap_lbl.setAlignment(_Qt.AlignmentFlag.AlignCenter)
                         cap_v.addWidget(cap_lbl, 1)
                         cap_key_lbl = QLabel("Waiting for key…")
+                        cap_key_lbl.setAccessibleName("Captured shortcut")
+                        cap_key_lbl.setWordWrap(True)
                         cap_key_lbl.setAlignment(_Qt.AlignmentFlag.AlignCenter)
-                        cap_key_lbl.setStyleSheet("font-size: 14px; font-weight: bold;")
+                        cap_key_lbl.setStyleSheet("font-weight: bold;")
                         cap_v.addWidget(cap_key_lbl)
                         cap_cancel = QPushButton("Cancel")
+                        cap_cancel.setAutoDefault(False)
                         cap_cancel.clicked.connect(cap_dlg.reject)
-                        cap_v.addWidget(cap_cancel, 0, _Qt.AlignmentFlag.AlignRight)
+                        cap_dlg.layout().addWidget(cap_cancel, 0, _Qt.AlignmentFlag.AlignRight)
 
                         _captured_key = [None]
 
@@ -4233,6 +4258,8 @@ class MainWindow(QMainWindow):
                             _QTimer.singleShot(400, cap_dlg.accept)
 
                         cap_dlg.keyPressEvent = _key_press
+                        cap_dlg.setFocusPolicy(_Qt.FocusPolicy.StrongFocus)
+                        cap_dlg.setFocus()
                         fit_dialog_to_screen(cap_dlg)
                         _QTimer.singleShot(0, lambda: fit_dialog_to_screen(cap_dlg))
                         result = cap_dlg.exec()
@@ -4308,7 +4335,7 @@ class MainWindow(QMainWindow):
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dlg.reject)
-        outer.addWidget(buttons)
+        dlg.layout().addWidget(buttons)
 
         fit_dialog_to_screen(dlg)
         _QTimer.singleShot(0, lambda: fit_dialog_to_screen(dlg))

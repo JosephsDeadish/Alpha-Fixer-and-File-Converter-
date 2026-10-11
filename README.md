@@ -402,6 +402,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Shortcut configuration and key-capture guidance scroll on compact screens and
+at large fonts. Action columns retain readable widths, row buttons identify their
+actions accessibly, and Enter activates focused Change/Reset buttons. Key capture
+accepts Enter instead of accidentally activating Cancel; Escape still cancels.
+Bounded widget-host tests cover these interactions, not full native MainWindow
+or screen-reader acceptance.
+
 Alpha Adjuster panes, output/settings grids and preview statistics reflow on
 compact windows and at large fonts. Keyboard focus reveals complete controls.
 Alpha and Converter background progress updates preserve manually scrolled views
