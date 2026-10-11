@@ -451,6 +451,12 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Failed project open/recovery keeps retained playback paused while the error
+dialog is displayed, then resumes previously active playback after dismissal.
+Generated-frame tests pump Qt events during read/decode errors in both builders
+and verify retained playhead, edits and resources. These bounded checks do not
+replace native project/recovery or physical audio acceptance.
+
 Project media-identity checks reject nonfinite decoded frame rates before a
 loaded or recovered project replaces the active editor session. Generated-file
 regressions with injected decoder metadata cover cleanup and preservation of

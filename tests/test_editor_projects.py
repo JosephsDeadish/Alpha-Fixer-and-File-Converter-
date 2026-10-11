@@ -1716,6 +1716,67 @@ def test_invalid_open_keeps_unsaved_controls_and_playback(dialogs, tmp_path, kin
     assert project.open_button.isEnabled() and widget._content_scroll.isEnabled()
 
 
+@pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("recovery", [False, True])
+@pytest.mark.parametrize("failure", ["read", "prepare"])
+def test_failed_open_pauses_retained_playback_until_error_dismissed(
+        dialogs, tmp_path, kind, recovery, failure):
+    source, _ = sources(tmp_path)
+    widget = dialogs(kind)
+    if kind == "gif":
+        widget._add_paths([str(source)])
+        control = widget._delay_slider
+    else:
+        widget._load_image_paths([str(source)])
+        control = widget._brightness_slider
+    path = tmp_path / "failed-open.json"
+    save(widget, path)
+    project = widget._project
+    document = read_project(path)
+    if failure == "read":
+        document["version"] = 2
+    elif kind == "gif":
+        document["entries"][0]["png"] = "not-base64!"
+    else:
+        document["entries"][0]["source_sha256"] = "0" * 64
+    path.write_text(json.dumps(document))
+    control.setValue(control.value() + 10)
+    widget._scrubber.setValue(0)
+    widget._btn_play.setChecked(True)
+    entries = tuple(project.entries)
+    fingerprint = project.fingerprint()
+    saved, autosaved = project._saved, project._autosaved
+    history = list(widget._undo_stack), list(widget._redo_stack)
+    before = path.read_bytes()
+    modal = []
+
+    def error_dialog(*args):
+        modal.append((widget._btn_play.isChecked(), widget._preview_timer.isActive()))
+        # A real modal error dialog pumps the retained editor's preview timer.
+        QTest.qWait(160)
+        modal.append(widget._scrubber.value())
+
+    with patch("src.ui.editor_project.QMessageBox.critical", side_effect=error_dialog) as error:
+        assert project.load(path, recovery=recovery)
+        wait(widget)
+    error.assert_called_once()
+    assert modal == [(False, False), 0]
+    assert widget._btn_play.isChecked() and widget._preview_timer.isActive()
+    widget._btn_play.setChecked(False)
+    assert widget._scrubber.value() == 0
+    assert tuple(project.entries) == entries and project.fingerprint() == fingerprint
+    assert (project._saved, project._autosaved) == (saved, autosaved)
+    assert (widget._undo_stack, widget._redo_stack) == history
+    assert project.dirty and project.path == str(path)
+    assert path.read_bytes() == before
+    assert project.open_button.isEnabled() and widget._content_scroll.isEnabled()
+    if kind == "gif":
+        assert entries[0]._pil.getpixel((0, 0)) == (255, 0, 0, 255)
+    else:
+        with entries[0].get_frame(0) as frame:
+            assert frame.getpixel((0, 0)) == (255, 0, 0, 255)
+
+
 def test_first_autosave_retains_hash_and_pending_parent_close_keeps_media(dialogs, tmp_path):
     from threading import Event
     from src.ui import editor_project

@@ -433,10 +433,11 @@ class EditorProjectController(QObject):
             return document, missing_sources(document, path)
 
         def failed(message):
-            if was_playing:
-                self.dialog._btn_play.setChecked(True)
+            # The modal error pumps Qt events; keep retained playback paused until dismissal.
             self._failure(f"Could not open project: {path}\n{message}\n"
                           "The current project has been kept intact.")
+            if was_playing:
+                self.dialog._btn_play.setChecked(True)
 
         def discovered(job):
             if job.error:
