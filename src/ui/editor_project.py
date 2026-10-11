@@ -403,7 +403,18 @@ class EditorProjectController(QObject):
         replacements = {}
 
         def operation():
-            document = read_project(path, self.kind)
+            lock = None
+            if recovery:
+                # Discovery/pickers can outlive a writer starting a new job.
+                lock = QLockFile(str(path) + ".lock")
+                lock.setStaleLockTime(0)
+                if not lock.tryLock(0):
+                    raise ValueError("Recovery belongs to an active editor or cannot be locked")
+            try:
+                document = read_project(path, self.kind)
+            finally:
+                if lock is not None:
+                    lock.unlock()
             return document, missing_sources(document, path)
 
         def failed(message):
@@ -608,15 +619,21 @@ class EditorProjectController(QObject):
         if not self._recoveries:
             self.status.setText("No closed/crashed editor recovery copies found")
             return
+        candidates = tuple(self._recoveries)
         try:
             labels = [f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(p.stat().st_mtime))} • {p.name}"
-                      for p in self._recoveries]
+                      for p in candidates]
         except OSError as error:
             self._failure(str(error))
             return
-        label, accepted = QInputDialog.getItem(self.dialog, "Recover Project", "Retained recovery copies:", labels, 0, False)
+        self._loading = True
+        try:
+            label, accepted = QInputDialog.getItem(
+                self.dialog, "Recover Project", "Retained recovery copies:", labels, 0, False)
+        finally:
+            self._loading = False
         if accepted:
-            self.load(self._recoveries[labels.index(label)], recovery=True)
+            self.load(candidates[labels.index(label)], recovery=True)
 
     def allow_close(self, resume, *, provisional=False):
         if self._closing_approved:

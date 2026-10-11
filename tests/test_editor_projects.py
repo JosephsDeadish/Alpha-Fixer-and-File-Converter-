@@ -356,6 +356,7 @@ def test_relink_recovery_stays_dirty_without_rewriting_snapshot(dialogs, tmp_pat
     wait(widget)
     path = widget._project.recovery_path
     before = path.read_bytes()
+    widget._project._release_session()
     moved = tmp_path / "moved.png"
     still.rename(moved)
     recovered = dialogs("video")
@@ -365,6 +366,138 @@ def test_relink_recovery_stays_dirty_without_rewriting_snapshot(dialogs, tmp_pat
     assert recovered._clips[0].source_path == str(moved)
     assert recovered._project.dirty and recovered._project.path == ""
     assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+def test_recovery_locked_after_discovery_keeps_current_session(dialogs, tmp_path, kind):
+    from PyQt6.QtCore import QLockFile
+    _, still = sources(tmp_path)
+    writer, reader = dialogs(kind), dialogs(kind)
+    for widget in (writer, reader):
+        if kind == "gif":
+            widget._add_paths([str(still)])
+        else:
+            widget._load_image_paths([str(still)])
+        assert widget._project.autosave()
+        wait(widget)
+    writer._project._release_session()
+    if kind == "gif":
+        reader._delay_slider.setValue(420)
+    else:
+        reader._brightness_slider.setValue(150)
+    project = reader._project
+    entries = tuple(project.entries)
+    state = project.path, project._saved, project._autosaved, project._lock
+    snapshot = writer._project.recovery_path
+    before = snapshot.read_bytes()
+    lock = QLockFile(str(snapshot) + ".lock")
+    lock.setStaleLockTime(0)
+
+    def choose(_parent, _title, _prompt, labels, *_args):
+        assert lock.tryLock(0)
+        return labels[0], True
+
+    try:
+        with patch("src.ui.editor_project.QInputDialog.getItem", side_effect=choose), \
+                patch("src.ui.editor_project.QMessageBox.critical") as error, \
+                patch("src.ui.editor_project.QMessageBox.question") as question:
+            project.recover_project()
+            wait(reader)
+        error.assert_called_once()
+        question.assert_not_called()
+        assert "active" in project.status.text().lower()
+        assert tuple(project.entries) == entries and project.dirty
+        assert (project.path, project._saved, project._autosaved, project._lock) == state
+        assert project._lock.isLocked() and lock.isLocked()
+        assert snapshot.read_bytes() == before
+        assert not project._loading and reader._content_scroll.isEnabled()
+    finally:
+        lock.unlock()
+    with patch("src.ui.editor_project.QMessageBox.question", return_value=QMessageBox.StandardButton.Discard):
+        assert project.load(snapshot, recovery=True)
+        wait(reader)
+    assert project.dirty and project.path == ""
+    assert snapshot.read_bytes() == before
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("accepted", [False, True])
+def test_recovery_picker_keeps_candidate_snapshot_and_blocks_reentry(dialogs, tmp_path, kind, accepted):
+    _, still = sources(tmp_path)
+    writer, reader = dialogs(kind), dialogs(kind)
+    for widget in (writer, reader):
+        if kind == "gif":
+            widget._add_paths([str(still)])
+        else:
+            widget._load_image_paths([str(still)])
+        assert widget._project.autosave()
+        wait(widget)
+    writer._project._release_session()
+    project = reader._project
+    entries = tuple(project.entries)
+    snapshot = writer._project.recovery_path
+    before = snapshot.read_bytes()
+    resumes = []
+
+    def choose(_parent, _title, _prompt, labels, *_args):
+        assert not project.autosave()
+        assert not project.load(snapshot)
+        assert not project.allow_parent_close(lambda: resumes.append(True))
+        project._recoveries = []
+        return labels[0], accepted
+
+    with patch("src.ui.editor_project.QInputDialog.getItem", side_effect=choose), \
+            patch("src.ui.editor_project.QMessageBox.question", return_value=QMessageBox.StandardButton.Discard), \
+            patch("src.ui.editor_project.QMessageBox.critical") as error:
+        project.recover_project()
+        wait(reader)
+    error.assert_not_called()
+    assert not resumes and not project._loading
+    assert reader._content_scroll.isEnabled() and project._lock.isLocked()
+    assert snapshot.read_bytes() == before
+    if accepted:
+        assert project.dirty and project.path == ""
+        assert tuple(project.entries) != entries
+    else:
+        assert tuple(project.entries) == entries
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("malformed", [False, True])
+def test_recovery_read_claims_lock_and_releases_on_failure(dialogs, tmp_path, kind, malformed):
+    from PyQt6.QtCore import QLockFile, QThread
+    _, still = sources(tmp_path)
+    writer, reader = dialogs(kind), dialogs(kind)
+    if kind == "gif":
+        writer._add_paths([str(still)])
+    else:
+        writer._load_image_paths([str(still)])
+    assert writer._project.autosave()
+    wait(writer)
+    snapshot = writer._project.recovery_path
+    writer._project._release_session()
+    if malformed:
+        snapshot.write_text('{"bad":', encoding="utf-8")
+    before = snapshot.read_bytes()
+    probe = QLockFile(str(snapshot) + ".lock")
+    probe.setStaleLockTime(0)
+
+    def read(path, project_kind):
+        assert QThread.currentThread() != reader.thread()
+        assert not probe.tryLock(0)
+        return read_project(path, project_kind)
+
+    with patch("src.ui.editor_project.read_project", side_effect=read) as worker_read, \
+            patch("src.ui.editor_project.QMessageBox.critical") as error:
+        assert reader._project.load(snapshot, recovery=True)
+        wait(reader)
+    worker_read.assert_called_once()
+    assert error.call_count == int(malformed)
+    assert len(reader._project.entries) == (0 if malformed else 1)
+    assert not reader._project._loading and reader._content_scroll.isEnabled()
+    assert snapshot.read_bytes() == before
+    assert probe.tryLock(0)
+    probe.unlock()
 
 
 def test_relink_same_shape_wrong_identity_rejected_before_decode(dialogs, tmp_path):

@@ -451,6 +451,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Editor recovery rechecks the recovery-file lock while reading, rejecting a copy
+claimed by an active editor after discovery. The recovery picker uses a stable
+candidate list and blocks reentrant project I/O/shutdown while open. Generated
+GIF/Video project tests cover lock races, malformed-read cleanup and picker
+cancellation/reentry. Native concurrent-editor and physical storage recovery
+qualification remain outstanding.
+
 Builder project replacement keeps save/autosave actions blocked through modal
 confirmation and installation. Edits made during confirmation prevent stale
 replacement; completion restores editing controls on success, cancellation and
