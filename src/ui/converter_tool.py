@@ -562,7 +562,9 @@ class ConverterTab(QWidget):
         )
         self._keep_metadata_check.setToolTip(
             "Copy EXIF, ICC profile, and DPI data from the source file to the output.\n"
-            "Supported for JPEG, PNG, WEBP, TIFF, and AVIF outputs."
+            "Supported for JPEG, PNG, WEBP, TIFF, and AVIF outputs.\n"
+            "Multipage TIFF: only page 1 and its metadata are exported;\n"
+            "additional pages are not preserved."
         )
         gf_layout.addWidget(self._keep_metadata_check, 3, 0, 1, 2)
 
@@ -1933,7 +1935,7 @@ class ConverterTab(QWidget):
             parts = msg.splitlines() if msg else []
             dest_path = parts[0] if parts else ""
             dest_name = Path(dest_path).name if dest_path else "?"
-            note = parts[-1].strip() if len(parts) > 1 else ""
+            note = " ".join(part.strip() for part in parts[1:]) if len(parts) > 1 else ""
             if note:
                 self._log_msg(f"✔ {name}  →  {dest_name}  ({note})")
             else:

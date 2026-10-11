@@ -1696,6 +1696,347 @@ class TestConversionMetadata(unittest.TestCase):
                                 self.assertEqual(results[0][1], _pil_to_qimage(decoded))
 
 
+class TestMultipageTiffBoundary(unittest.TestCase):
+    def _make_source(self, directory, profiles=None):
+        source = Path(directory) / "multipage.tiff"
+        profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+        specs = [
+            ((40, 24), "red", "blue", 6),
+            ((18, 30), "green", "yellow", 3),
+            ((22, 16), "purple", "white", 1),
+        ]
+        profiles = (profile,) * len(specs) if profiles is None else profiles
+        with TiffImagePlugin.AppendingTiffWriter(str(source), True) as writer:
+            for index, (size, left, right, orientation) in enumerate(specs):
+                exif = Image.Exif()
+                exif[274] = orientation
+                exif[297] = (index, len(specs))
+                exif[305] = f"page-{index + 1}-metadata"
+                with Image.new("RGB", size, left) as page:
+                    page.paste(right, (size[0] // 2, 0, *size))
+                    page.save(writer, format="TIFF", exif=exif,
+                              icc_profile=profiles[index], dpi=(100 + index, 100 + index))
+                writer.newFrame()
+        with Image.open(source) as pages:
+            self.assertEqual(pages.n_frames, len(specs))
+            for index, (size, _, _, orientation) in enumerate(specs):
+                pages.seek(index)
+                self.assertEqual((pages.tag_v2[256], pages.tag_v2[257]), size)
+                self.assertEqual(pages.getexif()[274], orientation)
+                self.assertEqual(pages.getexif()[305], f"page-{index + 1}-metadata")
+        return source, profiles[0]
+
+    def test_mixed_page_metadata_does_not_contaminate_export_or_preview(self):
+        from src.ui.preview_pane import _ThumbLoader
+
+        first_profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+        later_profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("LAB")).tobytes()
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            for profile in (None, first_profile):
+                source, _ = self._make_source(directory, (profile, later_profile, None))
+                for opener in (
+                    lambda: _open_image(str(source)),
+                    lambda: _open_image_for_preview(str(source), 512),
+                    lambda: _open_image_for_preview(str(source), 4),
+                ):
+                    with self.subTest(first_icc=profile is not None, opener=opener):
+                        with opener() as image:
+                            self.assertEqual(image.info.get("icc_profile"), profile)
+                            self.assertEqual("icc_profile" in image.info, profile is not None)
+                            self.assertEqual(image.info["tiff_page_count"], 3)
+                            if image.format == "TIFF":
+                                self.assertEqual(image.getexif()[305], "page-1-metadata")
+                            self.assertEqual(tuple(map(float, image.info["dpi"])), (100, 100))
+                thumbnails, errors = [], []
+                loader = _ThumbLoader(str(source), max_size=4)
+                loader.loaded.connect(lambda *args: thumbnails.append(args))
+                loader.failed.connect(errors.append)
+                loader.run()
+                self.assertFalse(errors)
+                self.assertEqual(len(thumbnails), 1)
+                self.assertEqual("ICC" in thumbnails[0][1], profile is not None)
+                for fmt in ("PNG", "TIFF"):
+                    for keep in (False, True):
+                        for resize in (None, (12, 20)):
+                            with self.subTest(first_icc=profile is not None, fmt=fmt,
+                                              keep=keep, resize=resize):
+                                output = Path(directory) / ("mixed" + SUPPORTED_OUTPUT_FORMATS[fmt])
+                                with self.assertWarns(UserWarning):
+                                    convert_file(str(source), str(output), fmt,
+                                                 keep_metadata=keep, resize=resize)
+                                with Image.open(output) as saved:
+                                    self.assertEqual(saved.info.get("icc_profile"), profile if keep else None)
+                                    self.assertEqual("icc_profile" in saved.info, keep and profile is not None)
+                                    if keep:
+                                        self.assertEqual(saved.getexif()[305], "page-1-metadata")
+
+    def test_page_count_handles_close_on_success_and_failure(self):
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, _ = self._make_source(directory)
+            real_open = Image.open
+            for opener in (
+                lambda: _open_image(str(source)),
+                lambda: _open_image_for_preview(str(source), 4),
+            ):
+                for failure in (None, OSError, SyntaxError, MemoryError):
+                    handles = []
+
+                    def tracked_open(*args, **kwargs):
+                        image = real_open(*args, **kwargs)
+                        handles.append(image.fp)
+                        return image
+
+                    with self.subTest(opener=opener, failure=failure):
+                        with mock.patch("src.core.file_converter.Image.open", side_effect=tracked_open):
+                            if failure is None:
+                                with opener():
+                                    self.assertEqual(len(handles), 2)
+                                    self.assertTrue(handles[1].closed)
+                            else:
+                                with mock.patch.object(TiffImagePlugin.TiffImageFile, "n_frames",
+                                                       new_callable=mock.PropertyMock,
+                                                       side_effect=failure("page count failed")):
+                                    if failure is MemoryError:
+                                        with self.assertRaises(MemoryError):
+                                            opener()
+                                    else:
+                                        with opener() as image:
+                                            self.assertIsNone(image.info["tiff_page_count"])
+                                self.assertEqual(len(handles), 2)
+                        self.assertTrue(all(handle.closed for handle in handles))
+
+    def test_unknown_page_count_preserves_first_page_and_discloses_limit(self):
+        from src.core.file_converter import get_tiff_page_count
+        from src.ui.converter_tool import ConverterTab
+        from src.ui.preview_pane import _ConverterPreviewLoader, _ThumbLoader, _pil_to_qimage
+
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, profile = self._make_source(directory)
+            with _open_image(str(source)) as native:
+                expected = native.copy()
+            try:
+                with mock.patch.object(TiffImagePlugin.TiffImageFile, "n_frames",
+                                       new_callable=mock.PropertyMock,
+                                       side_effect=SyntaxError("unsupported later page")):
+                    self.assertIsNone(get_tiff_page_count(str(source)))
+                    for opener in (_open_image, lambda path: _open_image_for_preview(path, 512)):
+                        with opener(str(source)) as image:
+                            self.assertEqual(image.tobytes(), expected.tobytes())
+                            self.assertEqual(image.getexif()[305], "page-1-metadata")
+                            self.assertEqual(image.info["icc_profile"], profile)
+                            self.assertIsNone(image.info["tiff_page_count"])
+                    output = Path(directory) / "first.png"
+                    with self.assertWarnsRegex(UserWarning, "page 1 only.*total page count unavailable"):
+                        convert_file(str(source), str(output), "PNG", keep_metadata=True)
+                    with Image.open(output) as saved:
+                        self.assertEqual(saved.tobytes(), expected.tobytes())
+                        self.assertEqual(saved.getexif()[305], "page-1-metadata")
+                    results, thumbnails, errors = [], [], []
+                    loader = _ConverterPreviewLoader(str(source), "PNG", 90)
+                    loader.ready.connect(lambda *args: results.append(args))
+                    loader.failed.connect(errors.append)
+                    loader.run()
+                    thumb = _ThumbLoader(str(source), max_size=4)
+                    thumb.loaded.connect(lambda *args: thumbnails.append(args))
+                    thumb.failed.connect(errors.append)
+                    thumb.run()
+                    self.assertFalse(errors)
+                    self.assertEqual(len(results), 1)
+                    self.assertEqual(len(thumbnails), 1)
+                    self.assertEqual(results[0][1], _pil_to_qimage(expected))
+                    for text in (*results[0][2:], thumbnails[0][1]):
+                        self.assertIn("page 1 only", text)
+                        self.assertIn("total page count unavailable", text)
+                    for threshold in (1, 100):
+                        done = []
+                        worker = ConverterWorker([str(source)], "PNG", ".png",
+                                                 output_dir=str(Path(directory) / f"converted-{threshold}"))
+                        worker.file_done.connect(lambda *args: done.append(args))
+                        with mock.patch("src.core.worker._LARGE_BATCH_THRESHOLD", threshold), \
+                                self.assertWarnsRegex(UserWarning, "total page count unavailable"):
+                            worker.run()
+                        self.assertEqual(len(done), 1)
+                        self.assertTrue(done[0][1], done[0][2])
+                        destination, note = done[0][2].split("\n", 1)
+                        with Image.open(destination) as saved:
+                            self.assertEqual(saved.tobytes(), expected.tobytes())
+                        logs = []
+                        ConverterTab._on_file_done(types.SimpleNamespace(_log_msg=logs.append), *done[0])
+                        self.assertIn("page 1 only", logs[0])
+                        self.assertIn("total page count unavailable", logs[0])
+            finally:
+                expected.close()
+
+    def test_page_count_probe_closes_and_propagates_resource_and_open_failures(self):
+        from src.core.file_converter import get_tiff_page_count
+
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, _ = self._make_source(directory)
+            real_open = Image.open
+            for failure in (SyntaxError, MemoryError):
+                handles = []
+
+                def tracked_open(*args, **kwargs):
+                    image = real_open(*args, **kwargs)
+                    handles.append(image.fp)
+                    return image
+
+                with self.subTest(failure=failure), \
+                        mock.patch("src.core.file_converter.Image.open", side_effect=tracked_open), \
+                        mock.patch.object(TiffImagePlugin.TiffImageFile, "n_frames",
+                                          new_callable=mock.PropertyMock,
+                                          side_effect=failure("count failed")):
+                    if failure is MemoryError:
+                        with self.assertRaises(MemoryError):
+                            get_tiff_page_count(str(source))
+                    else:
+                        self.assertIsNone(get_tiff_page_count(str(source)))
+                self.assertEqual(len(handles), 1)
+                self.assertTrue(handles[0].closed)
+            with mock.patch("src.core.file_converter.Image.open",
+                            side_effect=SyntaxError("invalid first page")):
+                with self.assertRaisesRegex(SyntaxError, "invalid first page"):
+                    get_tiff_page_count(str(source))
+
+    def test_unknown_count_does_not_hide_first_page_decode_failure(self):
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, _ = self._make_source(directory)
+            for opener in (_open_image, lambda path: _open_image_for_preview(path, 4)):
+                for failure in (SyntaxError, OSError, MemoryError):
+                    with self.subTest(opener=opener, failure=failure), \
+                            mock.patch.object(TiffImagePlugin.TiffImageFile, "n_frames",
+                                              new_callable=mock.PropertyMock,
+                                              side_effect=SyntaxError("unsupported later page")), \
+                            mock.patch("src.core.file_converter._load_image_pixels",
+                                       side_effect=failure("first page decode failed")):
+                        with self.assertRaises(failure):
+                            opener(str(source))
+
+    def test_export_warns_and_keeps_only_first_page_pixels_and_metadata(self):
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, profile = self._make_source(directory)
+            with _open_image(str(source)) as native:
+                expected = native.copy()
+            try:
+                for fmt in ("PNG", "TIFF"):
+                    for keep in (False, True):
+                        for resize in (None, (12, 20)):
+                            with self.subTest(fmt=fmt, keep=keep, resize=resize):
+                                output = Path(directory) / ("output" + SUPPORTED_OUTPUT_FORMATS[fmt])
+                                with self.assertWarnsRegex(UserWarning, "page 1 of 3 only"):
+                                    convert_file(str(source), str(output), fmt,
+                                                 keep_metadata=keep, resize=resize)
+                                with _open_image(str(output)) as saved:
+                                    self.assertEqual(getattr(saved, "n_frames", 1), 1)
+                                    reference = expected.resize(resize, Image.LANCZOS) if resize else expected.copy()
+                                    try:
+                                        self.assertEqual(saved.size, reference.size)
+                                        self.assertEqual(saved.tobytes(), reference.tobytes())
+                                    finally:
+                                        reference.close()
+                                    self.assertNotIn(297, saved.getexif())
+                                    if keep:
+                                        self.assertEqual(saved.getexif()[305], "page-1-metadata")
+                                        self.assertEqual(saved.info["icc_profile"], profile)
+                                        for dpi in saved.info["dpi"]:
+                                            self.assertAlmostEqual(float(dpi), 100, delta=0.01)
+                                    else:
+                                        self.assertNotIn(305, saved.getexif())
+                                        self.assertNotIn("icc_profile", saved.info)
+            finally:
+                expected.close()
+
+    def test_preview_discloses_page_limit_and_matches_single_page_export(self):
+        from src.ui.preview_pane import _ConverterPreviewLoader, _ThumbLoader, _pil_to_qimage
+
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, _ = self._make_source(directory)
+            for fmt in ("PNG", "JPEG", "TIFF", "WEBP"):
+                for resize in (None, (12, 20)):
+                    with self.subTest(fmt=fmt, resize=resize):
+                        results, errors = [], []
+                        loader = _ConverterPreviewLoader(str(source), fmt, 90, resize=resize)
+                        loader.ready.connect(lambda *args: results.append(args))
+                        loader.failed.connect(errors.append)
+                        loader.run()
+                        self.assertFalse(errors)
+                        self.assertEqual(len(results), 1)
+                        for text in results[0][2:]:
+                            self.assertIn("page 1 of 3 only", text)
+                            self.assertIn("metadata are not exported", text)
+                        output = Path(directory) / ("export" + SUPPORTED_OUTPUT_FORMATS[fmt])
+                        with self.assertWarns(UserWarning):
+                            convert_file(str(source), str(output), fmt, resize=resize)
+                        with _open_image(str(output)) as saved:
+                            self.assertEqual(results[0][1], _pil_to_qimage(saved))
+            thumbnails, errors = [], []
+            loader = _ThumbLoader(str(source), max_size=4)
+            loader.loaded.connect(lambda *args: thumbnails.append(args))
+            loader.failed.connect(errors.append)
+            loader.run()
+            self.assertFalse(errors)
+            self.assertEqual(len(thumbnails), 1)
+            self.assertIn("page 1 of 3 only", thumbnails[0][1])
+
+    def test_worker_success_reports_page_loss_without_changing_output_path(self):
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, _ = self._make_source(directory)
+            worker = ConverterWorker([str(source)], "TIFF", ".tiff",
+                                     output_dir=str(Path(directory) / "converted"),
+                                     keep_metadata=True)
+            results = []
+            worker.file_done.connect(lambda *args: results.append(args))
+            with mock.patch("src.core.worker._LARGE_BATCH_THRESHOLD", 1), self.assertWarns(UserWarning):
+                worker.run()
+            self.assertEqual(len(results), 1)
+            self.assertTrue(results[0][1])
+            destination, note = results[0][2].split("\n", 1)
+            self.assertTrue(Path(destination).is_file())
+            self.assertIn("page 1 of 3 only", note)
+            with Image.open(destination) as saved:
+                self.assertEqual(saved.n_frames, 1)
+
+    def test_page_loss_warning_as_error_closes_source_without_writing(self):
+        import warnings
+        from src.core.file_converter import tiff_first_page_note
+
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, _ = self._make_source(directory)
+            destination = Path(directory) / "converted.png"
+            with _open_image(str(source)) as image:
+                expected_warning = tiff_first_page_note(image.info["tiff_page_count"])
+                with mock.patch("src.core.file_converter._open_image", return_value=image), \
+                        mock.patch.object(image, "close", wraps=image.close) as close, \
+                        warnings.catch_warnings():
+                    warnings.simplefilter("error", UserWarning)
+                    with self.assertRaises(UserWarning) as raised:
+                        convert_file(str(source), str(destination), "PNG")
+                    self.assertEqual(str(raised.exception), expected_warning)
+                    close.assert_called_once_with()
+                    with self.assertRaises(ValueError):
+                        image.getpixel((0, 0))
+                    self.assertFalse(destination.exists())
+
+    def test_single_page_tiff_has_no_page_loss_warning(self):
+        import warnings
+        from src.ui.preview_pane import _ConverterPreviewLoader
+
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source = Path(directory) / "single.tiff"
+            with Image.new("RGB", (8, 6), "red") as image:
+                image.save(source)
+            results = []
+            loader = _ConverterPreviewLoader(str(source), "TIFF", 90)
+            loader.ready.connect(lambda *args: results.append(args))
+            loader.run()
+            self.assertEqual(len(results), 1)
+            self.assertNotIn("page 1", results[0][2] + results[0][3])
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                convert_file(str(source), str(Path(directory) / "single.png"), "PNG")
+            self.assertFalse(caught)
+
+
 class TestConvertFile(unittest.TestCase):
     def test_output_format_discards_alpha_for_jpeg(self):
         self.assertTrue(output_format_discards_alpha("JPEG"))
@@ -2024,6 +2365,7 @@ class TestConvertFile(unittest.TestCase):
     def test_open_image_for_preview_reduces_large_images_before_full_decode(self):
         class FakeImage:
             def __init__(self):
+                self.format = "PNG"
                 self.mode = "RGB"
                 self.size = (8192, 8192)
                 self.draft_calls = []

@@ -451,6 +451,14 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Multipage TIFF conversion and previews explicitly use page 1 only, including
+TIFF-to-TIFF output; additional pages are not preserved. Preview details, direct
+conversion warnings and batch logs disclose this limit. Page counting uses a
+separate handle to prevent later-page ICC contamination; damaged later pages
+leave the total unavailable without blocking a readable first page. Generated
+fixtures cover first-page orientation, EXIF/ICC/DPI, resize parity and cleanup.
+Full multipage editing/export remains unsupported and needs separate development.
+
 Video Builder now offers opt-in **Preview audio** with independent volume/mute.
 Audio follows the visual timeline through playback, scrubbing, trims, split
 segments, speed/FPS changes and looping. Loading is asynchronous; missing devices,

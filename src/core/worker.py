@@ -36,7 +36,10 @@ from .alpha_processor import (
     apply_manual_alpha,
     apply_rgba_adjust,
 )
-from .file_converter import convert_file, build_output_path, output_format_discards_alpha
+from .file_converter import (
+    convert_file, build_output_path, output_format_discards_alpha,
+    get_tiff_page_count, tiff_first_page_note,
+)
 from .presets import AlphaPreset
 from src.ui._ui_utils import staged_output_path
 
@@ -421,6 +424,8 @@ class ConverterWorker(QThread):
             try:
                 logical_src = self._source_aliases.get(src, src)
                 actual_target_format, actual_target_ext, note = self._resolve_effective_target(src)
+                page_note = tiff_first_page_note(get_tiff_page_count(src))
+                note = "\n".join(part for part in (note, page_note) if part)
                 dest = build_output_path(
                     logical_src,
                     actual_target_ext,
@@ -515,7 +520,7 @@ class ConverterWorker(QThread):
                         if ok:
                             success += 1
                             outputs[src_path] = dest_or_err.splitlines()[0]
-                            if not large_batch:
+                            if not large_batch or "\n" in dest_or_err:
                                 try:
                                     self.file_done.emit(src_path, True, dest_or_err)
                                 except RuntimeError:

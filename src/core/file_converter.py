@@ -26,6 +26,7 @@ import os
 import logging
 import math
 import tempfile
+import warnings
 from pathlib import Path
 from typing import Optional
 
@@ -294,7 +295,9 @@ FORMAT_DESCRIPTIONS = {
     "TIFF": (
         "Tagged Image File Format — flexible lossless/compressed format.\n"
         "Used in professional print, photography, and scientific imaging.\n"
-        "Supports alpha, multiple layers, and various colour depths."
+        "Supports alpha and various colour depths.\n"
+        "This converter previews and exports only the first page of multipage TIFFs;\n"
+        "additional pages and their metadata are not preserved."
     ),
     "WEBP": (
         "Google WebP — modern lossy/lossless format for the web.\n"
@@ -541,6 +544,10 @@ def _open_image(path: str) -> Image.Image:
         return load_tim(path)
     img = Image.open(path)
     try:
+        if img.format == "TIFF":
+            # Counting pages can leak later-page metadata into Pillow's info.
+            with Image.open(path) as pages:
+                img.info["tiff_page_count"] = _count_tiff_pages(pages)
         if ext in (".tiff", ".tif"):
             # TIFF loading closes the file before Pillow caches nested IFDs.
             try:
@@ -572,6 +579,8 @@ def _open_image_for_preview(path: str, max_size: int) -> Image.Image:
     img = Image.open(path)
     try:
         if img.format == "TIFF":
+            with Image.open(path) as pages:
+                img.info["tiff_page_count"] = _count_tiff_pages(pages)
             _load_image_pixels(img)
         target = max(1, int(max_size))
         longest = max(img.size) if img.size else 0
@@ -598,6 +607,37 @@ def _open_image_for_preview(path: str, max_size: int) -> Image.Image:
         img.close()
         raise
     return img
+
+
+def _count_tiff_pages(img: Image.Image) -> int | None:
+    """Best-effort metadata scan; decoding page 1 remains the loader's job."""
+    try:
+        return img.n_frames
+    except (OSError, SyntaxError, ValueError, EOFError):
+        # A readable first page may be followed by an unsupported/malformed IFD.
+        return None
+
+
+def tiff_first_page_note(page_count: int | None) -> str:
+    """Describe the converter's single-image boundary for multipage TIFFs."""
+    if page_count is None:
+        return (
+            "TIFF: page 1 only — total page count unavailable; additional pages "
+            "and their metadata are not exported."
+        )
+    if page_count <= 1:
+        return ""
+    return (
+        f"TIFF: page 1 of {page_count} only — additional pages and their "
+        "metadata are not exported."
+    )
+
+
+def get_tiff_page_count(path: str) -> int | None:
+    if Path(path).suffix.lower() not in {".tif", ".tiff"}:
+        return 1
+    with Image.open(path) as img:
+        return _count_tiff_pages(img) if img.format == "TIFF" else 1
 
 
 def _flatten_alpha(img: Image.Image, bg_rgb: tuple[int, int, int] = (255, 255, 255)) -> Image.Image:
@@ -658,6 +698,9 @@ def convert_file(
     """
     Convert a single image file.
 
+    Multipage TIFF input exports only page 1 and its supported metadata,
+    with a UserWarning; additional pages are not preserved, even to TIFF.
+
     The image's native colour mode is preserved where the target format
     supports it.  For targets that cannot store an alpha channel (JPEG, BMP,
     PPM, PCX, GIF) the alpha is properly composited onto a white background
@@ -676,6 +719,9 @@ def convert_file(
     src_img = _open_image(input_path)
     try:
         img = src_img
+        page_note = tiff_first_page_note(src_img.info.get("tiff_page_count", 1))
+        if page_note:
+            warnings.warn(page_note, UserWarning, stacklevel=2)
 
         if resize:
             try:
@@ -742,7 +788,7 @@ def convert_file(
                     # Storage/layout tags from TIFF describe the source raster,
                     # not the output's mode, strips, compression, or palette.
                     for tag in (254, 255, 258, 259, 262, 266, 273, 277, 278,
-                                279, 284, 288, 289, 292, 293, 301, 317, 320,
+                                279, 284, 288, 289, 292, 293, 297, 301, 317, 320,
                                 322, 323, 324, 325, 330, 338, 339, 347, 34675):
                         exif.pop(tag, None)
                     for tag, value in ((256, img.width), (257, img.height),

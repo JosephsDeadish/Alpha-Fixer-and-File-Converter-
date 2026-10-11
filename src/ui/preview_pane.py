@@ -197,7 +197,7 @@ class _ThumbLoader(QThread):
         img = None
         try:
             from PIL import Image
-            from src.core.file_converter import _open_image_for_preview
+            from src.core.file_converter import _open_image_for_preview, tiff_first_page_note
             img = _open_image_for_preview(self._path, self._max_size)
             mode = img.mode
             width, height = img.size
@@ -221,7 +221,7 @@ class _ThumbLoader(QThread):
                 meta_keys.append("ICC")
             if "dpi" in img.info:
                 dpi = img.info["dpi"]
-                meta_keys.append(f"DPI {dpi[0]:.0f}×{dpi[1]:.0f}")
+                meta_keys.append(f"DPI {float(dpi[0]):.0f}×{float(dpi[1]):.0f}")
             meta_note = ("  ·  " + "/".join(meta_keys)) if meta_keys else ""
 
             img.thumbnail((self._max_size, self._max_size), Image.LANCZOS)
@@ -234,6 +234,9 @@ class _ThumbLoader(QThread):
                 f"{width} × {height}  ·  {mode}{alpha_note}\n"
                 f"{_fmt_size(file_size)}{meta_note}"
             )
+            page_note = tiff_first_page_note(img.info.get("tiff_page_count", 1))
+            if page_note:
+                meta_text += "\n" + page_note
             if not self._abort:
                 try:
                     self.loaded.emit(qimg, meta_text)
@@ -1140,12 +1143,13 @@ class _ConverterPreviewLoader(QThread):
         try:
             import io
             from PIL import Image
-            from src.core.file_converter import _open_image
+            from src.core.file_converter import _open_image, tiff_first_page_note
 
             img = _open_image(self._path)
             orig_mode = img.mode
             orig_w, orig_h = img.size
             src_file_size = os.path.getsize(self._path)
+            page_note = tiff_first_page_note(img.info.get("tiff_page_count", 1))
 
             # Early abort: if the request is already stale (user moved to a
             # different file before we even decoded the header), skip all work.
@@ -1166,6 +1170,8 @@ class _ConverterPreviewLoader(QThread):
                 f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
                 f"{_fmt_size(src_file_size)}"
             )
+            if page_note:
+                src_meta += "\n" + page_note
 
             # If a newer selection or format change arrived, bail out before
             # running the expensive in-memory conversion step.
@@ -1191,6 +1197,10 @@ class _ConverterPreviewLoader(QThread):
                 save_img = save_img.convert("P")
             elif fmt == "ICO":
                 save_img = save_img.convert("RGBA")
+            elif fmt == "TIFF":
+                # Match export: don't let source TIFF layout/orientation tags
+                # silently alter the single-page output raster.
+                save_img = save_img.copy()
 
             save_kwargs: dict = {}
             if fmt in _QUALITY_FORMATS:
@@ -1224,6 +1234,8 @@ class _ConverterPreviewLoader(QThread):
                     f"Preview as {fmt}{quality_note}\n"
                     f"(source shown – conversion unsupported)"
                 )
+                if page_note:
+                    out_meta += "\n" + page_note
                 img.close()
                 img = None
                 if self._abort:
@@ -1256,6 +1268,8 @@ class _ConverterPreviewLoader(QThread):
                 f"Preview as {fmt}{quality_note}\n"
                 f"~{_fmt_size(converted_size)}"
             )
+            if page_note:
+                out_meta += "\n" + page_note
             if self._abort:
                 return
             try:
