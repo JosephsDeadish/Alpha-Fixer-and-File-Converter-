@@ -686,6 +686,7 @@ class ConverterTab(QWidget):
         self._layout_timer = QTimer(self)
         self._layout_timer.setSingleShot(True)
         self._layout_timer.timeout.connect(self._reflow_controls)
+        self._reveal_after_reflow = False
         self._focus_timer = QTimer(self)
         self._focus_timer.setSingleShot(True)
         self._focus_timer.timeout.connect(self._reveal_focus)
@@ -797,13 +798,18 @@ class ConverterTab(QWidget):
         # the two inner viewports into unusable slivers above the preview.
         for scroll in (self._left_scroll, self._right_scroll):
             scroll.setMinimumHeight(scroll.widget().minimumSizeHint().height() if compact else 0)
-        self._focus_timer.start(0)
+        if self._reveal_after_reflow:
+            self._focus_timer.start(0)
 
     def _schedule_focus_reveal(self, _previous, current):
         if current is not None and self._content.isAncestorOf(current):
             self._focus_timer.start(0)
 
     def _reveal_focus(self):
+        if self._layout_timer.isActive():
+            self._focus_timer.start(0)
+            return
+        self._reveal_after_reflow = False
         current = QApplication.focusWidget()
         if current is None or not self._content.isAncestorOf(current):
             return
@@ -824,9 +830,10 @@ class ConverterTab(QWidget):
     def eventFilter(self, watched, event):
         if hasattr(self, "_layout_timer"):
             if event.type() in (QEvent.Type.Resize, QEvent.Type.FontChange, QEvent.Type.StyleChange):
+                # Child resizes from status text must not undo manual scrolling.
+                if watched is self._content_scroll.viewport() or event.type() != QEvent.Type.Resize:
+                    self._reveal_after_reflow = True
                 self._layout_timer.start(0)
-            elif event.type() == QEvent.Type.LayoutRequest:
-                self._focus_timer.start(0)
         return super().eventFilter(watched, event)
 
     def _setup_shortcuts(self):

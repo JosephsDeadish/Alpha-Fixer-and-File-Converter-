@@ -197,3 +197,26 @@ def test_compact_dds_options_reveal_without_resetting_preferences(app, converter
     settle(app)
     visible(converter, converter._dds_variant_combo)
     assert converter._dds_variant_combo.currentData() == saved
+
+
+def test_progress_preserves_manually_scrolled_viewport(app, converter):
+    converter.setStyleSheet(build_stylesheet() + "\nQWidget { font-size: 32px; }")
+    converter.resize(480, 400)
+    converter.show()
+    settle(app)
+    converter._file_list.setFocus()
+    settle(app)
+    visible(converter, converter._file_list)
+    bar = converter._content_scroll.verticalScrollBar()
+    assert bar.maximum() > 0
+    bar.setValue(bar.maximum())
+    settle(app)
+    position = bar.value()
+    assert position == bar.maximum()
+    converter._batch_start_time = 0
+    with patch("src.ui.converter_tool.time.monotonic", return_value=100):
+        for current in (1, 50, 99):
+            converter._on_progress(current, 100, "generated.png")
+            settle(app)
+            assert app.focusWidget() is converter._file_list
+            assert bar.value() == position

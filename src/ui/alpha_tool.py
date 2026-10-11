@@ -11,7 +11,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QEvent, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QImage, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
     QProgressBar, QGroupBox, QScrollArea,
     QGridLayout, QLineEdit, QSplitter,
     QMessageBox, QTextEdit, QMenu,
-    QAbstractSpinBox,
+    QAbstractSpinBox, QApplication, QBoxLayout, QSizePolicy,
 )
 
 from ..core.presets import PresetManager
@@ -361,7 +361,16 @@ class AlphaFixerTab(QWidget):
     # ------------------------------------------------------------------
 
     def _setup_ui(self):
-        main_layout = QVBoxLayout(self)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        self._content_scroll = QScrollArea()
+        self._content_scroll.setWidgetResizable(True)
+        self._content_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self._content_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        outer_layout.addWidget(self._content_scroll)
+        self._content = QWidget()
+        self._content_scroll.setWidget(self._content)
+        main_layout = QVBoxLayout(self._content)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(8)
 
@@ -392,13 +401,13 @@ class AlphaFixerTab(QWidget):
         main_layout.addWidget(self._next_step_lbl)
 
         outer_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._splitter = outer_splitter
         outer_splitter.setChildrenCollapsible(False)
 
         # ==============================================================
         # Left panel: file list  +  before/after comparison
         # ==============================================================
         left = QWidget()
-        left.setMinimumWidth(320)
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 4, 0)
         lv.setSpacing(5)
@@ -431,7 +440,6 @@ class AlphaFixerTab(QWidget):
         go_layout.setContentsMargins(8, 12, 8, 10)
         go_layout.setColumnStretch(0, 0)
         go_layout.setColumnStretch(1, 1)
-        go_layout.setColumnMinimumWidth(0, 120)
         go_layout.setHorizontalSpacing(12)
         go_layout.setVerticalSpacing(10)
         # Explicit row minimum heights prevent the nested QHBoxLayout in row 0
@@ -444,16 +452,14 @@ class AlphaFixerTab(QWidget):
         lbl_out_folder = QLabel("Output folder:")
         lbl_out_folder.setMinimumHeight(24)
         go_layout.addWidget(lbl_out_folder, 0, 0)
-        out_row = QHBoxLayout()
         self._out_dir_edit = QLineEdit()
         self._out_dir_edit.setPlaceholderText("Same as source (default)")
         self._out_dir_edit.setMinimumHeight(28)
         self._btn_out_dir = QPushButton("Browse…")
         self._btn_out_dir.setMinimumHeight(28)
         self._btn_out_dir.setMinimumWidth(80)
-        out_row.addWidget(self._out_dir_edit, 1)
-        out_row.addWidget(self._btn_out_dir)
-        go_layout.addLayout(out_row, 0, 1)
+        go_layout.addWidget(self._out_dir_edit, 0, 1)
+        go_layout.addWidget(self._btn_out_dir, 0, 2)
 
         lbl_suffix = QLabel("Filename suffix:")
         lbl_suffix.setMinimumHeight(24)
@@ -497,21 +503,16 @@ class AlphaFixerTab(QWidget):
 
         lv.addWidget(list_area, 1)
 
-        # Wrap controls + file-list in a scroll area so they remain accessible
-        # on smaller windows.  The compare widget lives OUTSIDE this scroll area
-        # so it is never clipped by layout size constraints.
-        # Do NOT set an explicit minimum height here: the QVBoxLayout already
-        # computes a natural minimum (~370 px) from its children, and the
-        # scroll area respects that value.  An explicit override smaller than
-        # the natural minimum (e.g. 300 px) would allow the scroll area to
-        # squish the widget below its natural minimum, causing rows in the
-        # Output group-box and the file list to visually overlap.
+        # Keep separate controls/preview sizing on wide windows; compact mode
+        # expands the controls viewport and scrolls the entire tab vertically.
         left_scroll = QScrollArea()
         left_scroll.setWidget(left)
         left_scroll.setWidgetResizable(True)
         left_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        left_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._left_scroll = left_scroll
 
-        # ---- Before/after compare panel (outside scroll area, always visible) ----
+        # ---- Before/after compare panel ----
         compare_area = QWidget()
         self._compare_area = compare_area   # kept for show/hide when popping out
         ca_layout = QVBoxLayout(compare_area)
@@ -562,6 +563,7 @@ class AlphaFixerTab(QWidget):
 
         # Row: [Before stats panel] [BeforeAfterWidget] [After stats panel]
         compare_row = QHBoxLayout()
+        self._compare_row = compare_row
         compare_row.setContentsMargins(0, 0, 0, 0)
         compare_row.setSpacing(4)
 
@@ -606,11 +608,9 @@ class AlphaFixerTab(QWidget):
         self._btn_dock_back.clicked.connect(self._on_dock_back_clicked)
         ca_layout.addWidget(self._btn_dock_back)
 
-        # Left column: vertical splitter – controls/file-list panel on top
-        # (scrollable), compare panel on the bottom (always fully visible).
+        # Left column: controls/file-list above the independent compare panel.
         left_vsplit = QSplitter(Qt.Orientation.Vertical)
         left_vsplit.setChildrenCollapsible(False)
-        left_vsplit.setMinimumWidth(320)
         left_vsplit.addWidget(left_scroll)
         left_vsplit.addWidget(compare_area)
         left_vsplit.setSizes([420, 380])
@@ -622,7 +622,6 @@ class AlphaFixerTab(QWidget):
         # Right panel: run controls + alpha settings
         # ==============================================================
         right = QWidget()
-        right.setMinimumWidth(380)
         rv = QVBoxLayout(right)
         rv.setContentsMargins(4, 0, 0, 0)
         rv.setSpacing(6)
@@ -675,7 +674,6 @@ class AlphaFixerTab(QWidget):
         gt_layout.setContentsMargins(8, 12, 8, 10)
         gt_layout.setColumnStretch(0, 0)
         gt_layout.setColumnStretch(1, 1)
-        gt_layout.setColumnMinimumWidth(0, 165)
         gt_layout.setHorizontalSpacing(12)
         gt_layout.setVerticalSpacing(8)
 
@@ -865,10 +863,45 @@ class AlphaFixerTab(QWidget):
         right_scroll.setWidget(right)
         right_scroll.setWidgetResizable(True)
         right_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        right_scroll.setMinimumWidth(380)
+        right_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._right_scroll = right_scroll
         outer_splitter.addWidget(right_scroll)
         outer_splitter.setSizes([460, 580])
         main_layout.addWidget(outer_splitter, 1)
+        self._responsive_rows = (
+            (btn_row, (self._btn_add_files, self._btn_add_folder, self._btn_clear)),
+            (run_row, (self._btn_run, self._btn_stop)),
+        )
+        self._responsive_grids = (
+            (go_layout, ((lbl_out_folder, self._out_dir_edit, self._btn_out_dir),
+                         (lbl_suffix, self._suffix_edit))),
+            (gt_layout, ((hint_lbl,), (lbl_cmin, self._clamp_min_spin),
+                         (lbl_cmax, self._clamp_max_spin), (self._invert_check,),
+                         (self._binary_cut_check,), (adv_sep,),
+                         (lbl_thresh, self._threshold_spin), (self._finetune_params_lbl,),
+                         (rgb_sep,), (lbl_red, self._red_spin),
+                         (lbl_green, self._green_spin), (lbl_blue, self._blue_spin),
+                         (lbl_alpha_adj, self._alpha_delta_spin), (self._apply_rgb_check,))),
+        )
+        self._compact_texts = (
+            (self._invert_check, "Invert alpha"),
+            (self._binary_cut_check, "Binary cut"),
+            (self._alpha_vis_check, "Highlight alpha"),
+            (self._apply_rgb_check, "Apply RGBA deltas"),
+        )
+        self._full_control_texts = {control: control.text() for control, _ in self._compact_texts}
+        self._layout_timer = QTimer(self)
+        self._layout_timer.setSingleShot(True)
+        self._layout_timer.timeout.connect(self._reflow_controls)
+        self._reveal_after_reflow = False
+        self._focus_timer = QTimer(self)
+        self._focus_timer.setSingleShot(True)
+        self._focus_timer.timeout.connect(self._reveal_focus)
+        for widget in (self._content, self._content_scroll.viewport(), left, right,
+                       left_scroll.viewport(), right_scroll.viewport(), compare_area):
+            widget.installEventFilter(self)
+        QApplication.instance().focusChanged.connect(self._schedule_focus_reveal)
+        self._layout_timer.start(0)
 
         # ==============================================================
         # Connections
@@ -927,6 +960,86 @@ class AlphaFixerTab(QWidget):
         # Initialise the live params label
         self._refresh_finetune_label()
         self._refresh_preview_helper_status()
+
+    def _reflow_controls(self):
+        available = self._content_scroll.viewport().width()
+        compact = available < max(760, self.fontMetrics().height() * 38)
+        self._grp_tune.setTitle("Alpha Settings" if compact else "Alpha Channel Settings")
+        self._splitter.setOrientation(
+            Qt.Orientation.Vertical if compact else Qt.Orientation.Horizontal
+        )
+        self._compare_row.setDirection(
+            QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight
+        )
+        for control, text in self._compact_texts:
+            control.setText(text if compact else self._full_control_texts[control])
+        for grid, rows in self._responsive_grids:
+            grid.setColumnStretch(0, 1 if compact else 0)
+            grid.setColumnStretch(1, 0 if compact else 1)
+            for row in rows:
+                for control in row:
+                    grid.removeWidget(control)
+            next_row = 0
+            for row in rows:
+                for column, control in enumerate(row):
+                    grid.addWidget(control, next_row + column if compact else next_row,
+                                   0 if compact else column, 1,
+                                   1 if compact or len(row) > 1 else 2)
+                next_row += len(row) if compact else 1
+        for layout, controls in self._responsive_rows:
+            required = sum(control.minimumSizeHint().width() for control in controls)
+            required += layout.spacing() * (len(controls) - 1)
+            layout.setDirection(
+                QBoxLayout.Direction.TopToBottom
+                if required > min(available, layout.parentWidget().width()) - 40
+                else QBoxLayout.Direction.LeftToRight
+            )
+        for control in self._content.findChildren(QWidget):
+            if isinstance(control, (QPushButton, QCheckBox, QLineEdit, QAbstractSpinBox)):
+                control.setMinimumHeight(control.minimumSizeHint().height())
+            elif isinstance(control, QLabel):
+                control.setWordWrap(True)
+                control.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        # Compact overflow belongs to the outer scroll, not tiny nested viewports.
+        for scroll in (self._left_scroll, self._right_scroll):
+            scroll.setMinimumHeight(scroll.widget().minimumSizeHint().height() if compact else 0)
+        if self._reveal_after_reflow:
+            self._focus_timer.start(0)
+
+    def _schedule_focus_reveal(self, _previous, current):
+        if current is not None and self._content.isAncestorOf(current):
+            self._focus_timer.start(0)
+
+    def _reveal_focus(self):
+        if self._layout_timer.isActive():
+            self._focus_timer.start(0)
+            return
+        self._reveal_after_reflow = False
+        current = QApplication.focusWidget()
+        if current is None or not self._content.isAncestorOf(current):
+            return
+        if isinstance(current.parentWidget(), QAbstractSpinBox):
+            current = current.parentWidget()
+        for scroll in (self._left_scroll, self._right_scroll, self._content_scroll):
+            if scroll.widget().isAncestorOf(current):
+                viewport = scroll.viewport()
+                rect = current.rect()
+                rect.moveTopLeft(current.mapTo(viewport, rect.topLeft()))
+                for bar, leading, trailing, extent in (
+                    (scroll.horizontalScrollBar(), rect.left(), rect.right(), viewport.width()),
+                    (scroll.verticalScrollBar(), rect.top(), rect.bottom(), viewport.height()),
+                ):
+                    delta = leading if leading < 0 else max(0, trailing - extent + 1)
+                    bar.setValue(bar.value() + delta)
+
+    def eventFilter(self, watched, event):
+        if hasattr(self, "_layout_timer"):
+            if event.type() in (QEvent.Type.Resize, QEvent.Type.FontChange, QEvent.Type.StyleChange):
+                # Child resizes from status text must not undo manual scrolling.
+                if watched is self._content_scroll.viewport() or event.type() != QEvent.Type.Resize:
+                    self._reveal_after_reflow = True
+                self._layout_timer.start(0)
+        return super().eventFilter(watched, event)
 
     def _setup_shortcuts(self):
         self._shortcut_objects: dict[str, QShortcut] = {}

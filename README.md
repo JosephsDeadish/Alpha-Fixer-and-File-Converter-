@@ -402,6 +402,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Alpha Adjuster panes, output/settings grids and preview statistics reflow on
+compact windows and at large fonts. Keyboard focus reveals complete controls.
+Alpha and Converter background progress updates preserve manually scrolled views
+rather than pulling them back to an unchanged focused control. Generated-image
+layout, keyboard and progress regressions cover these behaviors offscreen; native
+display and accessibility acceptance remain outstanding.
+
 Converter panes, option grids and action rows stack on compact windows and at
 large fonts. Outer scrolling keeps previews and controls reachable; keyboard focus
 reveals complete controls and failure-report actions. Generated-image checks cover
