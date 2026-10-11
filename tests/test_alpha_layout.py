@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import QApplication, QLabel, QWidget
 
 from src.core.presets import PresetManager
 from src.core.settings_manager import SettingsManager
+from src.core.worker import AlphaWorker
 from src.ui.alpha_tool import AlphaFixerTab, _AlphaPreviewLoader
 from src.ui.theme_engine import DEFAULT_THEME, LIGHT_THEME, build_stylesheet
 
@@ -312,6 +313,79 @@ def test_basic_default_and_keyboard_skips_collapsed_controls(app, alpha):
     assert app.focusWidget() is alpha._log
     QTest.keyClick(alpha._log, Qt.Key.Key_Backtab)
     assert app.focusWidget() is alpha._advanced_toggle
+
+
+@pytest.mark.parametrize("binary,expected", [
+    (True, [150, 150, 22, 22]),
+    (False, [150, 22, 118, 245]),
+])
+def test_cutoff_guidance_matches_processing_order_and_global_rgba_deltas(
+        app, alpha, binary, expected):
+    alpha._clamp_min_spin.setValue(32)
+    alpha._clamp_max_spin.setValue(160)
+    alpha._threshold_spin.setValue(128)
+    alpha._invert_check.setChecked(True)
+    alpha._binary_cut_check.setChecked(binary)
+    alpha._alpha_delta_spin.setValue(-10)
+    alpha._apply_rgb_check.setChecked(True)
+    alpha._advanced_toggle.setChecked(False)
+    alpha._preview_debounce.stop()
+    alpha._update_compare()
+    image = alpha._compare.after_image()
+    assert [image.pixelColor(x, 0).alpha() for x in range(4)] == expected
+    guidance = alpha._threshold_spin.accessibleDescription()
+    assert "RGBA deltas apply afterwards to all pixels" in guidance
+    assert guidance == alpha._threshold_label.toolTip() == alpha._threshold_spin.toolTip()
+    if binary:
+        assert "After inversion and range normalization" in guidance
+        assert "before the output range clamp" in guidance
+        assert "binary cut at 128" in alpha._advanced_status.text()
+    else:
+        assert "protected from the alpha fix" in guidance
+        assert "selective threshold 128" in alpha._advanced_status.text()
+    assert "thresh=" not in alpha._finetune_params_lbl.text()
+    assert "binary_cut=" not in alpha._finetune_params_lbl.text()
+    assert "2 on" in alpha._advanced_toggle.text()
+
+    class ImmediateWorker(AlphaWorker):
+        def start(self):
+            self.run()
+
+    alpha._out_dir_edit.setText("build/alpha-layout-tests/output")
+    alpha._suffix_edit.setText("_processed")
+    with patch("src.ui.alpha_tool.AlphaWorker", ImmediateWorker), \
+            patch.object(alpha, "_update_compare"), \
+            patch.object(alpha, "_offer_delete_originals"):
+        alpha._run()
+    assert alpha._progress.value() == 100
+    with Image.open("build/alpha-layout-tests/output/generated_processed.png") as output:
+        assert [output.getpixel((x, 0))[3] for x in range(4)] == expected
+    assert not alpha._advanced_toggle.isChecked()
+
+
+def test_zero_and_disabled_rgba_deltas_do_not_claim_processing_changes(app, alpha):
+    alpha._apply_rgb_check.setChecked(True)
+    assert "no processing changes" in alpha._advanced_status.text()
+    assert "RGBA enabled (zero deltas)" in alpha._advanced_status.text()
+    assert " on" not in alpha._advanced_toggle.text()
+    alpha._red_spin.setValue(7)
+    assert "1 on" in alpha._advanced_toggle.text()
+    alpha._apply_rgb_check.setChecked(False)
+    assert "no processing changes" in alpha._advanced_status.text()
+    assert "Saved RGBA deltas (disabled): R +7" in alpha._advanced_status.text()
+    assert " on" not in alpha._advanced_toggle.text()
+
+
+def test_cycling_tooltip_modes_describe_normalized_binary_cut(app, alpha):
+    from src.ui.tooltip_manager import _MODE_TIPS
+
+    for mode, (tips, _fallback) in _MODE_TIPS.items():
+        for text in tips["binary_cut_check"]:
+            assert "ignores Min/Max" not in text, mode
+            if "255" in text:
+                assert any(word in text.lower() for word in ("normaliz", "range clamp")), (mode, text)
+        assert any("RGBA deltas" in text for text in tips["threshold_spin"]), mode
+        assert any("normaliz" in text.lower() for text in tips["threshold_spin"]), mode
 
 
 @pytest.mark.parametrize("key", [Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter])

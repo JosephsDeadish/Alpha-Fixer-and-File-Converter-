@@ -750,8 +750,8 @@ class AlphaFixerTab(QWidget):
 
         self._binary_cut_check = QCheckBox("Binary cut (hard transparent / opaque split)")
         self._binary_cut_check.setToolTip(
-            "Hard cutout mask: pixels with alpha ≥ threshold become fully opaque (255),\n"
-            "pixels below threshold become fully transparent (0).\n"
+            "After inversion and range normalization, alpha ≥ cutoff becomes 255,\n"
+            "and alpha below cutoff becomes 0. The result is then clamped to Min/Max.\n"
             "At threshold 0, every pixel becomes opaque before the final range clamp.\n"
             "Used by N64 1-bit alpha textures and similar hard-edge formats."
         )
@@ -785,11 +785,12 @@ class AlphaFixerTab(QWidget):
         lbl_thresh.setMinimumHeight(24)
         lbl_thresh.setToolTip(
             "When set above 0 (and Binary cut is OFF): pixels with alpha >= threshold\n"
-            "are protected and kept at their original value — only pixels with alpha\n"
+            "are protected from the alpha fix — only pixels with alpha\n"
             "below this value are inverted/scaled.\n"
             "0 (default) means every pixel is processed regardless of its current alpha.\n"
             "Example: threshold=128 leaves already-opaque areas unchanged.\n"
-            "When Binary cut is ON: sets the hard split point (>= threshold → 255, else → 0)."
+            "When Binary cut is ON: cuts after inversion and range normalization,\n"
+            "then clamps to Min/Max. Enabled RGBA deltas apply afterwards to all pixels."
         )
         gt_layout.addWidget(lbl_thresh, 6, 0)
         self._threshold_spin = QSpinBox()
@@ -1072,12 +1073,16 @@ class AlphaFixerTab(QWidget):
         self._threshold_label.setText(label)
         self._threshold_spin.setAccessibleName(label.rstrip(":"))
         meaning = (
-            "Alpha at or above the cutoff becomes 255; below it becomes 0, "
-            "before the output range clamp. At 0, all pixels become opaque."
+            "After inversion and range normalization, alpha at or above the cutoff "
+            "becomes 255; below it becomes 0, before the output range clamp. "
+            "At 0, all pixels become opaque."
             if binary else
             "0 processes all pixels. Above 0, alpha at or above the threshold "
-            "is protected; only lower values are inverted or scaled."
+            "is protected from the alpha fix; only lower values are inverted or scaled."
         )
+        meaning += " Enabled RGBA deltas apply afterwards to all pixels."
+        self._threshold_label.setToolTip(meaning)
+        self._threshold_spin.setToolTip(meaning)
         self._threshold_spin.setAccessibleDescription(meaning)
         active = []
         if binary:
@@ -1090,12 +1095,14 @@ class AlphaFixerTab(QWidget):
                                ("B", self._blue_spin), ("A", self._alpha_delta_spin))
             if spin.value()
         )
-        if self._apply_rgb_check.isChecked():
-            active.append(f"RGBA {deltas}" if deltas else "RGBA enabled (zero deltas)")
+        if self._apply_rgb_check.isChecked() and deltas:
+            active.append(f"RGBA {deltas}")
         retained = (
             f" Saved RGBA deltas (disabled): {deltas}."
             if deltas and not self._apply_rgb_check.isChecked() else ""
         )
+        if self._apply_rgb_check.isChecked() and not deltas:
+            retained = " RGBA enabled (zero deltas)."
         summary = (
             ("Advanced active: " + "; ".join(active) + "." if active
              else "Advanced: no processing changes.") + retained
@@ -1482,15 +1489,10 @@ class AlphaFixerTab(QWidget):
         """Update the live fine-tune params summary label."""
         cmin   = self._clamp_min_spin.value()
         cmax   = self._clamp_max_spin.value()
-        thresh = self._threshold_spin.value()
         lo, hi = min(cmin, cmax), max(cmin, cmax)
         parts  = [f"scale → [{self._clamp_range_label(lo, hi)}]"]
-        if thresh:
-            parts.append(f"thresh={thresh}")
         if self._invert_check.isChecked():
             parts.append("invert=yes")
-        if self._binary_cut_check.isChecked():
-            parts.append("binary_cut=yes")
         self._finetune_params_lbl.setText("  ·  ".join(parts))
         self._refresh_advanced_status()
 

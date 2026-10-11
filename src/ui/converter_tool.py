@@ -841,7 +841,17 @@ class ConverterTab(QWidget):
         self._advanced_status.setToolTip(detail)
         self._advanced_status.setAccessibleDescription(detail)
         expanded = self._advanced_toggle.isChecked()
-        self._advanced_toggle.setText(f"{'▼' if expanded else '▶'}  Advanced")
+        active_count = 0 if fmt == "GIF" else sum((
+            fmt in ("JPEG", "WEBP", "AVIF", "JPEG2000"),
+            fmt == "DDS",
+            self._keep_metadata_check.isChecked()
+            and fmt in ("JPEG", "PNG", "WEBP", "TIFF", "AVIF"),
+            self._resize_check.isChecked(),
+        ))
+        self._advanced_toggle.setText(
+            f"{'▼' if expanded else '▶'}  Advanced"
+            + (f" · {active_count} on" if active_count else "")
+        )
         self._advanced_toggle.setAccessibleName(
             ("Hide" if expanded else "Show") + " advanced conversion settings"
         )

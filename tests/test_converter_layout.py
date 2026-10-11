@@ -326,6 +326,55 @@ def test_saved_options_initially_collapsed_and_format_aware(app, converter):
         app.processEvents()
 
 
+@pytest.mark.parametrize("fmt,quality_active,metadata_supported,encoding_count", [
+    ("PNG", False, True, 0),
+    ("JPEG", True, True, 1),
+    ("WEBP", True, True, 1),
+    ("AVIF", True, True, 1),
+    ("JPEG2000", True, False, 1),
+    ("DDS", False, False, 1),
+    ("TIFF", False, True, 0),
+    ("BMP", False, False, 0),
+    ("GIF", False, False, 0),
+])
+def test_disclosure_counts_only_current_format_processors(
+        app, converter, fmt, quality_active, metadata_supported, encoding_count):
+    converter._resize_check.setChecked(False)
+    converter._keep_metadata_check.setChecked(False)
+    converter._quality_spin.setValue(73)
+    converter._dds_variant_combo.setCurrentIndex(
+        converter._dds_variant_combo.findData("rgba"))
+    index = next(i for i in range(converter._fmt_combo.count())
+                 if converter._fmt_combo.itemData(i)[0] == fmt)
+    converter._fmt_combo.setCurrentIndex(index)
+    converter._preview_debounce.stop()
+    converter._advanced_toggle.setChecked(False)
+    assert converter._quality_spin.isEnabled() is quality_active
+    assert not converter._width_spin.isEnabled()
+    assert not converter._height_spin.isEnabled()
+    assert not converter._lock_aspect_check.isEnabled()
+    assert converter._dds_variant_combo.isHidden() is (fmt != "DDS")
+    saved = (converter._quality_spin.value(), converter._dds_variant_combo.currentData())
+    for resize in (False, True):
+        for metadata in (False, True):
+            converter._resize_check.setChecked(resize)
+            converter._keep_metadata_check.setChecked(metadata)
+            converter._preview_debounce.stop()
+            count = 0 if fmt == "GIF" else (
+                encoding_count + int(resize) + int(metadata and metadata_supported))
+            assert converter._advanced_toggle.text() == (
+                "▶  Advanced" + (f" · {count} on" if count else ""))
+            assert converter._width_spin.isEnabled() is resize
+            assert converter._height_spin.isEnabled() is resize
+            assert converter._lock_aspect_check.isEnabled() is resize
+            assert saved == (converter._quality_spin.value(),
+                             converter._dds_variant_combo.currentData())
+            converter._advanced_toggle.setChecked(True)
+            assert converter._advanced_toggle.text() == (
+                "▼  Advanced" + (f" · {count} on" if count else ""))
+            converter._advanced_toggle.setChecked(False)
+
+
 @pytest.mark.parametrize("resize_enabled", [False, True], ids=["basic", "retained-resize"])
 def test_collapsed_run_exports_generated_image_with_retained_options(
         app, converter, resize_enabled):

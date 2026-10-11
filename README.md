@@ -451,6 +451,17 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Advanced summaries distinguish effective processing from retained preferences.
+Alpha guidance explains binary cutting after inversion/range normalization and
+RGBA adjustments after threshold protection; enabled zero deltas are not counted
+as an active change. Converter's disclosure counts applicable current-format
+settings, excluding retained options and GIF Builder handoff preferences.
+Duplicated Alpha summary text is removed without removing controls.
+This pass covered 69 layout/processing checks at DPR 2 and 72 existing contrast
+checks across 57 palettes at DPR 1, plus 22 X11 screenshots across five themes.
+Screenshots were not an exhaustive all-theme or custom-background visual audit;
+physical mixed-DPI, screen-reader and native release acceptance remain outstanding.
+
 Action/tab text now follows the actual theme fill, including composited custom
 color transparency, instead of assuming white text is readable on every accent.
 Focus cues follow the corresponding state. All 57 built-in themes retain the
