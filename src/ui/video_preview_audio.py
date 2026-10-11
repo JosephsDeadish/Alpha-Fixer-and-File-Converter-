@@ -59,17 +59,19 @@ class PreviewAudioController:
         self.ended = False
         self.closed = False
         self.loaded_at = 0.0
+        self.device_lost_at = None
         self.last_seek = float("-inf")
         backend.event = self.media_event
 
     def configure(self, enabled, volume, muted):
         self.enabled, self.volume, self.muted = enabled, volume, muted
-        self.sync(self.target, self.playing, force=True)
+        self.sync(self.target, self.playing, force=True, retry=True)
 
     def reset(self):
         self.path = None
         self.target = None
         self.ready = self.failed = self.ended = False
+        self.device_lost_at = None
         self.backend.stop()
         self.backend.load(None)
 
@@ -86,7 +88,7 @@ class PreviewAudioController:
         if self.closed:
             return
         if event == "device":
-            self.sync(self.target, self.playing, force=True)
+            self.sync(self.target, self.playing, force=True, retry=True)
             return
         if self.path is None:
             return
@@ -110,7 +112,7 @@ class PreviewAudioController:
             self.backend.stop()
             self.status(f"Preview audio unavailable: {detail or 'media backend error'}. Video continues silently.")
 
-    def sync(self, target, playing, force=False):
+    def sync(self, target, playing, force=False, retry=False):
         self.target, self.playing = target, playing
         if self.closed:
             return
@@ -122,10 +124,16 @@ class PreviewAudioController:
                         (target.reason if target is not None else "Preview audio: no clip."))
             return
         if not self.backend.has_device():
+            if self.device_lost_at is None:
+                self.device_lost_at = self.clock()
             self.backend.pause()
             self.status("Preview audio unavailable: no output device. Video continues silently.")
             return
-        if self.path != target.path:
+        if self.device_lost_at is not None:
+            self.loaded_at += self.clock() - self.device_lost_at
+            self.device_lost_at = None
+        # Automatic wraps and clip boundaries force seeks, not decoder retries.
+        if self.path != target.path or (self.failed and retry):
             self.backend.stop()
             self.path = target.path
             self.ready = self.failed = self.ended = False
@@ -217,7 +225,9 @@ class QtAudioBackend:
         if status in (statuses.LoadedMedia, statuses.BufferedMedia):
             self.event("ready")
         elif status == statuses.EndOfMedia:
-            self.event("ended")
+            # A queued EOF notification can arrive after a seek on this player.
+            if player.mediaStatus() == statuses.EndOfMedia:
+                self.event("ended")
         elif status == statuses.InvalidMedia:
             self.event("error", self.player.errorString())
 

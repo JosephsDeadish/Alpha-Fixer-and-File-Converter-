@@ -5502,7 +5502,8 @@ class VideoToolDialog(QDialog):
         self._sync_playhead_frame_entry()
         if not self._preview_advancing:
             self._reset_preview_clock()
-        self._sync_preview_audio(force=not self._preview_advancing)
+        self._sync_preview_audio(
+            force=not self._preview_advancing, retry=not self._preview_advancing)
         total = self._total_preview_frames()
         if total == 0 or not self._clips:
             self._preview_pixmap = None
@@ -5581,7 +5582,7 @@ class VideoToolDialog(QDialog):
         else:
             self._preview_timer.stop()
             self._btn_play.setText("▶  Play")
-        self._sync_preview_audio(force=True)
+        self._sync_preview_audio(force=True, retry=True)
         self.queue_status_changed.emit(self.get_queue_status_text())
 
     def _on_preview_fps_changed(self, value: int) -> None:
@@ -5594,7 +5595,7 @@ class VideoToolDialog(QDialog):
         self._sync_playhead_frame_entry()
         self._update_timeline_summary()
         self._update_export_summary()
-        self._sync_preview_audio(force=True)
+        self._sync_preview_audio(force=True, retry=True)
 
     def _advance_preview(self) -> None:
         total = self._total_preview_frames()
@@ -5641,7 +5642,7 @@ class VideoToolDialog(QDialog):
                 self._preview_mute_check.isChecked())
         self._sync_preview_audio(force=True)
 
-    def _sync_preview_audio(self, force=False) -> None:
+    def _sync_preview_audio(self, force=False, retry=False) -> None:
         if self._preview_audio is None:
             if self._preview_audio_check.isChecked() and self._preview_audio_error:
                 self._preview_audio_status.setText(self._preview_audio_error)
@@ -5656,7 +5657,7 @@ class VideoToolDialog(QDialog):
             target = clip_audio_target(clip, frame, self._fps_slider.value())
         force = force or clip is not self._preview_audio_clip
         self._preview_audio_clip = clip
-        self._preview_audio.sync(target, self._is_playing, force=force)
+        self._preview_audio.sync(target, self._is_playing, force=force, retry=retry)
 
     # ------------------------------------------------------------------
     # Export

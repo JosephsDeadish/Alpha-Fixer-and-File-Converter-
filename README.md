@@ -451,6 +451,14 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Video preview audio can retry transient decoder failures on explicit recovery
+actions or device return without reloading failed media on automatic timeline
+wraps. Time without an output device does not consume the loading deadline, and
+obsolete queued end-of-media notifications are ignored after a seek. Deterministic
+backend regressions and bounded generated-media checks cover recovery logic;
+audible synchronization, latency and physical device-change acceptance remain
+outstanding.
+
 Editor recovery rechecks the recovery-file lock while reading, rejecting a copy
 claimed by an active editor after discovery. The recovery picker uses a stable
 candidate list and blocks reentrant project I/O/shutdown while open. Generated

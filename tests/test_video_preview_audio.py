@@ -170,6 +170,83 @@ def test_device_appears_after_initial_unavailability(follower):
     assert b.calls[-1] == ("play",)
 
 
+@pytest.mark.parametrize("failure", ["error", "timeout"])
+def test_failed_load_retries_only_on_explicit_sync(follower, failure):
+    c, b, _, clock = follower
+    target = AudioTarget("clip.mp4", 2, 1)
+    c.configure(True, 0.7, False)
+    c.sync(target, True)
+    if failure == "error":
+        b.event("error", "transient decoder failure")
+    else:
+        clock[0] = 9
+        c.sync(target, True)
+    assert c.failed
+    b.calls.clear()
+    c.sync(target, True)
+    assert not b.calls
+    c.sync(target, True, force=True)
+    assert not b.calls
+    c.sync(target, True, force=True, retry=True)
+    assert b.calls.count(("load", "clip.mp4")) == 1
+    assert not c.failed and not c.ready
+    c.sync(AudioTarget("clip.mp4", 4, 1), True)
+    b.event("ready")
+    assert ("seek", 4) in b.calls
+    assert b.calls[-1] == ("play",)
+
+
+def test_device_return_retries_failed_load(follower):
+    c, b = ready(follower)
+    b.device = False
+    b.event("device")
+    b.event("error", "output disconnected")
+    assert c.failed
+    b.calls.clear()
+    b.device = True
+    b.event("device")
+    assert ("load", "clip.mp4") in b.calls
+    b.event("ready")
+    assert b.calls[-1] == ("play",)
+
+
+def test_no_device_time_does_not_exhaust_loading_deadline(follower):
+    c, b, messages, clock = follower
+    c.configure(True, 0.7, False)
+    c.sync(AudioTarget("clip.mp4", 2, 1), True)
+    clock[0] = 1
+    b.device = False
+    b.event("device")
+    clock[0] = 20
+    c.sync(AudioTarget("clip.mp4", 4, 1), True)
+    clock[0] = 30
+    b.device = True
+    b.event("device")
+    assert not c.failed
+    assert messages[-1].startswith("Preview audio: loading")
+    b.event("ready")
+    assert ("seek", 4) in b.calls
+    assert b.calls[-1] == ("play",)
+
+
+def test_loading_timeout_still_applies_after_device_return(follower):
+    c, b, messages, clock = follower
+    c.configure(True, 0.7, False)
+    target = AudioTarget("clip.mp4", 2, 1)
+    c.sync(target, True)
+    clock[0] = 1
+    b.device = False
+    b.event("device")
+    clock[0] = 30
+    b.device = True
+    b.event("device")
+    clock[0] = 38
+    c.sync(target, True)
+    assert c.failed
+    assert "loading timed out" in messages[-1]
+    assert ("play",) not in b.calls
+
+
 @pytest.fixture(scope="module")
 def app():
     from PyQt6.QtWidgets import QApplication
@@ -286,7 +363,7 @@ def test_preview_clock_preserves_fractional_phase_and_multiple_loops(video, coun
     widget._btn_play.setChecked(True)
     widget._preview_timer.stop()
     loops = []
-    widget._sync_preview_audio = lambda force=False: loops.append(force)
+    widget._sync_preview_audio = lambda force=False, retry=False: loops.append((force, retry))
     previous_loop = 0
     for tick in ticks:
         now[0] = tick
@@ -294,9 +371,54 @@ def test_preview_clock_preserves_fractional_phase_and_multiple_loops(video, coun
         widget._advance_preview()
         absolute = start + int(tick * 60)
         assert widget._scrubber.value() == absolute % count
-        assert loops.count(True) == int(absolute // count != previous_loop)
+        assert loops.count((True, False)) == int(absolute // count != previous_loop)
+        assert not any(retry for _, retry in loops)
         assert widget._preview_anchor == 0.0
         previous_loop = absolute // count
+
+
+@pytest.mark.parametrize("split", [False, True], ids=["wrap", "clip-boundary-and-wrap"])
+@pytest.mark.parametrize("recovery", ["scrub", "play", "fps", "configure", "device"])
+def test_automatic_wraps_do_not_retry_invalid_media_but_recovery_does(video, split, recovery):
+    widget, backend = video
+    add_clip(widget, count=2)
+    if split:
+        add_clip(widget, count=2)
+    now = [0.0]
+    widget._preview_clock = lambda: now[0]
+    widget._preview_audio_check.setChecked(True)
+    widget._btn_play.setChecked(True)
+    widget._preview_timer.stop()
+
+    def invalid_load(path):
+        backend.calls.append(("load", path))
+        backend.event("error", "invalid media")
+
+    backend.load = invalid_load
+    backend.event("error", "invalid media")
+    backend.calls.clear()
+    for tick in range(1, 25):
+        now[0] = tick * 0.041
+        widget._advance_preview()
+    assert widget._preview_loop >= 6
+    assert widget._preview_audio.failed
+    assert not any(call[0] == "load" for call in backend.calls)
+
+    if recovery == "scrub":
+        widget._scrubber.setValue(1 - widget._scrubber.value())
+    elif recovery == "play":
+        widget._btn_play.setChecked(False)
+    elif recovery == "fps":
+        widget._fps_slider.setValue(50)
+    elif recovery == "configure":
+        widget._preview_volume_slider.setValue(21)
+    else:
+        backend.event("device")
+    assert backend.calls.count(("load", "clip.mp4")) == 1
+    for tick in range(25, 49):
+        now[0] = tick * 0.041
+        widget._advance_preview()
+    assert backend.calls.count(("load", "clip.mp4")) == 1
 
 
 @pytest.mark.parametrize("pixels", [13, 24, 32])
@@ -361,6 +483,7 @@ def qt_backend():
             self.mediaStatusChanged, self.errorOccurred = Signal(), Signal()
             self.destroyed = Signal()
             self.source = ""
+            self.status = self.MediaStatus.LoadedMedia
         def setAudioOutput(self, output):
             calls.append((self, "output", output))
         def setSource(self, source):
@@ -375,6 +498,7 @@ def qt_backend():
         def deleteLater(self):
             calls.append((self, "delete"))
         def errorString(self): return "old decoder"
+        def mediaStatus(self): return self.status
 
     class Url:
         def __new__(cls):
@@ -422,6 +546,25 @@ def test_qt_source_switch_discards_delayed_prior_player_events(follower, qt_back
     current.mediaStatusChanged.callback(1)
     assert c.ready and fake.calls[-1] == ("play",)
     assert ("seek", 2) in fake.calls
+
+
+def test_qt_seek_after_eof_discards_queued_same_player_end(follower, qt_backend):
+    c, fake, messages, _ = follower
+    backend, _ = qt_backend
+    backend.event = c.media_event
+    fake.load = backend.load
+    c, fake = ready(follower)
+    player = backend.player
+    player.status = player.MediaStatus.EndOfMedia
+    player.mediaStatusChanged.callback(player.status)
+    assert c.ended
+    c.sync(AudioTarget("clip.mp4", 0, 1), True, force=True)
+    assert not c.ended and fake.calls[-1] == ("play",)
+    player.status = player.MediaStatus.LoadedMedia
+    before = list(fake.calls), list(messages)
+    player.mediaStatusChanged.callback(player.MediaStatus.EndOfMedia)
+    assert (fake.calls, messages) == before
+    assert not c.ended
 
 
 def test_release_clips_clears_all_player_sources_before_temp_cleanup(video, qt_backend):
