@@ -451,6 +451,12 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Project media-identity checks reject nonfinite decoded frame rates before a
+loaded or recovered project replaces the active editor session. Generated-file
+regressions with injected decoder metadata cover cleanup and preservation of
+unsaved media, edits, history, selection and playback. These bounded checks do
+not establish malformed real-media fidelity or native recovery acceptance.
+
 Audio-preview synchronization stops immediately when a transport call reports a
 synchronous backend error, preserving the failure status instead of restarting
 playback. Deterministic transport-failure/retry regressions and a generated

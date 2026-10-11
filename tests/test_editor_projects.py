@@ -257,6 +257,108 @@ def test_missing_video_media_preserves_live_session(dialogs, tmp_path):
     assert original.get_frame(0).getpixel((0, 0)) == (255, 0, 0, 255)
 
 
+@pytest.mark.parametrize("fps", [float("nan"), float("inf"), -float("inf")])
+def test_prepare_rejects_nonfinite_decoded_fps_and_releases_media(dialogs, tmp_path, fps):
+    from src.ui import video_tool
+    source, still = sources(tmp_path)
+    widget = dialogs("video")
+    widget._load_image_paths([str(source), str(still)])
+    path = tmp_path / "p.json"
+    save(widget, path)
+    prepared = []
+    loader = video_tool._load_image_as_clip
+
+    def load(source_path):
+        clip = loader(source_path)
+        if source_path == str(still):
+            clip.fps = fps
+        clip.close = Mock(wraps=clip.close)
+        prepared.append(clip)
+        return clip
+
+    with patch.object(video_tool, "_load_image_as_clip", side_effect=load):
+        with pytest.raises(ValueError, match="source FPS"):
+            prepare_entries(read_project(path), path)
+    assert len(prepared) == 2
+    for clip in prepared:
+        clip.close.assert_called_once()
+
+
+@pytest.mark.parametrize("token", ["NaN", "Infinity", "-Infinity", "1e999", "-1e999"])
+def test_nonfinite_project_fps_rejected_before_decode(dialogs, tmp_path, token):
+    _, still = sources(tmp_path)
+    widget = dialogs("video")
+    widget._load_image_paths([str(still)])
+    path = tmp_path / "p.json"
+    save(widget, path)
+    document = read_project(path)
+    document["entries"][0]["fps"] = "nonfinite-fps"
+    path.write_text(json.dumps(document).replace('"nonfinite-fps"', token))
+    widget._brightness_slider.setValue(177)
+    project = widget._project
+    original = tuple(project.entries)
+    fingerprint = project.fingerprint()
+    state = project.path, project._saved, project._autosaved
+    with pytest.raises(ValueError, match="Non-finite number|source FPS"):
+        read_project(path)
+    with patch("src.ui.editor_project.prepare_entries") as prepare, \
+            patch("src.ui.editor_project.QMessageBox.critical") as error:
+        assert project.load(path)
+        wait(widget)
+    error.assert_called_once()
+    prepare.assert_not_called()
+    assert tuple(project.entries) == original and project.fingerprint() == fingerprint
+    assert (project.path, project._saved, project._autosaved) == state and project.dirty
+    with original[0].get_frame(0) as frame:
+        assert frame.getpixel((0, 0)) == (255, 0, 0, 255)
+
+
+@pytest.mark.parametrize("recovery", [False, True])
+def test_nonfinite_decoded_fps_keeps_unsaved_video_session(dialogs, tmp_path, recovery):
+    from src.ui import video_tool
+    source, still = sources(tmp_path)
+    widget = dialogs("video")
+    widget._load_image_paths([str(source), str(still)])
+    path = tmp_path / "p.json"
+    save(widget, path)
+    project = widget._project
+    widget._clip_list.setCurrentRow(0)
+    widget._clip_speed_slider.setValue(70)
+    widget._brightness_slider.setValue(177)
+    widget._scrubber.setValue(1)
+    widget._btn_play.setChecked(True)
+    original = tuple(project.entries)
+    fingerprint = project.fingerprint()
+    state = project.path, project._saved, project._autosaved
+    history = list(widget._undo_stack), list(widget._redo_stack)
+    before = path.read_bytes()
+    loader = video_tool._load_image_as_clip
+
+    def load(source_path):
+        clip = loader(source_path)
+        clip.fps = float("nan")
+        return clip
+
+    with patch.object(video_tool, "_load_image_as_clip", side_effect=load), \
+            patch("src.ui.editor_project.QMessageBox.critical") as error, \
+            patch("src.ui.editor_project.QMessageBox.question",
+                  return_value=QMessageBox.StandardButton.Discard) as replace:
+        assert project.load(path, recovery=recovery)
+        wait(widget)
+    error.assert_called_once()
+    replace.assert_not_called()
+    assert tuple(project.entries) == original and project.fingerprint() == fingerprint
+    assert (project.path, project._saved, project._autosaved) == state and project.dirty
+    assert (widget._undo_stack, widget._redo_stack) == history
+    assert widget._clip_list.currentRow() == 0 and widget._scrubber.value() == 1
+    assert widget._btn_play.isChecked() and widget._preview_timer.isActive()
+    assert widget._content_scroll.isEnabled() and not project._loading
+    assert path.read_bytes() == before
+    for clip in original:
+        with clip.get_frame(0) as frame:
+            assert frame.getpixel((0, 0)) == (255, 0, 0, 255)
+
+
 def test_missing_media_relink_repeated_entries_save_and_export(dialogs, tmp_path):
     import threading
     from src.ui import video_tool

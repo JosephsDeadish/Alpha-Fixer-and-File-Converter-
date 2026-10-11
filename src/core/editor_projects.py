@@ -267,6 +267,8 @@ def prepare_entries(document, project_path, replacements=None):
                 if clip is None:
                     raise ValueError(f"Cannot load project media: {source}")
                 prepared.append(clip)
+                if not math.isfinite(clip.fps):
+                    raise ValueError(f"Invalid decoded source FPS: {source}")
                 if source_stamps[source] != _source_stamp(os.stat(source)):
                     raise ValueError(f"Media changed during project I/O: {source}")
                 clip._source_sha256 = signatures[source]
