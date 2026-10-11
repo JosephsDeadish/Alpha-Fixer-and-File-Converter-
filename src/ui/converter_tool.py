@@ -217,11 +217,13 @@ class ConverterTab(QWidget):
         self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._session_status_lbl.setProperty("toolGuidance", True)
         main_layout.addWidget(self._session_status_lbl)
-        self._next_step_lbl = QLabel("Next step: add files or a folder, choose an output format, then preview or convert.")
+        self._next_step_lbl = QLabel("Next step: add files or a folder, choose an output format, then preview or convert.", self._content)
         self._next_step_lbl.setWordWrap(True)
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._next_step_lbl.setProperty("toolGuidance", True)
-        main_layout.addWidget(self._next_step_lbl)
+        # Retain structured guidance for the main-window summary without
+        # displaying it twice beside the session status.
+        self._next_step_lbl.hide()
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self._splitter = splitter
@@ -520,7 +522,6 @@ class ConverterTab(QWidget):
         self._advanced_toggle.installEventFilter(self)
         rv.addWidget(self._advanced_toggle)
         self._advanced_hint = QLabel(
-            "Advanced · Quality, DDS variant, metadata and resize. "
             "Collapsing only hides controls; enabled settings still apply."
         )
         self._advanced_hint.setWordWrap(True)
@@ -826,14 +827,26 @@ class ConverterTab(QWidget):
         ]
         prefix = ("Retained settings (GIF Builder uses its own settings): "
                   if fmt == "GIF" else "Advanced settings: ")
-        self._advanced_status.setText(prefix + "; ".join(parts) + ".")
+        detail = prefix + "; ".join(parts) + "."
+        current = []
+        if fmt in ("JPEG", "WEBP", "AVIF", "JPEG2000"):
+            current.append(parts[0])
+        if fmt == "DDS":
+            current.append(parts[1])
+        current.extend(parts[2:])
+        self._advanced_status.setText(
+            "GIF Builder uses its own settings; conversion settings retained."
+            if fmt == "GIF" else "Advanced settings: " + "; ".join(current) + "."
+        )
+        self._advanced_status.setToolTip(detail)
+        self._advanced_status.setAccessibleDescription(detail)
         expanded = self._advanced_toggle.isChecked()
         self._advanced_toggle.setText(f"{'▼' if expanded else '▶'}  Advanced")
         self._advanced_toggle.setAccessibleName(
             ("Hide" if expanded else "Show") + " advanced conversion settings"
         )
         self._advanced_toggle.setAccessibleDescription(
-            self._advanced_hint.text() + " " + self._advanced_status.text()
+            self._advanced_hint.text() + " " + detail
         )
         if hasattr(self, "_layout_timer"):
             self._layout_timer.start(0)

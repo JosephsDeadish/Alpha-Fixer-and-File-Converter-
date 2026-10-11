@@ -236,7 +236,8 @@ def test_disclosure_keys_preserve_generated_preview_and_preferences(app, convert
               converter._width_spin.value(), converter._height_spin.value(),
               converter._compare._raw_after)
     assert "resize 60 × 30 px (aspect locked)" in converter._advanced_status.text()
-    assert "retained (not used for PNG)" in converter._advanced_status.text()
+    assert "not used for PNG" not in converter._advanced_status.text()
+    assert "retained (not used for PNG)" in converter._advanced_status.toolTip()
     assert not converter._grp_resize.isVisible()
     assert converter._fmt_combo.isVisible()
     assert converter._btn_run.isVisible()
@@ -282,10 +283,15 @@ def test_saved_options_initially_collapsed_and_format_aware(app, converter):
         assert not restored._grp_resize.isVisible()
         assert restored._fmt_combo.currentData()[0] == "JPEG"
         summary = restored._advanced_status.text()
+        assert restored._next_step_lbl.isHidden()
+        assert restored._next_step_lbl.text().removeprefix("Next step:").strip() in restored._session_status_lbl.text()
         assert "quality 73;" in summary
         assert "preserve supported metadata" in summary
         assert "resize off (original dimensions)" in summary
-        assert "retained (not used for JPEG)" in summary
+        assert "not used for JPEG" not in summary
+        assert "retained (not used for JPEG)" in restored._advanced_status.toolTip()
+        assert "retained (not used for JPEG)" in restored._advanced_status.accessibleDescription()
+        assert "retained (not used for JPEG)" in restored._advanced_toggle.accessibleDescription()
         restored._advanced_toggle.setChecked(True)
         restored._keep_metadata_check.setChecked(False)
         assert "metadata not copied" in restored._advanced_status.text()
@@ -294,7 +300,8 @@ def test_saved_options_initially_collapsed_and_format_aware(app, converter):
                          if restored._fmt_combo.itemData(i)[0] == "DDS")
         restored._fmt_combo.setCurrentIndex(dds_index)
         restored._preview_debounce.stop()
-        assert "quality 73 retained (not used for DDS)" in restored._advanced_status.text()
+        assert "quality" not in restored._advanced_status.text()
+        assert "quality 73 retained (not used for DDS)" in restored._advanced_status.toolTip()
         restored._keep_metadata_check.setChecked(True)
         assert "metadata enabled, retained (not supported for DDS)" in restored._advanced_status.text()
         assert restored._dds_variant_combo.isVisible()

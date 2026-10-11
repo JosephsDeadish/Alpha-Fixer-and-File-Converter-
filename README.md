@@ -451,6 +451,17 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+The latest hierarchy pass removes duplicate in-tool next-step labels and shortens
+Basic/Advanced guidance while retaining complete settings details in tooltips and
+accessible descriptions. A freshly rebuilt Linux folder bundle passed 24 actual
+Alpha/Converter window cases at verified scales 1/1.5/2, Dark/Light themes and
+900×700/1200×800 sizes, producing 48 screenshots with externally observed exit 0
+at every scale. Focused source regressions passed (60 plus three status tests).
+The earlier scale-2 exit-139 teardown failure did not reproduce in bounded
+before-change or final runs; no lifecycle fix or root-cause resolution is claimed.
+Screenshot review still shows dense compact scrolling and weak inactive-tab/button
+contrast in the Light theme; these need further visual/accessibility work.
+
 Basic/Advanced usability checks now cover Enter/Return activation in Alpha and
 shrinking Converter guidance after widening a window or shortening its text.
 The opt-in `ALPHA_FIXER_GUI_ACCEPTANCE_OUT` launch hook exercises the actual

@@ -394,11 +394,13 @@ class AlphaFixerTab(QWidget):
         self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._session_status_lbl.setProperty("toolGuidance", True)
         main_layout.addWidget(self._session_status_lbl)
-        self._next_step_lbl = QLabel("Next step: add image files to preview or process, then choose a preset or manual adjustments.")
+        self._next_step_lbl = QLabel("Next step: add image files to preview or process, then choose a preset or manual adjustments.", self._content)
         self._next_step_lbl.setWordWrap(True)
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._next_step_lbl.setProperty("toolGuidance", True)
-        main_layout.addWidget(self._next_step_lbl)
+        # Retain structured guidance for the main-window summary without
+        # displaying it twice beside the session status.
+        self._next_step_lbl.hide()
 
         outer_splitter = QSplitter(Qt.Orientation.Horizontal)
         self._splitter = outer_splitter
@@ -690,8 +692,7 @@ class AlphaFixerTab(QWidget):
             "Set Min = Max to force every pixel to exactly that value."
         )
         hint_lbl = QLabel(
-            "Basic · Set the output alpha range and optionally invert transparency. "
-            "For a fixed opacity, set Min = Max. Review the preview before processing."
+            "Set the alpha range; Min = Max gives a fixed opacity."
         )
         hint_lbl.setToolTip(range_help)
         hint_lbl.setObjectName("subheader")
@@ -768,7 +769,6 @@ class AlphaFixerTab(QWidget):
         )
         gt_layout.addWidget(adv_sep, 5, 0, 1, 2)
         self._advanced_hint = QLabel(
-            "Advanced · Binary cut, selective threshold and RGBA deltas. "
             "Collapsing only hides controls; enabled settings still apply."
         )
         self._advanced_hint.setWordWrap(True)
@@ -1096,10 +1096,13 @@ class AlphaFixerTab(QWidget):
             f" Saved RGBA deltas (disabled): {deltas}."
             if deltas and not self._apply_rgb_check.isChecked() else ""
         )
-        self._advanced_status.setText(
+        summary = (
             ("Advanced active: " + "; ".join(active) + "." if active
-             else "Advanced: no processing changes.") + retained + " " + meaning
+             else "Advanced: no processing changes.") + retained
         )
+        self._advanced_status.setText(summary)
+        self._advanced_status.setToolTip(summary + " " + meaning)
+        self._advanced_status.setAccessibleDescription(meaning)
         expanded = self._advanced_toggle.isChecked()
         self._advanced_toggle.setText(
             f"{'▼' if expanded else '▶'}  Advanced"
@@ -1110,7 +1113,7 @@ class AlphaFixerTab(QWidget):
         )
         self._advanced_toggle.setAccessibleDescription(
             "Collapsing only hides controls; enabled settings still apply. "
-            + self._advanced_status.text()
+            + self._advanced_status.toolTip()
         )
 
     def _schedule_focus_reveal(self, _previous, current):

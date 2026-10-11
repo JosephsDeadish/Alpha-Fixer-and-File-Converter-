@@ -301,7 +301,12 @@ def test_basic_default_and_keyboard_skips_collapsed_controls(app, alpha):
     alpha.show()
     settle(app)
     assert "no processing changes" in alpha._advanced_status.text()
-    assert "0 processes all pixels" in alpha._advanced_status.text()
+    assert alpha._next_step_lbl.isHidden()
+    assert alpha._next_step_lbl.text().removeprefix("Next step:").strip() in alpha._session_status_lbl.text()
+    assert "0 processes all pixels" not in alpha._advanced_status.text()
+    assert "0 processes all pixels" in alpha._advanced_status.toolTip()
+    assert "0 processes all pixels" in alpha._advanced_toggle.accessibleDescription()
+    assert "0 processes all pixels" in alpha._advanced_status.accessibleDescription()
     alpha._advanced_toggle.setFocus()
     QTest.keyClick(alpha._advanced_toggle, Qt.Key.Key_Tab)
     assert app.focusWidget() is alpha._log
