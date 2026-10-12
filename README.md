@@ -451,6 +451,12 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+GIF project/recovery loading preserves an explicit absence of imported source
+timing instead of inventing a source hold from an edited delay. Generated-image
+roundtrips cover reopening, resaving and undo, alongside bounded failed-load and
+storage/source-identity regressions. Physical storage/power-loss recovery and full
+native project/settings acceptance remain outstanding.
+
 Standard-image previews, conversion and Alpha loading normalize EXIF/XMP
 orientation before resizing or exporting. Retained metadata no longer reapplies
 rotation, including TIFF XMP tag 700 and mixed-orientation multipage TIFFs.

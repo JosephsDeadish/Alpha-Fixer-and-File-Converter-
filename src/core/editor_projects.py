@@ -251,6 +251,8 @@ def prepare_entries(document, project_path, replacements=None):
             for entry in document["entries"]:
                 prepared.append(_FrameEntry(entry["source"], entry["index"], decode_png(entry),
                                             entry["delay"], entry["source_delay"], entry["source_kind"]))
+                # The import constructor defaults missing source timing to delay; projects preserve explicit null.
+                prepared[-1].source_delay_ms = entry["source_delay"]
         else:
             from src.ui.video_tool import _load_image_as_clip, _load_video_clip
             decoded_pixels = 0

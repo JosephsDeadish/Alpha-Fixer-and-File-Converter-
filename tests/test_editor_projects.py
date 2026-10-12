@@ -171,6 +171,51 @@ def test_gif_owned_roundtrip_and_real_export_holds(dialogs, tmp_path):
     assert delays == [80, 140, 230, 350]
 
 
+@pytest.mark.parametrize("recovery", [False, True])
+def test_still_frame_override_preserves_absent_source_timing(dialogs, tmp_path, recovery):
+    _, still = sources(tmp_path)
+    widget = dialogs("gif")
+    widget._project.timer.stop()
+    widget._add_paths([str(still)])
+    widget._frame_list.setCurrentRow(0)
+    widget._pf_check.setChecked(True)
+    widget._pf_slider.setValue(370)
+    assert widget._frames[0].source_delay_ms is None
+    assert "370 ms (per-frame override)" in widget._frame_diag_lbl.text()
+    path = tmp_path / "override.gifproject.json"
+    if recovery:
+        assert widget._project.autosave()
+        wait(widget)
+        path = widget._project.recovery_path
+        widget._project._release_session()
+    else:
+        save(widget, path)
+    before = read_project(path)
+    assert before["entries"][0]["source_delay"] is None
+    still.unlink()
+
+    loaded = dialogs("gif")
+    loaded._project.timer.stop()
+    with patch("src.ui.editor_project.QMessageBox.critical") as error:
+        assert loaded._project.load(path, recovery=recovery)
+        wait(loaded)
+    error.assert_not_called()
+    assert loaded._frames[0].delay_ms == 370
+    assert loaded._frames[0].source_delay_ms is None
+    assert "370 ms (per-frame override)" in loaded._frame_diag_lbl.text()
+    assert loaded._pf_check.isChecked() and loaded._pf_slider.value() == 370
+    assert loaded._project.dirty is recovery
+    output = tmp_path / "resaved.gifproject.json"
+    save(loaded, output)
+    assert read_project(output)["entries"] == before["entries"]
+    loaded._pf_check.setChecked(False)
+    assert loaded._frames[0].delay_ms is None and loaded._project.dirty
+    loaded._undo()
+    assert loaded._frames[0].delay_ms == 370
+    assert loaded._frames[0].source_delay_ms is None
+    assert not loaded._project.dirty
+
+
 def test_video_gif_split_still_settings_roundtrip(dialogs, tmp_path):
     source, still = sources(tmp_path)
     widget = dialogs("video")
