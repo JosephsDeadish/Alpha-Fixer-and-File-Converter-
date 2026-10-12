@@ -103,6 +103,17 @@ def test_custom_background_path_edit_accepts_local_file_drops():
         edit.deleteLater()
 
 
+def test_custom_background_path_clear_button_empties_the_field(app, dialog):
+    widget, _ = dialog
+    widget._custom_bg_check.setChecked(True)
+    widget._custom_bg_path_edit.setText("/tmp/background.png")
+    assert widget._custom_bg_path_edit.text() == "/tmp/background.png"
+    widget._custom_bg_path_edit.clear()
+    app.processEvents()
+    assert widget._custom_bg_path_edit.text() == ""
+    assert "Choose an image" in widget._custom_bg_status_lbl.text()
+
+
 @pytest.mark.parametrize("tool,limit_control,track_control", _HISTORY_CONTROLS)
 def test_opening_existing_ini_does_not_rewrite_legacy_history_policy(
         settings_session, tool, limit_control, track_control):

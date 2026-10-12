@@ -387,9 +387,11 @@ class SettingsDialog(QDialog):
         self._custom_bg_path_edit.setPlaceholderText(
             "Path to image, GIF, or video file…"
         )
+        self._custom_bg_path_edit.setClearButtonEnabled(True)
         self._custom_bg_path_edit.setToolTip(
             "Full path to the background image, animated image, or video file.\n"
-            "You can also drag a local file from Explorer/Finder onto this field."
+            "You can also drag a local file from Explorer/Finder onto this field.\n"
+            "Use the clear button to remove the path."
         )
         self._custom_bg_path_edit.setAccessibleDescription(self._custom_bg_path_edit.toolTip())
         self._custom_bg_path_edit.setReadOnly(False)
