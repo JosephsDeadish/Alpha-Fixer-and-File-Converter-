@@ -1360,6 +1360,10 @@ class GifBuilderDialog(QDialog):
         self._frames.clear()
         self._frame_list.clear()
         self._reset_frame_history()
+        self._preview_idx = 0
+        self._update_count()
+        self._update_scrubber()
+        self._update_preview_frame()
 
     def _update_history_controls(self) -> None:
         busy = self._editing_busy()

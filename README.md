@@ -451,6 +451,14 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+GIF Builder shutdown clears its retained preview pixmap and resets frame count,
+scrubber and transport state after releasing frames. Regressions cover close,
+reject and parent shutdown plus 15 generated-project reopen/autosave/shutdown
+cycles: 45 frame entries closed exactly once, 15 previews cleared and 15 locks
+released, with recovery files preserved. Bounded project, teardown and storage
+groups passed 124 tests without skips. These checks do not establish sustained
+resource stability, physical storage/power-loss recovery or native device behavior.
+
 Repeated builder project replacement and failed open/recovery checks exercise
 image, reader, temporary-remux and audio-player cleanup. A truncated-GIF regression
 now closes copied frames when decoding fails partway through. Bounded checks

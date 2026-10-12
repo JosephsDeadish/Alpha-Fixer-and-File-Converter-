@@ -2045,6 +2045,51 @@ def test_cancelled_parent_shutdown_preserves_closed_editor_reopen(dialogs, tmp_p
     assert gif._project.session_id != identity and gif._project.timer.isActive()
 
 
+@pytest.mark.parametrize("route", ["close", "reject", "parent"])
+def test_repeated_gif_shutdown_releases_preview_and_recovery(dialogs, tmp_path, route):
+    from src.ui.editor_project import approve_parent_projects
+    source, _ = sources(tmp_path)
+    widget = dialogs("gif")
+    for _ in range(5):
+        widget.show()
+        widget._add_paths([str(source)])
+        widget._scrubber.setValue(2)
+        widget._btn_play.setChecked(True)
+        assert widget._project.autosave()
+        wait(widget)
+        lock = widget._project._lock
+        entries = tuple(widget._frames)
+        for entry in entries:
+            entry.close = Mock(wraps=entry.close)
+        assert not widget._preview_lbl.pixmap().isNull()
+        with patch("src.ui.editor_project.QMessageBox.question",
+                   return_value=QMessageBox.StandardButton.Discard):
+            if route == "parent":
+                assert approve_parent_projects([widget], lambda: None)
+                widget.hide()
+            elif route == "reject":
+                widget.reject()
+            else:
+                assert widget.close()
+        assert not widget._frames and not widget._history_entries
+        assert not widget._undo_stack and not widget._redo_stack
+        for entry in entries:
+            entry.close.assert_called_once()
+            assert not entry._thumb_cache
+            with pytest.raises(ValueError):
+                entry._pil.getpixel((0, 0))
+        assert widget._preview_lbl.pixmap().isNull()
+        assert widget._preview_lbl.text() == "(no frames yet)"
+        assert widget._preview_frame_lbl.text() == "0 / 0"
+        assert widget._frame_count_lbl.text() == "0 frames"
+        assert widget._scrubber.maximum() == 0
+        assert not widget._scrubber.isEnabled() and not widget._btn_rewind.isEnabled()
+        assert not widget._btn_play.isChecked() and not widget._preview_timer.isActive()
+        assert not widget._project.timer.isActive()
+        assert widget._project._lock is None and not lock.isLocked()
+        assert widget._project.recovery_path.is_file()
+
+
 def test_identity_failure_closes_already_prepared_clips(dialogs, tmp_path):
     from src.ui import video_tool
     source, still = sources(tmp_path)
