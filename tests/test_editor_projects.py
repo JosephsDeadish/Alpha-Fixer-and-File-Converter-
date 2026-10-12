@@ -855,7 +855,7 @@ def test_close_cancel_save_and_export_guard(dialogs, tmp_path):
 
 @pytest.mark.parametrize("kind", ["gif", "video"])
 @pytest.mark.parametrize("provisional", [False, True])
-@pytest.mark.parametrize("answer", ["Cancel", "Discard", "Save"])
+@pytest.mark.parametrize("answer", ["Cancel", "Discard", "Save", "SaveCancelled"])
 def test_close_prompt_blocks_project_io_and_failed_save_keeps_recovery(
         dialogs, tmp_path, kind, provisional, answer):
     _, still = sources(tmp_path)
@@ -892,11 +892,11 @@ def test_close_prompt_blocks_project_io_and_failed_save_keeps_recovery(
 
     def question(*args):
         assert_modal_guard()
-        return getattr(QMessageBox.StandardButton, answer)
+        return getattr(QMessageBox.StandardButton, "Save" if answer == "SaveCancelled" else answer)
 
     def picker(*args):
         assert_modal_guard()
-        return str(path), ""
+        return ("" if answer == "SaveCancelled" else str(path)), ""
 
     with patch("src.ui.editor_project.QMessageBox.question", side_effect=question), \
             patch("src.ui.editor_project.QFileDialog.getSaveFileName", side_effect=picker), \
@@ -1120,7 +1120,7 @@ def test_replace_prompt_late_edit_keeps_live_session(dialogs, tmp_path, kind):
 
 @pytest.mark.parametrize("kind", ["gif", "video"])
 @pytest.mark.parametrize("automatic", [False, True])
-@pytest.mark.parametrize("failure", ["ENOSPC", "EACCES"])
+@pytest.mark.parametrize("failure", ["ENOSPC", "EACCES", "EIO"])
 def test_storage_failure_preserves_project_recovery_and_retries(dialogs, tmp_path, kind, automatic, failure):
     import errno
     from src.ui import editor_project
@@ -1142,7 +1142,8 @@ def test_storage_failure_preserves_project_recovery_and_retries(dialogs, tmp_pat
     old_entries = tuple(project.entries)
     control.setValue(control.value() + 10)
     destination = project.recovery_path if automatic else path
-    target = "os.fsync" if failure == "ENOSPC" else "tempfile.NamedTemporaryFile"
+    target = {"ENOSPC": "os.fsync", "EACCES": "tempfile.NamedTemporaryFile",
+              "EIO": "os.replace"}[failure]
     error = OSError(getattr(errno, failure), failure)
     with patch(target, side_effect=error), patch.object(editor_project.QMessageBox, "critical") as modal:
         assert project._save(destination, automatic=automatic)
@@ -1160,6 +1161,221 @@ def test_storage_failure_preserves_project_recovery_and_retries(dialogs, tmp_pat
     assert project.dirty is automatic
     assert destination.read_bytes() != before[1 if automatic else 0]
     assert project._lock is state[2] and project._lock.isLocked()
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("automatic", [False, True])
+def test_destination_directory_disappears_before_commit_and_retries(dialogs, tmp_path, kind, automatic):
+    import os
+    from src.ui import editor_project
+
+    _, still = sources(tmp_path)
+    widget = dialogs(kind)
+    if kind == "gif":
+        widget._add_paths([str(still)])
+        control = widget._delay_slider
+    else:
+        widget._load_image_paths([str(still)])
+        control = widget._brightness_slider
+    project = widget._project
+    folder = tmp_path / "projects"
+    folder.mkdir()
+    path = folder / "saved.json"
+    save(widget, path)
+    assert project.autosave()
+    wait(widget)
+    before = path.read_bytes(), project.recovery_path.read_bytes()
+    state = project.path, project._saved, project._autosaved, project._lock
+    control.setValue(control.value() + 10)
+    captured = project.fingerprint()
+    entries = tuple(project.entries)
+    destination = project.recovery_path if automatic else path
+    displaced = destination.parent.with_name(destination.parent.name + "-disconnected")
+    replace = os.replace
+
+    def disconnect(staged, target):
+        destination.parent.rename(displaced)
+        return replace(staged, target)
+
+    try:
+        with patch("os.replace", side_effect=disconnect), \
+                patch.object(editor_project.QMessageBox, "critical") as modal:
+            assert project._save(destination, automatic=automatic)
+            wait(widget)
+        assert modal.call_count == (0 if automatic else 1)
+        assert not destination.parent.exists()
+        assert (displaced / destination.name).read_bytes() == before[1 if automatic else 0]
+        assert project.dirty and project.fingerprint() == captured
+        assert tuple(project.entries) == entries
+        assert (project.path, project._saved, project._autosaved, project._lock) == state
+        assert project.timer.isActive() and project._lock.isLocked()
+        assert not project._closing_approved and project._pending_close is None
+    finally:
+        if displaced.exists():
+            displaced.rename(destination.parent)
+
+    assert (path.read_bytes(), project.recovery_path.read_bytes()) == before
+    # Cleanup cannot reach a staged file while its directory is disconnected.
+    # Remove only this test's orphan once the directory becomes available again.
+    for orphan in destination.parent.glob(".alpha_fixer_save_*"):
+        orphan.unlink()
+    assert project._save(destination, automatic=automatic)
+    wait(widget)
+    assert project.dirty is automatic
+    assert (project._autosaved if automatic else project._saved) == captured
+    assert project.path == str(path) and project._lock is state[3]
+    assert project._lock.isLocked() and project.timer.isActive()
+    assert not list(tmp_path.rglob(".alpha_fixer_save_*"))
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("recovery", [False, True])
+@pytest.mark.parametrize("failure", ["EACCES", "EIO", "ENOENT"])
+def test_project_read_storage_failure_preserves_live_session_and_retries(
+        dialogs, tmp_path, kind, recovery, failure):
+    import errno
+    from PyQt6.QtCore import QLockFile
+    from src.ui import editor_project
+
+    _, still = sources(tmp_path)
+    widget = dialogs(kind)
+    if kind == "gif":
+        widget._add_paths([str(still)])
+        control = widget._delay_slider
+    else:
+        widget._load_image_paths([str(still)])
+        control = widget._brightness_slider
+    project = widget._project
+    path = tmp_path / "saved.json"
+    save(widget, path)
+    assert project.autosave()
+    wait(widget)
+    candidate = tmp_path / "candidate.json"
+    candidate.write_bytes(path.read_bytes())
+    before = path.read_bytes(), project.recovery_path.read_bytes(), candidate.read_bytes()
+    control.setValue(control.value() + 10)
+    fingerprint = project.fingerprint()
+    state = project.path, project._saved, project._autosaved, project._lock
+    entries = tuple(project.entries)
+    history = tuple(widget._undo_stack), tuple(widget._redo_stack)
+    error = OSError(getattr(errno, failure), failure)
+    with patch("src.core.editor_projects.open", create=True, side_effect=error), \
+            patch.object(editor_project.QMessageBox, "critical") as modal:
+        assert project.load(candidate, recovery=recovery)
+        wait(widget)
+    modal.assert_called_once()
+    assert failure in project.status.text()
+    assert project.fingerprint() == fingerprint and project.dirty
+    assert tuple(project.entries) == entries
+    assert (tuple(widget._undo_stack), tuple(widget._redo_stack)) == history
+    assert (project.path, project._saved, project._autosaved, project._lock) == state
+    assert project._lock.isLocked() and project.timer.isActive()
+    assert widget._content_scroll.isEnabled() and not project._loading
+    assert (path.read_bytes(), project.recovery_path.read_bytes(), candidate.read_bytes()) == before
+    probe = QLockFile(str(candidate) + ".lock")
+    probe.setStaleLockTime(0)
+    try:
+        assert probe.tryLock(0)
+    finally:
+        probe.unlock()
+    with patch.object(editor_project.QMessageBox, "question",
+                      return_value=QMessageBox.StandardButton.Discard):
+        assert project.load(candidate, recovery=recovery)
+        wait(widget)
+    assert project.dirty is recovery
+    assert project.path == ("" if recovery else str(candidate))
+    assert project._lock is state[3] and project._lock.isLocked()
+    assert candidate.read_bytes() == before[2]
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("automatic", [False, True])
+def test_save_worker_owns_snapshot_and_late_edits_cancel_pending_close(dialogs, tmp_path, kind, automatic):
+    from threading import Event, get_ident
+    from src.core.editor_projects import decode_png
+    from src.ui import editor_project
+
+    _, still = sources(tmp_path)
+    widget = dialogs(kind)
+    if kind == "gif":
+        widget._add_paths([str(still)])
+        control = widget._delay_slider
+    else:
+        widget._load_image_paths([str(still)])
+        control = widget._brightness_slider
+    project = widget._project
+    path = tmp_path / "saved.json"
+    save(widget, path)
+    assert project.autosave()
+    wait(widget)
+    state = project._saved, project._autosaved, project._lock
+    control.setValue(control.value() + 10)
+    captured = project.fingerprint()
+    controls = project.controls()
+    original = project.entries[0]
+    destination = project.recovery_path if automatic else path
+    entered, release = Event(), Event()
+    gui_thread = get_ident()
+    snapshots = []
+    function = "encode_png" if kind == "gif" else "source_signature"
+    operation = getattr(editor_project, function)
+    resumed = Mock()
+
+    def blocked(value):
+        assert get_ident() != gui_thread
+        if kind == "gif":
+            assert value is not original._pil
+            snapshots.append(value)
+        entered.set()
+        assert release.wait(5)
+        return operation(value)
+
+    with patch.object(editor_project, function, side_effect=blocked), \
+            patch.object(editor_project.QMessageBox, "question",
+                         return_value=QMessageBox.StandardButton.Save), \
+            patch.object(editor_project.QFileDialog, "getSaveFileName",
+                         return_value=(str(path), "")):
+        try:
+            if automatic:
+                assert project.autosave()
+            else:
+                assert not project.allow_close(resumed)
+                assert project._pending_close is resumed
+            assert entered.wait(5)
+            control.setValue(control.value() + 10)
+            widget._clear_all()
+            assert not project.entries
+            assert project.fingerprint() != captured
+            assert not project.autosave()
+            assert not project._save(tmp_path / "unexpected.json")
+        finally:
+            release.set()
+            wait(widget)
+
+    document = read_project(destination)
+    assert document["controls"] == controls and len(document["entries"]) == 1
+    if kind == "gif":
+        with decode_png(document["entries"][0]) as image:
+            assert image.getpixel((0, 0)) == (255, 0, 0, 255)
+        assert snapshots
+        for image in snapshots:
+            with pytest.raises(ValueError, match="closed"):
+                image.getpixel((0, 0))
+    else:
+        assert document["entries"][0]["source_sha256"] == source_signature(still)
+    resumed.assert_not_called()
+    assert project._pending_close is None and not project._closing_approved
+    assert project.dirty and project.timer.isActive()
+    assert project._lock is state[2] and project._lock.isLocked()
+    assert (project._autosaved if automatic else project._saved) == captured
+    assert (project._saved if automatic else project._autosaved) == state[0 if automatic else 1]
+    assert project.path == str(path) and not (tmp_path / "unexpected.json").exists()
+    assert project._save(destination, automatic=automatic)
+    wait(widget)
+    assert read_project(destination)["entries"] == []
+    assert (project._autosaved if automatic else project._saved) == project.fingerprint()
+    assert project.dirty is automatic
+    assert not list(tmp_path.rglob(".alpha_fixer_save_*"))
 
 
 @pytest.mark.parametrize("kind", ["gif", "video"])

@@ -451,6 +451,14 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Builder project/recovery storage tests exercise injected I/O/read-permission
+failures, missing inputs and disappearing destination directories, followed by
+retry. They verify last-good project bytes, dirty/saved/autosaved state, session
+locks, snapshot ownership, cancelled save pickers and edits during close-save.
+The focused storage/recovery group passed 62 tests without reproducing a production
+defect. These injections do not establish physical disk-exhaustion, removable
+device or network-storage recovery acceptance.
+
 Project save/open/autosave operations defer while a builder is importing media.
 Generated-media regressions reproduce nested import event processing and verify
 that partial timelines cannot replace complete project or recovery files.
