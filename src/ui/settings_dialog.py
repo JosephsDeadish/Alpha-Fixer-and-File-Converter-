@@ -2503,6 +2503,13 @@ class SettingsDialog(QDialog):
         self._update_scale_preview = _update_scale_preview
         self.settings_changed.connect(lambda: _update_scale_preview())
         self.theme_changed.connect(lambda *_: _update_scale_preview())
+        self.theme_changed.connect(
+            lambda *_: _update_settings_background_overlay(
+                self._custom_bg_check.isChecked(),
+                self._use_theme_bg_check.isChecked(),
+                self._custom_bg_path_edit.text().strip(),
+            )
+        )
 
         gv.addWidget(grp_scale)
 

@@ -153,6 +153,10 @@ def test_custom_background_overlay_tracks_settings_state(settings_session, tmp_p
         assert widget._settings_bg_overlay.geometry() == widget.rect()
         assert widget._settings_tabs.property("customBgTransparent") is True
 
+        widget.theme_changed.emit(widget._theme)
+        app.processEvents()
+        assert widget._settings_bg_overlay.isVisible()
+
         widget._custom_bg_check.setChecked(False)
         app.processEvents()
 
