@@ -451,6 +451,14 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Video Builder GIF imports use Pillow's already-composited frames rather than
+applying disposal a second time, preserving background pixels outside partial
+frame rectangles. Generated palette/transparency/disposal cases cover both
+builders, project reopen and recovery, including timing/playhead restoration.
+Generated FFmpeg roundtrips also check video/audio settings, stream selections
+and selected clips. These bounded tests do not certify physical audio, sustained
+resource stability or power-loss recovery.
+
 Additional TIFF qualification covers 13 native image modes, raw/LZW compression,
 mixed orientation, per-page metadata and truncated trailing strips. Palette-alpha
 pages now resize through true-color RGBA rather than filtering palette indices,

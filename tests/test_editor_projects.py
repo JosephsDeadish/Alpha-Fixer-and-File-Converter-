@@ -171,6 +171,81 @@ def test_gif_owned_roundtrip_and_real_export_holds(dialogs, tmp_path):
     assert delays == [80, 140, 230, 350]
 
 
+@pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("disposal", [1, 2, 3])
+@pytest.mark.parametrize("transparency", ["none", "unused", "corner"])
+def test_palette_delta_gif_pixels_survive_project_and_recovery(
+        dialogs, tmp_path, kind, disposal, transparency):
+    source = tmp_path / "palette-delta.gif"
+    pages = [Image.new("P", (12, 8), 1) for _ in range(3)]
+    palette = [0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255] + [0] * 756
+    for page in pages:
+        page.putpalette(palette)
+        if transparency == "corner":
+            page.putpixel((11, 7), 0)
+    pages[1].paste(2, (3, 2, 5, 4))
+    pages[2].paste(3, (7, 2, 9, 4))
+    try:
+        pages[0].save(
+            source, save_all=True, append_images=pages[1:],
+            duration=[80, 140, 230], disposal=disposal, optimize=True,
+            **({"transparency": 0} if transparency != "none" else {}))
+    finally:
+        for page in pages:
+            page.close()
+    expected = []
+    with Image.open(source) as image:
+        assert image.n_frames == 3
+        for index in range(image.n_frames):
+            image.seek(index)
+            with image.convert("RGBA") as frame:
+                expected.append(frame.tobytes())
+                if index == 0:
+                    assert frame.getpixel((0, 0)) == (255, 0, 0, 255)
+                    assert frame.getpixel((11, 7))[3] == (0 if transparency == "corner" else 255)
+        image.seek(1)
+        if disposal != 2 or transparency == "unused":
+            assert image.dispose_extent != (0, 0, 12, 8)
+
+    def assert_pixels(widget):
+        if kind == "gif":
+            assert [entry._pil.tobytes() for entry in widget._frames] == expected
+            assert [entry.source_delay_ms for entry in widget._frames] == [80, 140, 230]
+            assert [entry.delay_ms for entry in widget._frames] == [80, 140, 230]
+        else:
+            assert len(widget._clips) == 1
+            assert widget._clips[0].total_frames == 3
+            assert widget._clips[0].fps == pytest.approx(1000 / 150)
+            for index, pixels in enumerate(expected):
+                with widget._clips[0].get_frame(index) as frame:
+                    assert frame.tobytes() == pixels
+
+    widget = dialogs(kind)
+    widget._project.timer.stop()
+    if kind == "gif":
+        widget._add_paths([str(source)])
+    else:
+        widget._load_image_paths([str(source)])
+    assert_pixels(widget)
+    widget._scrubber.setValue(1)
+    path = tmp_path / "palette-project.json"
+    save(widget, path)
+    assert widget._project.autosave()
+    wait(widget)
+    recovery = widget._project.recovery_path
+    widget._project._release_session()
+    loaded = dialogs(kind)
+    open_project(loaded, path)
+    assert_pixels(loaded)
+    assert loaded._scrubber.value() == 1
+    recovered = dialogs(kind)
+    assert recovered._project.load(recovery, recovery=True)
+    wait(recovered)
+    assert_pixels(recovered)
+    assert recovered._scrubber.value() == 1
+    assert recovered._project.dirty
+
+
 @pytest.mark.parametrize("recovery", [False, True])
 def test_still_frame_override_preserves_absent_source_timing(dialogs, tmp_path, recovery):
     _, still = sources(tmp_path)
@@ -1785,6 +1860,17 @@ def test_generated_video_audio_split_roundtrip(dialogs, tmp_path):
     widget._scrubber.setValue(4)
     widget._split_clip_at_playhead()
     widget._export_fmt_combo.setCurrentIndex(widget._export_fmt_combo.findData("mp4"))
+    widget._brightness_slider.setValue(165)
+    widget._audio_volume_slider.setValue(72)
+    widget._clip_list.setCurrentRow(1)
+    widget._scrubber.setValue(widget._scrubber.maximum() - 1)
+    expected_controls = widget._project.controls()
+    expected_selected = widget._clip_list.currentRow()
+    expected_playhead = widget._scrubber.value()
+    expected_streams = [
+        (clip.preferred_video_stream_index, clip.preferred_audio_stream_index)
+        for clip in widget._clips
+    ]
     path = tmp_path / "tone.videoproject.json"
     save(widget, path)
     loaded = dialogs("video")
@@ -1809,6 +1895,13 @@ def test_generated_video_audio_split_roundtrip(dialogs, tmp_path):
     assert recovered._project.load(widget._project.recovery_path, recovery=True)
     wait(recovered)
     for restored in (loaded, recovered):
+        assert restored._project.controls() == expected_controls
+        assert restored._clip_list.currentRow() == expected_selected
+        assert restored._scrubber.value() == expected_playhead
+        assert [
+            (clip.preferred_video_stream_index, clip.preferred_audio_stream_index)
+            for clip in restored._clips
+        ] == expected_streams
         assert [
             clip_audio_target(clip, frame, restored._fps_slider.value())
             for clip in restored._clips for frame in range(clip.active_frames)

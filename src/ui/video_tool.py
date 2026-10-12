@@ -2899,44 +2899,12 @@ def _decode_image_as_clip(path: str) -> Optional["_ClipEntry"]:
                 if n <= 1:
                     frames.append(gif.convert("RGBA"))
                 else:
-                    canvas = Image.new("RGBA", gif.size, (0, 0, 0, 0))
-                    try:
-                        for i in range(n):
-                            gif.seek(i)
-                            curr = gif.convert("RGBA")
-                            previous_canvas = canvas.copy()
-                            composite = canvas.copy()
-                            rect = _gif_frame_rect(gif, curr)
-                            left, top, right, bottom = rect
-                            rect_size = (max(0, right - left), max(0, bottom - top))
-                            if curr.size == rect_size:
-                                paste_img = curr
-                            elif curr.width >= right and curr.height >= bottom:
-                                paste_img = curr.crop(rect)
-                            else:
-                                paste_img = curr
-                            try:
-                                composite.paste(paste_img, (left, top), paste_img)
-                            finally:
-                                if paste_img is not curr:
-                                    paste_img.close()
-                                curr.close()
-                            frames.append(composite.copy())
-                            durations.append(max(1, int(gif.info.get("duration", 100) or 100)))
-                            disposal = getattr(gif, "disposal_method", gif.info.get("disposal", 0))
-                            canvas.close()
-                            if disposal == 2:
-                                canvas = Image.new("RGBA", gif.size, (0, 0, 0, 0))
-                                composite.close()
-                                previous_canvas.close()
-                            elif disposal == 3:
-                                canvas = previous_canvas
-                                composite.close()
-                            else:
-                                canvas = composite
-                                previous_canvas.close()
-                    finally:
-                        canvas.close()
+                    # Pillow seek already applies palette transparency and rectangle-scoped
+                    # disposal. Re-compositing its full frames loses retained background pixels.
+                    for i in range(n):
+                        gif.seek(i)
+                        frames.append(gif.convert("RGBA"))
+                        durations.append(max(1, int(gif.info.get("duration", 100) or 100)))
             finally:
                 gif.close()
             fps = 25.0
