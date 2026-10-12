@@ -451,6 +451,14 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Bounded project/recovery acceptance covers late malformed media and cancellation
+for both builders. Forty rejected replacements preserved current edits, pixels,
+selection, playhead, history, controls, locks and project/recovery bytes; checks
+verified prepared-resource and actual FFmpeg-reader cleanup plus successful retries.
+Fixtures use truncated embedded PNGs and generated MP4 frame-count mismatches.
+No production defect was reproduced. These offscreen/generated-media checks do
+not establish native recovery, long-running resource stability or power-loss safety.
+
 GIF Builder shutdown clears its retained preview pixmap and resets frame count,
 scrubber and transport state after releasing frames. Regressions cover close,
 reject and parent shutdown plus 15 generated-project reopen/autosave/shutdown

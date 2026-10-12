@@ -1839,6 +1839,166 @@ def test_repeated_truncated_gif_project_load_releases_partial_frames(dialogs, tm
     assert not list(tmp_path.glob("*.lock"))
 
 
+@pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("recovery", [False, True])
+@pytest.mark.parametrize("outcome", ["late_decode", "cancel"])
+def test_repeated_late_project_failure_and_cancel_release_prepared_media(
+        dialogs, tmp_path, kind, recovery, outcome):
+    import base64
+    from pathlib import Path
+    from src.core import editor_projects
+    from src.ui import video_tool
+
+    source, still = sources(tmp_path)
+    widget = dialogs(kind)
+    project = widget._project
+    project.timer.stop()
+    if kind == "gif":
+        widget._add_paths([str(source), str(still)])
+        control = widget._delay_slider
+    else:
+        executable = video_tool._get_ffmpeg_exe()
+        if not executable:
+            pytest.skip("Existing FFmpeg backend unavailable")
+        video = tmp_path / "generated.mp4"
+        subprocess.run(
+            [executable, "-y", "-v", "error", "-f", "lavfi", "-i",
+             "color=c=red:s=16x16:r=20:d=0.3", "-c:v", "libx264",
+             "-pix_fmt", "yuv420p", str(video)],
+            check=True, capture_output=True, timeout=30)
+        widget._load_image_paths([str(source), str(still)])
+        widget._load_video_paths([str(video)])
+        assert len(widget._clips) == 3
+        control = widget._brightness_slider
+    path = tmp_path / "live.json"
+    save(widget, path)
+    assert project.autosave()
+    wait(widget)
+    candidate = tmp_path / "candidate.json"
+    document = read_project(path)
+    if outcome == "late_decode":
+        if kind == "gif":
+            raw = base64.b64decode(document["entries"][-1]["png"])
+            document["entries"][-1]["png"] = base64.b64encode(raw[:len(raw) // 2]).decode("ascii")
+        else:
+            # The source is unchanged and decodes, but its final clip disagrees
+            # with the schema-valid saved metadata after acquiring resources.
+            document["entries"][-1]["frames"] += 1
+    write_project(candidate, document)
+    listing = project.entry_list
+    listing.setCurrentRow(2, QItemSelectionModel.SelectionFlag.NoUpdate)
+    listing.clearSelection()
+    rows = [0, 2] if kind == "gif" else [2]
+    for row in rows:
+        listing.item(row).setSelected(True)
+    control.setValue(control.value() + 17)
+    widget._scrubber.setValue(1)
+    if kind == "gif":
+        widget._pf_check.setChecked(True)
+        widget._pf_slider.setValue(333)
+    else:
+        widget._clip_speed_slider.setValue(70)
+    entries = tuple(project.entries)
+    fingerprint = project.fingerprint()
+    history = list(widget._undo_stack), list(widget._redo_stack)
+    state = project.path, project._saved, project._autosaved, project._lock
+    disk = path.read_bytes(), candidate.read_bytes(), project.recovery_path.read_bytes()
+    pixels = []
+    for entry in entries:
+        with (entry._pil.copy() if kind == "gif" else entry.get_frame(0)) as frame:
+            pixels.append((frame.size, frame.tobytes()))
+    prepared = []
+    readers = []
+    decode = editor_projects.decode_png
+    image_loader = video_tool._load_image_as_clip
+    video_loader = video_tool._load_video_clip
+
+    def track_image(entry):
+        image = decode(entry)
+        image.close = Mock(wraps=image.close)
+        prepared.append(image)
+        return image
+
+    def track_clip(loader, *args, **kwargs):
+        clip = loader(*args, **kwargs)
+        assert clip is not None
+        clip.close = Mock(wraps=clip.close)
+        prepared.append(clip)
+        if clip.clip_type == "video":
+            with clip.get_frame(1):
+                pass
+            getter = clip._get_frame
+            assert getter._reader is not None
+            reader = getter._reader
+            reader.close = Mock(wraps=reader.close)
+            readers.append((getter, reader, tuple(getter._cleanup_paths)))
+        return clip
+
+    with patch.object(editor_projects, "decode_png", side_effect=track_image), \
+            patch.object(video_tool, "_load_image_as_clip",
+                         side_effect=lambda *a, **kw: track_clip(image_loader, *a, **kw)), \
+            patch.object(video_tool, "_load_video_clip",
+                         side_effect=lambda *a, **kw: track_clip(video_loader, *a, **kw)), \
+            patch("src.ui.editor_project.QMessageBox.critical") as error, \
+            patch("src.ui.editor_project.QMessageBox.question",
+                  return_value=QMessageBox.StandardButton.Cancel) as replacement:
+        for _ in range(5):
+            start = len(prepared)
+            assert project.load(candidate, recovery=recovery)
+            wait(widget)
+            expected = len(entries) - (kind == "gif" and outcome == "late_decode")
+            assert len(prepared) - start == expected
+            for entry in prepared[start:]:
+                entry.close.assert_called_once()
+                if kind == "gif":
+                    with pytest.raises(ValueError, match="closed"):
+                        entry.getpixel((0, 0))
+                elif entry.clip_type == "image":
+                    with pytest.raises(ValueError, match="closed"):
+                        entry.get_frame(0)
+                elif entry.clip_type == "gif":
+                    assert entry._get_frame._frames == []
+            assert tuple(project.entries) == entries and project.fingerprint() == fingerprint
+            assert (widget._undo_stack, widget._redo_stack) == history
+            assert listing.currentRow() == 2
+            assert [listing.row(item) for item in listing.selectedItems()] == rows
+            assert widget._scrubber.value() == 1 and project.dirty
+            assert (project.path, project._saved, project._autosaved, project._lock) == state
+            assert project._lock.isLocked()
+            assert (path.read_bytes(), candidate.read_bytes(), project.recovery_path.read_bytes()) == disk
+            assert not project._loading and project._job is None
+            assert project.save_button.isEnabled() and project.open_button.isEnabled()
+            assert widget._content_scroll.isEnabled() and not widget._editing_busy()
+        assert error.call_count == (5 if outcome == "late_decode" else 0)
+        assert replacement.call_count == (5 if outcome == "cancel" else 0)
+    for getter, reader, cleanup_paths in readers:
+        reader.close.assert_called_once()
+        assert getter._reader is None and getter._prefetched_frame is None
+        assert getter._cleanup_paths == []
+        assert all(not Path(path).exists() for path in cleanup_paths)
+    for entry, expected in zip(entries, pixels):
+        with (entry._pil.copy() if kind == "gif" else entry.get_frame(0)) as frame:
+            assert (frame.size, frame.tobytes()) == expected
+    assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+    assert not (tmp_path / "candidate.json.lock").exists()
+    restored = read_project(path)
+    write_project(candidate, restored)
+    with patch("src.ui.editor_project.QMessageBox.critical") as error, \
+            patch("src.ui.editor_project.QMessageBox.question",
+                  return_value=QMessageBox.StandardButton.Discard):
+        assert project.load(candidate, recovery=recovery)
+        wait(widget)
+    error.assert_not_called()
+    assert len(project.entries) == len(entries)
+    assert all(new is not old for new, old in zip(project.entries, entries))
+    assert project.controls() == restored["controls"]
+    assert listing.currentRow() == restored["selected"]
+    assert widget._scrubber.value() == restored["playhead"]
+    assert project.dirty is recovery
+    assert project.path == ("" if recovery else str(candidate))
+    assert project.recovery_path.read_bytes() == disk[2]
+
+
 def test_wrong_editor_and_bounded_images(dialogs, tmp_path):
     _, still = sources(tmp_path)
     gif = dialogs("gif")
