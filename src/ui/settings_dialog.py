@@ -122,6 +122,28 @@ class ColorButton(QPushButton):
             self.color_changed.emit(self._color)
 
 
+class _BackgroundPathEdit(QLineEdit):
+    """Line edit that accepts dropped local files for background selection."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802
+        if event.mimeData().hasUrls() and any(url.isLocalFile() for url in event.mimeData().urls()):
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dropEvent(self, event) -> None:  # noqa: N802
+        for url in event.mimeData().urls():
+            if url.isLocalFile():
+                self.setText(url.toLocalFile())
+                event.acceptProposedAction()
+                return
+        super().dropEvent(event)
+
+
 class SettingsDialog(QDialog):
     theme_changed = pyqtSignal(dict)
     settings_changed = pyqtSignal()
@@ -358,7 +380,7 @@ class SettingsDialog(QDialog):
         _cbg_file_hl = QHBoxLayout(self._custom_bg_file_row)
         _cbg_file_hl.setContentsMargins(0, 0, 0, 0)
         _cbg_file_hl.addWidget(QLabel("Background file:"))
-        self._custom_bg_path_edit = QLineEdit()
+        self._custom_bg_path_edit = _BackgroundPathEdit()
         self._custom_bg_path_edit.setPlaceholderText(
             "Path to image, GIF, or video file…"
         )
