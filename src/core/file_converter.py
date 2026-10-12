@@ -25,6 +25,7 @@ import io
 import os
 import logging
 import math
+import re
 import struct
 import tempfile
 import warnings
@@ -513,10 +514,14 @@ def _load_image_pixels(img: Image.Image) -> None:
         # Pillow 10 transposes the core but leaves Orientation in EXIF.
         # Observe the transpose, not just a tag or a change in dimensions:
         # mirrors and square rotations do not change the raster dimensions.
-        orientation = getattr(img, "_tile_orientation", img.tag_v2.get(274))
+        orientation = img.tag_v2.get(274)
+        if orientation is None and img._exif is not None:
+            orientation = img._exif.get(274)
         core = img.im
+        img._display_orientation_applied = False
         load_end()
         if orientation in range(2, 9) and img.im is not core:
+            img._display_orientation_applied = True
             exif = img.getexif()
             if exif.get(274) == orientation:
                 del exif[274]
@@ -531,8 +536,94 @@ def _load_image_pixels(img: Image.Image) -> None:
         del img.load_end
 
 
+_XMP_ORIENTATION_PATTERNS = (
+    r"""tiff:Orientation\s*=\s*["']\s*([0-9]+)\s*["']""",
+    r"<tiff:Orientation>\s*([0-9]+)\s*</tiff:Orientation>",
+)
+
+
+def _xmp_orientation(value):
+    packets = value if isinstance(value, tuple) else (value,)
+    for packet in packets:
+        if isinstance(packet, bytes):
+            packet = packet.decode("utf-8", errors="replace")
+        if not isinstance(packet, str):
+            continue
+        for pattern in _XMP_ORIENTATION_PATTERNS:
+            match = re.search(pattern, packet)
+            if match:
+                # Attributes take precedence over elements, as in Pillow.
+                # Reject the whole value, rather than accepting its first digit.
+                number = match[1].lstrip("0")
+                return int(number) if len(number) == 1 and number in "12345678" else None
+    return None
+
+
+def _without_xmp_orientation(value):
+    if isinstance(value, tuple):
+        return tuple(_without_xmp_orientation(item) for item in value)
+    if isinstance(value, (str, bytes)):
+        for pattern in _XMP_ORIENTATION_PATTERNS:
+            value = re.sub(pattern.encode() if isinstance(value, bytes) else pattern,
+                           b"" if isinstance(value, bytes) else "", value)
+    return value
+
+
+def _normalize_image_orientation(img: Image.Image) -> None:
+    """Use display-oriented pixels, leaving no EXIF rotation to apply again."""
+    from PIL import ImageOps
+
+    # Decode errors must not be mistaken for optional metadata errors.
+    img.load()
+    try:
+        # Cache the orientation before cleaning XMP-only inputs. Pillow 10
+        # may clean EXIF instead of XMP; reduce() then reads the stale XMP anew.
+        xmp = {key: img.info.pop(key)
+               for key in ("xmp", "XML:com.adobe.xmp") if key in img.info}
+        exif = img.getexif()
+        if 274 not in exif and not getattr(img, "_display_orientation_applied", False):
+            # Match Pillow's key precedence, but support every representation
+            # that our cleaner removes. Explicit EXIF (even 1/invalid) wins.
+            packets = [xmp.get(key) for key in ("XML:com.adobe.xmp", "xmp")]
+            # Pillow 10 keeps TIFF XMP only in tag 700, not img.info.
+            packets.append(exif.get(700))
+            if hasattr(img, "tag_v2"):
+                packets.append(img.tag_v2.get(700))
+            for packet in packets:
+                orientation = _xmp_orientation(packet)
+                if orientation is not None:
+                    exif[274] = orientation
+                    break
+        ImageOps.exif_transpose(img, in_place=True)
+        img.info.update({key: _without_xmp_orientation(value) for key, value in xmp.items()})
+        # TIFF XMP also lives in cached EXIF and tag_v2, which encoders retain.
+        exif = img.getexif()
+        if 700 in exif:
+            exif[700] = _without_xmp_orientation(exif[700])
+        if hasattr(img, "tag_v2"):
+            if 700 in img.tag_v2:
+                img.tag_v2[700] = _without_xmp_orientation(img.tag_v2[700])
+            if 274 not in exif:
+                img.tag_v2.pop(274, None)
+        if "exif" in img.info:
+            img.info["exif"] = exif.tobytes()
+        if "Raw profile type exif" in img.info:
+            img.info["Raw profile type exif"] = exif.tobytes().hex()
+    except (OSError, SyntaxError, ValueError, TypeError, KeyError, struct.error):
+        # A malformed EXIF block can fail parsing or serialization after the
+        # transpose. Keep decoded pixels but never retain a stale orientation.
+        for key in ("exif", "Raw profile type exif", "xmp", "XML:com.adobe.xmp"):
+            img.info.pop(key, None)
+        img._exif = Image.Exif()
+        if hasattr(img, "tag_v2"):
+            for tag in (274, 700):
+                img.tag_v2.pop(tag, None)
+        warnings.warn("Malformed EXIF metadata discarded; using decoded pixels.",
+                      UserWarning, stacklevel=2)
+
+
 def _open_image(path: str) -> Image.Image:
-    """Open an image preserving its native mode (DDS/SVG/XNB/TIM handled specially)."""
+    """Open display-oriented pixels in their native mode."""
     ext = Path(path).suffix.lower()
     if ext == ".dds":
         return _load_dds(path)
@@ -559,6 +650,7 @@ def _open_image(path: str) -> Image.Image:
             except Exception:
                 pass
         _load_image_pixels(img)  # force decode so the file handle can be closed
+        _normalize_image_orientation(img)
     except MemoryError:
         w, h = img.size
         img.close()
@@ -591,6 +683,7 @@ def _open_image_for_preview(path: str, max_size: int) -> Image.Image:
                 img.draft(None, (target * 2, target * 2))
             except Exception:
                 pass
+            _normalize_image_orientation(img)
             current_longest = max(img.size) if img.size else longest
             reduce_factor = max(1, int(math.floor(current_longest / max(target * 2, 1))))
             if reduce_factor > 1:
@@ -598,6 +691,7 @@ def _open_image_for_preview(path: str, max_size: int) -> Image.Image:
                 img.close()
                 img = reduced
         img.load()
+        _normalize_image_orientation(img)
     except MemoryError:
         w, h = img.size
         img.close()
@@ -798,6 +892,7 @@ def _convert_tiff_pages(source: Image.Image, output_path: str,
             except Exception:
                 pass
             _load_image_pixels(source)
+            _normalize_image_orientation(source)
             page = source.resize(resize, Image.LANCZOS) if resize else source.copy()
             try:
                 if page.mode == "I;16B":

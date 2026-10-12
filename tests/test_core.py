@@ -5196,6 +5196,7 @@ class TestRound14ResourceHygiene(unittest.TestCase):
         class _FakeImg:
             mode = "RGB"
             size = (4, 4)
+            format = "PNG"
 
             def load(self):
                 raise MemoryError("simulated OOM")

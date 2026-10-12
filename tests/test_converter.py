@@ -1422,6 +1422,322 @@ class TestAtlasDetection(unittest.TestCase):
 
 
 class TestConversionMetadata(unittest.TestCase):
+    def test_all_exif_orientations_match_display_pixels_and_alpha(self):
+        from src.core.alpha_processor import load_image
+
+        methods = {
+            2: Image.Transpose.FLIP_LEFT_RIGHT,
+            3: Image.Transpose.ROTATE_180,
+            4: Image.Transpose.FLIP_TOP_BOTTOM,
+            5: Image.Transpose.TRANSPOSE,
+            6: Image.Transpose.ROTATE_270,
+            7: Image.Transpose.TRANSVERSE,
+            8: Image.Transpose.ROTATE_90,
+        }
+        formats = [fmt for fmt in ("PNG", "JPEG", "TIFF", "WEBP", "AVIF")
+                   if output_format_available(fmt)]
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            for fmt in formats:
+                for orientation in range(1, 9):
+                    source = Path(directory) / ("source" + SUPPORTED_OUTPUT_FORMATS[fmt])
+                    exif = Image.Exif()
+                    exif[274] = orientation
+                    exif[305] = "all orientations"
+                    with Image.new("RGB", (40, 24), (240, 20, 20)) as raster:
+                        raster.paste((20, 20, 240), (20, 0, 40, 24))
+                        raster.paste((20, 240, 20), (0, 12, 20, 24))
+                        raster.save(source, exif=exif.tobytes(), quality=100)
+                    # Independently decode source pixels. TIFF's decoder already
+                    # applies the orientation; other formats retain native pixels.
+                    with Image.open(source) as raw:
+                        raw.load()
+                        expected = (raw.transpose(methods[orientation])
+                                    if fmt != "TIFF" and orientation in methods else raw.copy())
+                    try:
+                        for opener in (_open_image, lambda p: _open_image_for_preview(p, 512),
+                                       load_image):
+                            with self.subTest(source=fmt, orientation=orientation, opener=opener):
+                                with opener(str(source)) as loaded, loaded.convert("RGB") as rgb, expected.convert("RGB") as wanted_rgb:
+                                    self.assertEqual(rgb.size, expected.size)
+                                    self.assertEqual(rgb.tobytes(), wanted_rgb.tobytes())
+                                    self.assertIn(loaded.getexif().get(274), (None, 1))
+                        for target in formats + ["BMP"]:
+                            for keep in (False, True):
+                                for resize in (None, (20, 12)):
+                                    with self.subTest(source=fmt, orientation=orientation,
+                                                      target=target, keep=keep, resize=resize):
+                                        output = Path(directory) / ("out" + SUPPORTED_OUTPUT_FORMATS[target])
+                                        convert_file(str(source), str(output), target, quality=100,
+                                                     resize=resize, keep_metadata=keep)
+                                        wanted = expected.resize(resize, Image.LANCZOS) if resize else expected.copy()
+                                        try:
+                                            with Image.open(output) as encoded:
+                                                encoded.load()
+                                                self.assertIn(encoded.getexif().get(274), (None, 1))
+                                                with encoded.convert("RGB") as decoded:
+                                                    self.assertEqual(decoded.size, wanted.size)
+                                                    for point in ((0, 0), (decoded.width - 1, 0),
+                                                                  (0, decoded.height - 1),
+                                                                  (decoded.width - 1, decoded.height - 1)):
+                                                        self.assertLess(max(abs(a - b) for a, b in zip(
+                                                            decoded.getpixel(point), wanted.getpixel(point))), 25)
+                                                if keep and target != "BMP":
+                                                    self.assertEqual(encoded.getexif()[305], "all orientations")
+                                                if not keep:
+                                                    self.assertNotIn(305, encoded.getexif())
+                                        finally:
+                                            wanted.close()
+                    finally:
+                        expected.close()
+
+    def test_reduced_preview_normalizes_before_reduction(self):
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source = Path(directory) / "large.png"
+            for orientation in range(1, 9):
+                exif = Image.Exif()
+                exif[274] = orientation
+                with Image.new("RGB", (81, 49), "red") as raster:
+                    raster.paste("blue", (40, 0, 81, 49))
+                    raster.paste("green", (0, 24, 40, 49))
+                    raster.save(source, exif=exif)
+                with Image.open(source) as raw, ImageOps.exif_transpose(raw) as expected:
+                    with expected.reduce(5) as reduced, _open_image_for_preview(str(source), 8) as preview:
+                        self.assertEqual(preview.size, reduced.size)
+                        self.assertEqual(preview.tobytes(), reduced.tobytes())
+                        self.assertIn(preview.getexif().get(274), (None, 1))
+
+    def test_dual_exif_xmp_reduced_preview_is_normalized_once(self):
+        methods = {
+            2: Image.Transpose.FLIP_LEFT_RIGHT, 3: Image.Transpose.ROTATE_180,
+            4: Image.Transpose.FLIP_TOP_BOTTOM, 5: Image.Transpose.TRANSPOSE,
+            6: Image.Transpose.ROTATE_270, 7: Image.Transpose.TRANSVERSE,
+            8: Image.Transpose.ROTATE_90,
+        }
+
+        def pillow10_transpose(image, *, in_place=False):
+            self.assertTrue(in_place)
+            image.load()
+            exif = image.getexif()
+            method = methods.get(exif.get(274))
+            if method is not None:
+                image.im = image.im.transpose(method)
+                image._size = image.im.size
+                del exif[274]
+                # Pillow 10 uses an if/elif chain: EXIF excludes XMP cleanup.
+                if "exif" in image.info:
+                    image.info["exif"] = exif.tobytes()
+
+        original_open = Image.open
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source = Path(directory) / "dual.png"
+            with Image.new("RGB", (81, 49), "red") as raster:
+                raster.paste("blue", (40, 0, 81, 49))
+                raster.paste("green", (0, 24, 40, 49))
+                for orientation in range(1, 9):
+                    exif = Image.Exif()
+                    exif[274] = orientation
+                    exif[305] = "retain EXIF software"
+                    raster.save(source, exif=exif)
+                    packet = (f'<rdf:Description tiff:Orientation="{orientation}" '
+                              f'dc:description="retain XMP"><tiff:Orientation>{orientation}'
+                              '</tiff:Orientation></rdf:Description>')
+                    clean = '<rdf:Description  dc:description="retain XMP"></rdf:Description>'
+                    representations = [
+                        (packet, clean), (packet.encode(), clean.encode()),
+                        ((packet.encode(), b"other XMP"), (clean.encode(), b"other XMP")),
+                        ((packet, b"other XMP"), (clean, b"other XMP")),
+                    ]
+                    with (raster.transpose(methods[orientation]) if orientation in methods
+                          else raster.copy()) as expected, expected.reduce(5) as reduced:
+                        for legacy in (False, True):
+                            for key in ("xmp", "XML:com.adobe.xmp"):
+                                for value, cleaned in representations:
+                                    def open_with_xmp(*args, **kwargs):
+                                        image = original_open(*args, **kwargs)
+                                        image.info[key] = value
+                                        return image
+
+                                    with self.subTest(orientation=orientation, legacy=legacy,
+                                                      key=key, value_type=type(value)), mock.patch.object(
+                                            Image, "open", side_effect=open_with_xmp), (
+                                            mock.patch.object(ImageOps, "exif_transpose", pillow10_transpose)
+                                            if legacy else nullcontext()):
+                                        with _open_image_for_preview(str(source), 8) as preview:
+                                            self.assertEqual(preview.size, reduced.size)
+                                            self.assertEqual(preview.tobytes(), reduced.tobytes())
+                                            self.assertIn(preview.getexif().get(274), (None, 1))
+                                            self.assertEqual(preview.getexif()[305], "retain EXIF software")
+                                            self.assertEqual(preview.info[key], cleaned)
+
+    def test_xmp_only_orientation_is_cached_before_cleanup(self):
+        from PIL.PngImagePlugin import PngInfo
+
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source = Path(directory) / "xmp.png"
+            metadata = PngInfo()
+            metadata.add_text("XML:com.adobe.xmp",
+                              '<rdf:Description tiff:Orientation="6" dc:title="keep"/>')
+            with Image.new("RGB", (81, 49), "red") as raster:
+                raster.paste("blue", (40, 0, 81, 49))
+                raster.save(source, pnginfo=metadata)
+                with raster.transpose(Image.Transpose.ROTATE_270) as expected, expected.reduce(5) as reduced:
+                    with _open_image_for_preview(str(source), 8) as preview:
+                        self.assertEqual(preview.size, reduced.size)
+                        self.assertEqual(preview.tobytes(), reduced.tobytes())
+                        self.assertNotIn(274, preview.getexif())
+                        self.assertIn('dc:title="keep"', preview.info["XML:com.adobe.xmp"])
+
+    def test_xmp_orientation_forms_and_representations_match_pixels(self):
+        methods = TestTiffXmpOrientation._methods
+        original_open = Image.open
+        cases = 0
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            for fmt in ("PNG", "JPEG", "TIFF", "WEBP"):
+                if not output_format_available(fmt):
+                    continue
+                source = Path(directory) / ("forms" + SUPPORTED_OUTPUT_FORMATS[fmt])
+                with Image.new("RGB", (31, 19), "red") as raster:
+                    raster.paste("blue", (15, 0, 31, 19))
+                    raster.paste("green", (0, 9, 15, 19))
+                    raster.save(source, format=fmt)
+                with original_open(source) as raw:
+                    raw.load()
+                    for orientation in range(1, 9):
+                        for form in (
+                            f"tiff:Orientation='{orientation}'",
+                            f'tiff:Orientation = " {orientation} "',
+                            f"<tiff:Orientation> {orientation} </tiff:Orientation>",
+                        ):
+                            packet = f'<rdf:Description dc:title="keep">{form}</rdf:Description>'
+                            clean = '<rdf:Description dc:title="keep"></rdf:Description>'
+                            for value, cleaned in (
+                                (packet, clean), (packet.encode(), clean.encode()),
+                                ((packet, b"other XMP"), (clean, b"other XMP")),
+                                ((packet.encode(), "other XMP"), (clean.encode(), "other XMP")),
+                            ):
+                                for key in ("xmp", "XML:com.adobe.xmp"):
+                                    def open_with_xmp(*args, **kwargs):
+                                        image = original_open(*args, **kwargs)
+                                        if image.format == "TIFF":
+                                            image.getexif()
+                                        image.info[key] = value
+                                        return image
+
+                                    with self.subTest(fmt=fmt, orientation=orientation,
+                                                      form=form, key=key, representation=type(value)), (
+                                            mock.patch.object(Image, "open", side_effect=open_with_xmp)):
+                                        method = methods.get(orientation)
+                                        with (raw.transpose(method) if method is not None else raw.copy()) as expected:
+                                            with _open_image(str(source)) as actual:
+                                                self.assertEqual(actual.size, expected.size)
+                                                self.assertEqual(actual.tobytes(), expected.tobytes())
+                                                self.assertIn(actual.getexif().get(274), (None, 1))
+                                                self.assertEqual(actual.info[key], cleaned)
+                                            with (expected.copy() if fmt == "JPEG" else expected.reduce(2)) as reduced, (
+                                                    _open_image_for_preview(str(source), 16 if fmt == "JPEG" else 6)) as preview:
+                                                self.assertEqual(preview.size, reduced.size)
+                                                self.assertEqual(preview.tobytes(), reduced.tobytes())
+                                        cases += 1
+        self.assertGreaterEqual(cases, 576)
+
+    def test_xmp_orientation_precedence_and_invalid_values(self):
+        from src.core.file_converter import _normalize_image_orientation
+
+        cases = [
+            (None, "tiff:Orientation='6'", None, 6),
+            (1, "tiff:Orientation='6'", None, 1),
+            (2, "tiff:Orientation='6'", None, 2),
+            (9, "tiff:Orientation='6'", None, 1),
+            (None, "tiff:Orientation='0'", None, 1),
+            (None, "tiff:Orientation='9'", None, 1),
+            (None, "tiff:Orientation='16'", None, 1),
+            (None, "tiff:Orientation='999999999999999999999999'", None, 1),
+            (None, "tiff:Orientation='6'<tiff:Orientation> 8 </tiff:Orientation>", None, 6),
+            (None, "tiff:Orientation='6'", "tiff:Orientation='8'", 8),
+            (None, "tiff:Orientation='06'", None, 6),
+        ]
+        with Image.new("RGB", (31, 19), "red") as raster:
+            raster.paste("blue", (15, 0, 31, 19))
+            for explicit, xmp, xml, wanted in cases:
+                with self.subTest(explicit=explicit, xmp=xmp, xml=xml), raster.copy() as actual:
+                    exif = Image.Exif()
+                    if explicit is not None:
+                        exif[274] = explicit
+                    actual.info["exif"] = exif.tobytes()
+                    actual.info["xmp"] = xmp
+                    if xml is not None:
+                        actual.info["XML:com.adobe.xmp"] = xml
+                    _normalize_image_orientation(actual)
+                    method = TestTiffXmpOrientation._methods.get(wanted)
+                    with (raster.transpose(method) if method is not None else raster.copy()) as expected:
+                        self.assertEqual(actual.size, expected.size)
+                        self.assertEqual(actual.tobytes(), expected.tobytes())
+                    self.assertNotIn("tiff:Orientation", actual.info["xmp"])
+
+    def test_all_orientations_ui_preview_matches_resized_exports(self):
+        from src.ui.preview_pane import _ConverterPreviewLoader, _ThumbLoader, _pil_to_qimage
+
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source = Path(directory) / "oriented.png"
+            for orientation in range(1, 9):
+                exif = Image.Exif()
+                exif[274] = orientation
+                with Image.new("RGB", (40, 24), "red") as raster:
+                    raster.paste("blue", (20, 0, 40, 24))
+                    raster.paste("green", (0, 12, 20, 24))
+                    raster.save(source, exif=exif)
+                with Image.open(source) as raw, ImageOps.exif_transpose(raw) as expected:
+                    thumbs, errors = [], []
+                    loader = _ThumbLoader(str(source))
+                    loader.loaded.connect(lambda *args: thumbs.append(args))
+                    loader.failed.connect(errors.append)
+                    loader.run()
+                    self.assertFalse(errors)
+                    self.assertEqual(thumbs[0][0], _pil_to_qimage(expected))
+                    for target in ("PNG", "JPEG", "TIFF", "WEBP"):
+                        if not output_format_available(target):
+                            continue
+                        for resize in (None, (20, 12)):
+                            results = []
+                            loader = _ConverterPreviewLoader(str(source), target, 90, resize=resize)
+                            loader.ready.connect(lambda *args: results.append(args))
+                            loader.failed.connect(errors.append)
+                            loader.run()
+                            self.assertFalse(errors)
+                            self.assertEqual(len(results), 1)
+                            self.assertEqual(results[0][0], _pil_to_qimage(expected))
+                            for keep in (False, True):
+                                with self.subTest(orientation=orientation, target=target, resize=resize, keep=keep):
+                                    output = Path(directory) / ("export" + SUPPORTED_OUTPUT_FORMATS[target])
+                                    convert_file(str(source), str(output), target, quality=90,
+                                                 resize=resize, keep_metadata=keep)
+                                    with Image.open(output) as decoded:
+                                        self.assertEqual(results[0][1], _pil_to_qimage(decoded))
+
+    def test_orientation_normalization_does_not_accept_truncated_pixels(self):
+        from PIL import ImageFile
+        from src.core.alpha_processor import load_image
+
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            for fmt, mode in (("PNG", "RGBA"), ("JPEG", "RGB")):
+                source = Path(directory) / ("damaged" + SUPPORTED_OUTPUT_FORMATS[fmt])
+                exif = Image.Exif()
+                exif[274] = 6
+                with Image.new(mode, (80, 48), "red") as raster:
+                    raster.paste("blue", (40, 0, 80, 48))
+                    raster.save(source, exif=exif.tobytes())
+                data = source.read_bytes()
+                source.write_bytes(data[:len(data) // 2] if fmt == "PNG" else data[:-60])
+                with mock.patch.object(ImageFile, "LOAD_TRUNCATED_IMAGES", False):
+                    for opener in (_open_image, lambda p: _open_image_for_preview(p, 8), load_image):
+                        with self.subTest(format=fmt, opener=opener), self.assertRaises(OSError):
+                            opener(str(source))
+                    output = Path(directory) / "protected.png"
+                    output.write_bytes(b"existing output")
+                    with self.assertRaises(OSError):
+                        convert_file(str(source), str(output), "PNG", keep_metadata=False)
+                    self.assertEqual(output.read_bytes(), b"existing output")
+
     def test_legacy_tiff_applied_orientation_is_not_exported_twice(self):
         methods = {
             2: Image.Transpose.FLIP_LEFT_RIGHT,
@@ -1493,7 +1809,7 @@ class TestConversionMetadata(unittest.TestCase):
                                             finally:
                                                 wanted.close()
 
-    def test_unapplied_tiff_orientation_is_preserved(self):
+    def test_unapplied_tiff_orientation_is_normalized(self):
         def unrotated_load_end(image):
             image._tile_orientation = image.tag_v2.get(274)
             image._size = image.im.size
@@ -1507,15 +1823,18 @@ class TestConversionMetadata(unittest.TestCase):
                 raster.save(source, exif=exif)
                 with mock.patch.object(TiffImagePlugin.TiffImageFile, "load_end", unrotated_load_end):
                     with _open_image(str(source)) as loaded:
-                        self.assertEqual(loaded.tobytes(), raster.tobytes())
-                        self.assertEqual(loaded.getexif()[274], 6)
+                        with raster.transpose(Image.Transpose.ROTATE_270) as expected:
+                            self.assertEqual(loaded.size, expected.size)
+                            self.assertEqual(loaded.tobytes(), expected.tobytes())
+                        self.assertNotIn(274, loaded.getexif())
                     output = Path(directory) / "unrotated.png"
                     convert_file(str(source), str(output), "PNG", keep_metadata=True)
                     with Image.open(output) as saved:
                         saved.load()
-                        self.assertEqual(saved.size, raster.size)
-                        self.assertEqual(saved.tobytes(), raster.tobytes())
-                        self.assertEqual(saved.getexif()[274], 6)
+                        with raster.transpose(Image.Transpose.ROTATE_270) as expected:
+                            self.assertEqual(saved.size, expected.size)
+                            self.assertEqual(saved.tobytes(), expected.tobytes())
+                        self.assertNotIn(274, saved.getexif())
 
     def test_oriented_metadata_encode_decode_matrix(self):
         formats = [fmt for fmt in ("PNG", "JPEG", "TIFF", "WEBP", "AVIF")
@@ -1547,11 +1866,6 @@ class TestConversionMetadata(unittest.TestCase):
                                     expected = original.resize(resize, Image.LANCZOS) if resize else original.copy()
                                     try:
                                         native_size = expected.size
-                                        orientation = original.getexif().get(274)
-                                        if target_format == "TIFF" and keep and orientation == 6:
-                                            rotated = expected.transpose(Image.Transpose.ROTATE_270)
-                                            expected.close()
-                                            expected = rotated
                                         with _open_image(str(destination)) as decoded:
                                             self.assertEqual(decoded.size, expected.size)
                                             with decoded.convert("RGB") as rgb:
@@ -1571,8 +1885,7 @@ class TestConversionMetadata(unittest.TestCase):
                                                 if target_format in ("PNG", "JPEG", "TIFF") and "dpi" in original.info:
                                                     for value in decoded.info["dpi"]:
                                                         self.assertAlmostEqual(value, 144, delta=0.1)
-                                                self.assertEqual(saved_exif.get(274),
-                                                                 None if target_format == "TIFF" else orientation)
+                                                self.assertNotIn(274, saved_exif)
                                             else:
                                                 self.assertNotIn(305, saved_exif)
                                                 self.assertNotIn(274, saved_exif)
@@ -1627,12 +1940,20 @@ class TestConversionMetadata(unittest.TestCase):
                                 self.assertEqual(decoded.size, size)
 
     def test_malformed_exif_falls_back_to_pixels_and_other_metadata(self):
+        from src.core.alpha_processor import load_image
+
         profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
         with tempfile.TemporaryDirectory(dir=".") as directory:
             source = Path(directory) / "malformed.png"
             with Image.new("RGB", (40, 24), "red") as raster:
                 raster.save(source, exif=b"Exif\x00\x00invalid TIFF header",
                             icc_profile=profile, dpi=(144, 144))
+            for opener in (_open_image, lambda p: _open_image_for_preview(p, 512), load_image):
+                with self.assertWarnsRegex(UserWarning, "Malformed EXIF"):
+                    with opener(str(source)) as loaded:
+                        self.assertEqual(loaded.size, (40, 24))
+                        self.assertFalse(loaded.getexif())
+                        self.assertEqual(loaded.info.get("icc_profile"), profile)
             for fmt in ("PNG", "JPEG", "TIFF", "WEBP", "AVIF"):
                 if not output_format_available(fmt):
                     continue
@@ -1648,7 +1969,7 @@ class TestConversionMetadata(unittest.TestCase):
                             self.assertLess(max(abs(a - b) for a, b in
                                                 zip(rgb.getpixel((0, 0)), (255, 0, 0))), 25)
 
-    def test_preview_preserves_native_orientation_without_double_rotation(self):
+    def test_preview_normalizes_orientation_without_double_rotation(self):
         with tempfile.TemporaryDirectory(dir=".") as directory:
             for fmt in ("PNG", "JPEG", "TIFF", "WEBP", "AVIF"):
                 if not output_format_available(fmt):
@@ -1664,10 +1985,10 @@ class TestConversionMetadata(unittest.TestCase):
                         self.assertEqual(preview.size, native.size)
                         self.assertEqual(preview.tobytes(), native.tobytes())
                         self.assertEqual(preview.getexif().get(274), native.getexif().get(274))
-                        if fmt == "TIFF":
-                            with ImageOps.exif_transpose(preview) as displayed:
-                                self.assertEqual(displayed.size, preview.size)
-                                self.assertEqual(displayed.tobytes(), preview.tobytes())
+                        self.assertNotIn(274, preview.getexif())
+                        with ImageOps.exif_transpose(preview) as displayed:
+                            self.assertEqual(displayed.size, preview.size)
+                            self.assertEqual(displayed.tobytes(), preview.tobytes())
 
     def test_converter_preview_matches_native_pixel_export(self):
         from src.ui.preview_pane import _ConverterPreviewLoader, _pil_to_qimage
@@ -1698,11 +2019,206 @@ class TestConversionMetadata(unittest.TestCase):
                                 self.assertEqual(results[0][1], _pil_to_qimage(decoded))
 
 
+class TestTiffXmpOrientation(unittest.TestCase):
+    _methods = {
+        2: Image.Transpose.FLIP_LEFT_RIGHT, 3: Image.Transpose.ROTATE_180,
+        4: Image.Transpose.FLIP_TOP_BOTTOM, 5: Image.Transpose.TRANSPOSE,
+        6: Image.Transpose.ROTATE_270, 7: Image.Transpose.TRANSVERSE,
+        8: Image.Transpose.ROTATE_90,
+    }
+
+    def test_tag_only_xmp_without_decoder_transpose_matches_normalized_pixels(self):
+        real_open = Image.open
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source = Path(directory) / "tag-only.tiff"
+            output = Path(directory) / "normalized.tiff"
+            with Image.new("RGBA", (31, 19), (255, 0, 0, 255)) as raster:
+                raster.paste((0, 0, 255, 128), (15, 0, 31, 19))
+                raster.paste((0, 255, 0, 0), (0, 9, 15, 19))
+                for orientation in range(1, 9):
+                    packet = (
+                        f'<rdf:Description tiff:Orientation="{orientation}" dc:title="keep"/>'
+                    ).encode()
+                    exif = Image.Exif()
+                    exif[700] = packet
+                    raster.save(source, exif=exif)
+                    for cached_exif in (True, False):
+                        def open_without_info_xmp(*args, **kwargs):
+                            image = real_open(*args, **kwargs)
+                            if Path(args[0]).resolve() == source.resolve():
+                                cached = image.getexif()
+                                # Simulate Pillow 10: no synthesized orientation
+                                # and no decoder transpose from an XMP-only tag.
+                                cached.pop(274, None)
+                                image.tag_v2.pop(274, None)
+                                image._tile_orientation = None
+                                for key in ("xmp", "XML:com.adobe.xmp"):
+                                    image.info.pop(key, None)
+                                if not cached_exif:
+                                    cached.pop(700, None)
+                            return image
+
+                        method = self._methods.get(orientation)
+                        with self.subTest(orientation=orientation, cached_exif=cached_exif), (
+                                raster.transpose(method) if method is not None else raster.copy()) as expected:
+                            with mock.patch.object(Image, "open", side_effect=open_without_info_xmp):
+                                for opener in (_open_image, lambda path: _open_image_for_preview(path, 64)):
+                                    with opener(str(source)) as actual:
+                                        self.assertEqual(actual.size, expected.size)
+                                        self.assertEqual(actual.tobytes(), expected.tobytes())
+                                        self.assertIn(actual.getexif().get(274), (None, 1))
+                                        self.assertEqual(
+                                            actual.tag_v2[700], b'<rdf:Description  dc:title="keep"/>',
+                                        )
+                                convert_file(str(source), str(output), "TIFF", keep_metadata=True)
+                            with _open_image(str(output)) as actual:
+                                self.assertEqual(actual.size, expected.size)
+                                self.assertEqual(actual.tobytes(), expected.tobytes())
+                                self.assertIn(actual.getexif().get(274), (None, 1))
+                                if cached_exif:
+                                    self.assertEqual(
+                                        actual.getexif()[700], b'<rdf:Description  dc:title="keep"/>',
+                                    )
+
+    def test_native_xmp_single_quotes_and_element_whitespace(self):
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source = Path(directory) / "native.tiff"
+            output = Path(directory) / "normalized.tiff"
+            with Image.new("RGB", (31, 19), "red") as raster:
+                raster.paste("blue", (15, 0, 31, 19))
+                raster.paste("green", (0, 9, 15, 19))
+                for orientation in range(1, 9):
+                    for form in (f"tiff:Orientation='{orientation}'",
+                                 f"<tiff:Orientation> {orientation} </tiff:Orientation>"):
+                        packet = f'<rdf:Description dc:title="keep">{form}</rdf:Description>'.encode()
+                        exif = Image.Exif()
+                        exif[700] = packet
+                        raster.save(source, exif=exif)
+                        method = self._methods.get(orientation)
+                        with self.subTest(orientation=orientation, form=form), (
+                                raster.transpose(method) if method is not None else raster.copy()) as expected:
+                            convert_file(str(source), str(output), "TIFF", keep_metadata=True)
+                            for path in (source, output):
+                                with _open_image(str(path)) as actual:
+                                    self.assertEqual(actual.size, expected.size)
+                                    self.assertEqual(actual.tobytes(), expected.tobytes())
+                                    self.assertIn(actual.getexif().get(274), (None, 1))
+                                    self.assertEqual(actual.getexif()[700],
+                                                     b'<rdf:Description dc:title="keep"></rdf:Description>')
+
+    def _write_source(self, source, specs):
+        expected = []
+        with TiffImagePlugin.AppendingTiffWriter(str(source), True) as writer:
+            for index, (exif_orientation, xmp_orientation) in enumerate(specs):
+                packet = (
+                    f'<rdf:Description tiff:Orientation="{xmp_orientation}" '
+                    f'dc:description="page-{index}"><tiff:Orientation>{xmp_orientation}'
+                    '</tiff:Orientation></rdf:Description>'
+                ).encode()
+                exif = Image.Exif()
+                exif[700] = packet
+                exif[305] = f"software-{index}"
+                if exif_orientation is not None:
+                    exif[274] = exif_orientation
+                with Image.new("RGB", (17 + index, 11 + index), "red") as raster:
+                    raster.paste("blue", (8, 0, raster.width, raster.height))
+                    raster.paste("green", (0, 5, 8, raster.height))
+                    raster.save(writer, format="TIFF", exif=exif)
+                    orientation = exif_orientation or xmp_orientation
+                    method = self._methods.get(orientation)
+                    expected.append(raster.transpose(method) if method is not None else raster.copy())
+                writer.newFrame()
+        return expected
+
+    def _assert_metadata(self, image, index):
+        self.assertIn(image.getexif().get(274), (None, 1))
+        self.assertEqual(image.getexif()[305], f"software-{index}")
+        clean = (
+            f'<rdf:Description  dc:description="page-{index}"></rdf:Description>'
+        ).encode()
+        self.assertEqual(image.getexif()[700], clean)
+        self.assertEqual(image.tag_v2[700], clean)
+        for key in ("xmp", "XML:com.adobe.xmp"):
+            if key in image.info:
+                value = image.info[key]
+                self.assertEqual(value.encode() if isinstance(value, str) else value, clean)
+
+    def _assert_roundtrip(self, source, directory, specs, resize):
+        expected = self._write_source(source, specs)
+        try:
+            with _open_image(str(source)) as normalized:
+                self._assert_metadata(normalized, 0)
+                self.assertEqual(normalized.size, expected[0].size)
+                self.assertEqual(normalized.tobytes(), expected[0].tobytes())
+            for generation in range(2):
+                output = Path(directory) / f"output-{generation}.tiff"
+                convert_file(str(source), str(output), "TIFF",
+                             keep_metadata=True, resize=resize)
+                with Image.open(output) as pages:
+                    self.assertEqual(pages.n_frames, len(specs))
+                    for index, wanted in enumerate(expected):
+                        pages.seek(index)
+                        # Inspect before loading: stale XMP must not synthesize
+                        # another Orientation tag when the output is reopened.
+                        self._assert_metadata(pages, index)
+                        pages.load()
+                        self._assert_metadata(pages, index)
+                        with (wanted.resize(resize, Image.LANCZOS) if resize
+                              else wanted.copy()) as display:
+                            self.assertEqual(pages.size, display.size)
+                            self.assertEqual(pages.tobytes(), display.tobytes())
+                with _open_image(str(output)) as reopened:
+                    self._assert_metadata(reopened, 0)
+                    with (expected[0].resize(resize, Image.LANCZOS) if resize
+                          else expected[0].copy()) as display:
+                        self.assertEqual(reopened.size, display.size)
+                        self.assertEqual(reopened.tobytes(), display.tobytes())
+                source = output
+                # Re-encoding an already resized page must not resample again.
+                if resize:
+                    resized = [image.resize(resize, Image.LANCZOS) for image in expected]
+                    for image in expected:
+                        image.close()
+                    expected = resized
+                    resize = None
+        finally:
+            for image in expected:
+                image.close()
+
+    def test_single_page_xmp_only_and_dual_orientation_keep_metadata_reopen(self):
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source = Path(directory) / "source.tiff"
+            for orientation in range(1, 9):
+                for exif_orientation, xmp_orientation in (
+                    (None, orientation), (orientation, orientation),
+                    (orientation, 9 - orientation),
+                ):
+                    for resize in (None, (9, 7)):
+                        with self.subTest(exif=exif_orientation, xmp=xmp_orientation,
+                                          resize=resize):
+                            self._assert_roundtrip(
+                                source, directory, [(exif_orientation, xmp_orientation)], resize,
+                            )
+
+    def test_multipage_mixed_xmp_only_and_dual_orientation_keep_metadata_reopen(self):
+        specs = [
+            spec for orientation in range(1, 9)
+            for spec in ((None, orientation), (orientation, orientation),
+                         (orientation, 9 - orientation))
+        ]
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            for resize in (None, (9, 7)):
+                with self.subTest(resize=resize):
+                    self._assert_roundtrip(
+                        Path(directory) / "source.tiff", directory, specs, resize,
+                    )
+
+
 class TestMultipageTiffBoundary(unittest.TestCase):
-    def _make_source(self, directory, profiles=None):
+    def _make_source(self, directory, profiles=None, specs=None):
         source = Path(directory) / "multipage.tiff"
         profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
-        specs = [
+        specs = specs if specs is not None else [
             ((40, 24), "red", "blue", 6),
             ((18, 30), "green", "yellow", 3),
             ((22, 16), "purple", "white", 1),
@@ -2005,6 +2521,77 @@ class TestMultipageTiffBoundary(unittest.TestCase):
             self.assertNotIn("\n", destination)
             with Image.open(destination) as saved:
                 self.assertEqual(saved.n_frames, 3)
+
+    def test_frame_seek_after_normalization_with_distinct_orientations(self):
+        from src.core.file_converter import _load_image_pixels, _normalize_image_orientation
+
+        methods = {
+            2: Image.Transpose.FLIP_LEFT_RIGHT, 3: Image.Transpose.ROTATE_180,
+            4: Image.Transpose.FLIP_TOP_BOTTOM, 5: Image.Transpose.TRANSPOSE,
+            6: Image.Transpose.ROTATE_270, 7: Image.Transpose.TRANSVERSE,
+            8: Image.Transpose.ROTATE_90,
+        }
+        specs = [((40, 24) if index % 2 == 0 else (24, 40),
+                  "red", "blue", orientation)
+                 for index, orientation in enumerate((6, 2, 8, 3, 5, 4, 7, 1))]
+
+        def legacy_load_end(image):
+            image._tile_orientation = image.tag_v2.get(274)
+            method = methods.get(image._tile_orientation)
+            if method is not None:
+                image.im = image.im.transpose(method)
+                image._size = image.im.size
+
+        def unrotated_load_end(image):
+            image._tile_orientation = image.tag_v2.get(274)
+            image._size = image.im.size
+
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, _ = self._make_source(directory, specs=specs)
+            for decoder in (None, legacy_load_end, unrotated_load_end):
+                with (mock.patch.object(TiffImagePlugin.TiffImageFile, "load_end", decoder)
+                      if decoder else nullcontext()):
+                    # Revisit pages in both directions, including rotations that
+                    # make one page's display size equal the next page's raw size.
+                    with Image.open(source) as pages:
+                        for index in [*range(8), *range(7, -1, -1)]:
+                            size, left, right, orientation = specs[index]
+                            pages.seek(index)
+                            self.assertEqual((pages.tag_v2[256], pages.tag_v2[257]), size)
+                            self.assertEqual(pages._tile_size, size)
+                            pages.getexif()
+                            _load_image_pixels(pages)
+                            _normalize_image_orientation(pages)
+                            with Image.new("RGB", size, left) as raster:
+                                raster.paste(right, (size[0] // 2, 0, *size))
+                                with (raster.transpose(methods[orientation]) if orientation in methods
+                                      else raster.copy()) as expected:
+                                    with self.subTest(decoder=decoder, page=index):
+                                        self.assertEqual(pages.size, expected.size)
+                                        self.assertEqual(pages.tobytes(), expected.tobytes())
+                                        self.assertIn(pages.getexif().get(274), (None, 1))
+                    for resize in (None, (12, 20)):
+                        output = Path(directory) / "distinct.tiff"
+                        convert_file(str(source), str(output), "TIFF",
+                                     keep_metadata=True, resize=resize)
+                        with Image.open(output) as saved:
+                            self.assertEqual(saved.n_frames, 8)
+                            for index, (size, left, right, orientation) in enumerate(specs):
+                                saved.seek(index)
+                                saved.getexif()
+                                saved.load()
+                                with Image.new("RGB", size, left) as raster:
+                                    raster.paste(right, (size[0] // 2, 0, *size))
+                                    with (raster.transpose(methods[orientation]) if orientation in methods
+                                          else raster.copy()) as oriented:
+                                        with (oriented.resize(resize, Image.LANCZOS) if resize
+                                              else oriented.copy()) as expected:
+                                            with self.subTest(decoder=decoder, resize=resize, page=index):
+                                                self.assertEqual(saved.size, expected.size)
+                                                self.assertEqual(saved.tobytes(), expected.tobytes())
+                                                self.assertIn(saved.getexif().get(274), (None, 1))
+                                                self.assertEqual(saved.getexif()[305],
+                                                                 f"page-{index + 1}-metadata")
 
     def test_all_pages_preserve_pixels_orientation_metadata_and_resize(self):
         first_profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
@@ -2625,12 +3212,13 @@ class TestConvertFile(unittest.TestCase):
         finally:
             img.close()
 
-    def test_open_image_for_preview_reduces_large_images_before_full_decode(self):
+    def test_open_image_for_preview_drafts_and_reduces_large_images(self):
         class FakeImage:
             def __init__(self):
                 self.format = "PNG"
                 self.mode = "RGB"
                 self.size = (8192, 8192)
+                self.info = {}
                 self.draft_calls = []
                 self.reduce_calls = []
                 self.closed = False
@@ -2648,12 +3236,15 @@ class TestConvertFile(unittest.TestCase):
             def load(self):
                 self.loaded = True
 
+            def getexif(self):
+                return Image.Exif()
+
             def close(self):
                 self.closed = True
 
         opened = FakeImage()
         with mock.patch("src.core.file_converter.Image.open", return_value=opened):
-            preview = _open_image_for_preview("/tmp/huge.png", 512)
+            preview = _open_image_for_preview("./huge.png", 512)
         self.assertEqual(opened.draft_calls, [(None, (1024, 1024))])
         self.assertTrue(opened.reduce_calls)
         self.assertTrue(opened.closed)

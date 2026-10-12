@@ -702,7 +702,15 @@ def load_image(path: str) -> Image.Image:
     if ext == ".tim":
         from .tim_handler import load_tim  # noqa: PLC0415
         return load_tim(path)
+    from .file_converter import _load_image_pixels, _normalize_image_orientation
+
     img = Image.open(path)
+    try:
+        _load_image_pixels(img)
+        _normalize_image_orientation(img)
+    except Exception:
+        img.close()
+        raise
     if img.mode != "RGBA":
         w, h = img.size
         try:

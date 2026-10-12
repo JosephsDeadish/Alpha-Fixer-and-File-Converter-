@@ -451,6 +451,14 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Standard-image previews, conversion and Alpha loading normalize EXIF/XMP
+orientation before resizing or exporting. Retained metadata no longer reapplies
+rotation, including TIFF XMP tag 700 and mixed-orientation multipage TIFFs.
+Generated-image regressions cover all eight orientations, metadata retention,
+preview reduction and malformed metadata; metadata preservation remains
+best-effort. These checks do not replace real malformed-media corpora or native
+multipage-editing acceptance.
+
 Bounded repeated project/recovery resource tests exercise six successful
 replacements, six cancellations and six failures per builder. Ownership checks
 cover decoded GIF images, video clips, native FFmpeg remux readers/files, Qt jobs,
