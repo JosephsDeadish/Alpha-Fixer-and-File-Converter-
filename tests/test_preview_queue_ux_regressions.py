@@ -111,6 +111,7 @@ def test_painter_history_overlay_scales_counts_and_preserves_actions(app, name):
         controls = [overlay._btn_undo, overlay._btn_redo, overlay._btn_all_vis,
                     overlay._chk_highlight, overlay._chk_labels]
         assert len({control.accessibleName() for control in controls}) == 5
+        assert not overlay._chk_labels.isChecked()
         for pixels in [13, 24, 32, 13]:
             host.setStyleSheet(build_stylesheet(theme)
                               + f"\nQWidget {{ font-size: {pixels}px; }}")

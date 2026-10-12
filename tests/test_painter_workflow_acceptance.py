@@ -138,8 +138,9 @@ def test_real_draw_edit_clipboards_slots_save_reopen(painter, app, tmp_path):
     painter.show()
     app.processEvents()
     canvas = painter._canvas
-    assert painter._btn_show_highlights.isChecked()
-    assert all(canvas._zone_visible)
+    assert not painter._btn_show_highlights.isChecked()
+    assert not painter._history_overlay.labels_checked()
+    assert not any(canvas._zone_visible)
     painter._ze_alpha_spin.setValue(64)
     draw(painter, app, "rect", (2, 2), (10, 10))
     first = canvas.get_mask_as_array(0)

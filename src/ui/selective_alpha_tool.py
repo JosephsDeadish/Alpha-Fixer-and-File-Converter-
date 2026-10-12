@@ -1364,10 +1364,10 @@ class _FloatingHistoryOverlay(QFrame):
         # Row 3: Show α values checkbox
         self._chk_labels = QCheckBox("Show α values")
         self._chk_labels.setAccessibleName("Show Painter zone alpha values")
-        self._chk_labels.setChecked(True)
+        self._chk_labels.setChecked(False)
         self._chk_labels.setToolTip(
             "When checked, each zone's alpha value is drawn as text at the\n"
-            "centre of its painted area on the canvas.  On by default."
+            "centre of its painted area on the canvas.  Off by default."
         )
         self._chk_labels.toggled.connect(self.labels_toggled)
         vlay.addWidget(self._chk_labels)
@@ -2032,7 +2032,7 @@ class SelectiveAlphaTool(QWidget):
 
         # "Show Highlights" checkbox — master visibility for all zone overlays (item 61)
         self._btn_show_highlights = QCheckBox("\U0001f441  Show Highlights")
-        self._btn_show_highlights.setChecked(True)
+        self._btn_show_highlights.setChecked(False)
         self._btn_show_highlights.setToolTip(
             "Toggle visibility of all alpha-zone highlight overlays on the canvas.\n"
             "Turn off to see the image without coloured highlights and alpha labels.\n"
@@ -2689,9 +2689,9 @@ class SelectiveAlphaTool(QWidget):
             self._canvas.set_show_zero_alpha(bool(self._settings.get("sa_show_zero_alpha", False)))
             # Restore show-alpha-labels toggle (now in history overlay)
             self._history_overlay.set_labels_checked(
-                bool(self._settings.get("sa_show_alpha_labels", True))
+                bool(self._settings.get("sa_show_alpha_labels", False))
             )
-            self._canvas.set_show_alpha_labels(bool(self._settings.get("sa_show_alpha_labels", True)))
+            self._canvas.set_show_alpha_labels(bool(self._settings.get("sa_show_alpha_labels", False)))
             # Restore last-used drawing tool
             last_tool = str(self._settings.get("sa_last_tool", "freehand"))
             if last_tool in self._tool_btns:
@@ -3518,11 +3518,6 @@ class SelectiveAlphaTool(QWidget):
         for img in self._result_history:
             img.close()
         self._result_history.clear()
-        # Reset the Show Highlights toggle so a freshly-loaded image starts
-        # with highlights shown; _auto_populate_zones_from_image will keep it
-        # on if multiple distinct alpha zones are detected.
-        self._btn_show_highlights.setChecked(True)
-        self._on_show_all_zones()
         # Auto-populate zone masks if the image has multiple distinct alphas.
         try:
             self._auto_populate_zones_from_image()
@@ -3534,7 +3529,7 @@ class SelectiveAlphaTool(QWidget):
             # Non-fatal: image is loaded; auto-detection just skipped
         self._refresh_session_status()
 
-    def _auto_populate_zones_from_image(self) -> None:
+    def _auto_populate_zones_from_image(self) -> int:
         """Auto-detect distinct alpha zones in the loaded image and populate them.
 
         When the source image contains 2–20 significant distinct alpha values
@@ -3549,7 +3544,7 @@ class SelectiveAlphaTool(QWidget):
         """
         src_img = self._canvas.get_source_image()
         if src_img is None:
-            return
+            return 0
 
         # Build RGBA array for analysis.
         if src_img.mode == "RGBA":
@@ -3565,7 +3560,11 @@ class SelectiveAlphaTool(QWidget):
         del arr  # free memory; masks will be stored inside the canvas
 
         if not zones:
-            return
+            self._btn_show_highlights.blockSignals(True)
+            self._btn_show_highlights.setChecked(False)
+            self._btn_show_highlights.blockSignals(False)
+            self._on_hide_all_zones()
+            return 0
 
         # Populate canvas masks in one undo step.
         self._canvas.populate_zones_from_detection(zones)
@@ -3598,9 +3597,16 @@ class SelectiveAlphaTool(QWidget):
         self._refresh_zone_combo_icons()
         self._refresh_zone_display_names()
 
-        # Reveal all populated zones and sync the master Show Highlights toggle.
-        self._on_show_all_zones()
-        self._btn_show_highlights.setChecked(True)
+        # Reveal populated zones only when multiple alpha values were detected.
+        show_highlights = len(zones) > 1
+        self._btn_show_highlights.blockSignals(True)
+        self._btn_show_highlights.setChecked(show_highlights)
+        self._btn_show_highlights.blockSignals(False)
+        if show_highlights:
+            self._on_show_all_zones()
+        else:
+            self._on_hide_all_zones()
+        return len(zones)
 
     def _on_save(self) -> None:
         if not self._canvas.has_image():
