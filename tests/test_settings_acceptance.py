@@ -268,6 +268,22 @@ def test_ui_scale_preview_reflects_layout_controls(app, dialog):
     assert "Button height 32px" in widget._scale_preview_detail.text()
 
 
+def test_ui_scale_preview_updates_theme_colors(dialog):
+    from src.ui.theme_engine import PRESET_THEMES
+
+    widget, _ = dialog
+    theme = dict(PRESET_THEMES["Bat Cave"])
+    widget._theme = theme
+    widget.theme_changed.emit(theme)
+
+    frame_style = widget._scale_preview_frame.styleSheet()
+    button_style = widget._scale_preview_button.styleSheet()
+    assert theme["surface"] in frame_style
+    assert theme["accent"] in frame_style
+    assert theme["accent"] in button_style
+    assert theme["text"] in frame_style
+
+
 def test_custom_background_recent_list_is_saved_and_restored(settings_session, tmp_path):
     from PyQt6.QtGui import QColor, QImage
 

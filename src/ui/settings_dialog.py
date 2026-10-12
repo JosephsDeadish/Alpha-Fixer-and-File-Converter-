@@ -2320,6 +2320,11 @@ class SettingsDialog(QDialog):
             spacing_map = {"Tight": 2, "Normal": 4, "Relaxed": 8}
             radius_map = {"None": 0, "Subtle": 3, "Normal": 6, "Rounded": 10, "Pill": 16}
             padding_map = {"Minimal": 2, "Normal": 6, "Spacious": 12}
+            theme = self._theme if isinstance(self._theme, dict) else {}
+            bg = theme.get("background", "#1a1a2e")
+            surface = theme.get("surface", "#16213e")
+            accent = theme.get("accent", "#e94560")
+            text = theme.get("text", "#eaeaea")
             scale_key = self._settings.get("ui_scale", "Normal")
             self._scale_preview_title.setText(
                 f"Live preview — {scale_key} scale, "
@@ -2341,10 +2346,13 @@ class SettingsDialog(QDialog):
             self._scale_preview_button.setMinimumHeight(btn_h)
             self._scale_preview_combo.setMinimumHeight(btn_h)
             self._scale_preview_combo.setStyleSheet(
-                f"QComboBox {{ min-height: {btn_h}px; }}"
+                f"QComboBox {{ min-height: {btn_h}px; background-color: {bg}; color: {text}; border-radius: {radius}px; }}"
+            )
+            self._scale_preview_button.setStyleSheet(
+                f"QPushButton {{ min-height: {btn_h}px; background-color: {accent}; color: {text}; border-radius: {radius}px; }}"
             )
             self._scale_preview_frame.setStyleSheet(
-                f"#scalePreviewFrame {{ border: 1px solid #666; border-radius: {radius}px; }}"
+                f"#scalePreviewFrame {{ background-color: {surface}; color: {text}; border: 1px solid {accent}; border-radius: {radius}px; }}"
             )
             layout = self._scale_preview_frame.layout()
             if layout is not None:
@@ -2353,9 +2361,13 @@ class SettingsDialog(QDialog):
             self._scale_preview_detail.setText(
                 f"Button height {btn_h}px • widget spacing {spacing}px • border radius {radius}px • panel padding {padding}px."
             )
+            self._scale_preview_sample_label.setStyleSheet(f"color: {text}; background: transparent;")
+            self._scale_preview_title.setStyleSheet(f"color: {text}; background: transparent;")
+            self._scale_preview_detail.setStyleSheet(f"color: {text}; background: transparent;")
 
         self._update_scale_preview = _update_scale_preview
         self.settings_changed.connect(lambda: _update_scale_preview())
+        self.theme_changed.connect(lambda *_: _update_scale_preview())
 
         gv.addWidget(grp_scale)
 
