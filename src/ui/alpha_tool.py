@@ -398,9 +398,12 @@ class AlphaFixerTab(QWidget):
         self._next_step_lbl.setWordWrap(True)
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._next_step_lbl.setProperty("toolGuidance", True)
-        # Retain structured guidance for the main-window summary without
-        # displaying it twice beside the session status.
-        self._next_step_lbl.hide()
+        self._next_step_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._next_step_lbl.setAccessibleName("Alpha Painter next step")
+        self._next_step_lbl.setAccessibleDescription(
+            "Short guided next step that explains what to do in the Alpha Painter."
+        )
+        main_layout.addWidget(self._next_step_lbl)
 
         outer_splitter = QSplitter(Qt.Orientation.Horizontal)
         self._splitter = outer_splitter

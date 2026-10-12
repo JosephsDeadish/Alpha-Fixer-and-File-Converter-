@@ -210,3 +210,23 @@ def test_saved_preview_helpers_and_batch_preferences(alpha, app):
         sip.delete(reopened)
         sip.delete(reopened_manager._qs)
         app.processEvents()
+
+
+def test_alpha_next_step_guidance_is_visible_and_tracks_selection(alpha, app, tmp_path):
+    widget, _ = alpha
+    widget.show()
+    app.processEvents()
+    assert widget._next_step_lbl.isVisible()
+    assert widget._next_step_lbl.text().startswith("Next step:")
+    assert "add image files" in widget._next_step_lbl.text()
+
+    source = tmp_path / "guide.png"
+    with Image.fromarray(pixels(), "RGBA") as image:
+        image.save(source)
+    widget._file_list.addItem(str(source))
+    widget._file_list.setCurrentRow(0)
+    wait_for_preview(widget, app, pixels())
+    app.processEvents()
+
+    assert "review the before/after preview" in widget._next_step_lbl.text()
+    assert "guide.png" in widget._session_status_lbl.text()
