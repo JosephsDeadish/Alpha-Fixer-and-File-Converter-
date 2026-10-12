@@ -61,6 +61,48 @@ def test_custom_background_picker_covers_supported_image_and_video_formats():
     assert "*.mp4" in flt
 
 
+def test_custom_background_path_edit_accepts_local_file_drops():
+    from src.ui.settings_dialog import _BackgroundPathEdit
+
+    class _Url:
+        def __init__(self, path: str):
+            self._path = path
+        def isLocalFile(self):
+            return True
+        def toLocalFile(self):
+            return self._path
+
+    class _Mime:
+        def __init__(self, path: str):
+            self._url = _Url(path)
+        def hasUrls(self):
+            return True
+        def urls(self):
+            return [self._url]
+
+    class _Event:
+        def __init__(self, path: str):
+            self._mime = _Mime(path)
+            self.accepted = False
+            self.ignored = False
+        def mimeData(self):
+            return self._mime
+        def acceptProposedAction(self):
+            self.accepted = True
+        def ignore(self):
+            self.ignored = True
+
+    edit = _BackgroundPathEdit()
+    try:
+        event = _Event("/tmp/background.webm")
+        edit.dropEvent(event)
+        assert edit.text() == "/tmp/background.webm"
+        assert event.accepted
+        assert not event.ignored
+    finally:
+        edit.deleteLater()
+
+
 @pytest.mark.parametrize("tool,limit_control,track_control", _HISTORY_CONTROLS)
 def test_opening_existing_ini_does_not_rewrite_legacy_history_policy(
         settings_session, tool, limit_control, track_control):

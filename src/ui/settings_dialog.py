@@ -344,8 +344,10 @@ class SettingsDialog(QDialog):
         self._custom_bg_check.setToolTip(
             "When enabled the application window background uses a custom image,\n"
             "animated GIF, or video file instead of the solid theme colour.\n"
-            "Supported: the app's image formats plus the video formats supported by Video Builder."
+            "Supported: the app's image formats plus the video formats supported by Video Builder.\n"
+            "You can also drag a local file into the path field below."
         )
+        self._custom_bg_check.setAccessibleDescription(self._custom_bg_check.toolTip())
         custom_bg_layout.addWidget(self._custom_bg_check)
         # Sub-container: hidden when custom bg is disabled
         self._custom_bg_sub = QWidget()
@@ -374,6 +376,7 @@ class SettingsDialog(QDialog):
         self._custom_bg_status_lbl.setWordWrap(True)
         self._custom_bg_status_lbl.setWordWrap(True)
         self._custom_bg_status_lbl.setVisible(False)
+        self._custom_bg_status_lbl.setAccessibleName("Custom background status")
         _cbg_vl.addWidget(self._custom_bg_status_lbl)
         # File picker row (hidden when use-theme is on)
         self._custom_bg_file_row = QWidget()
@@ -386,13 +389,15 @@ class SettingsDialog(QDialog):
         )
         self._custom_bg_path_edit.setToolTip(
             "Full path to the background image, animated image, or video file.\n"
-            "You can also drag a file from Explorer/Finder onto this field."
+            "You can also drag a local file from Explorer/Finder onto this field."
         )
+        self._custom_bg_path_edit.setAccessibleDescription(self._custom_bg_path_edit.toolTip())
         self._custom_bg_path_edit.setReadOnly(False)
         _cbg_file_hl.addWidget(self._custom_bg_path_edit, 1)
         self._custom_bg_browse_btn = QPushButton("Browse…")
         self._custom_bg_browse_btn.setMinimumWidth(90)
         self._custom_bg_browse_btn.setToolTip("Browse for a background image or video file.")
+        self._custom_bg_browse_btn.setAccessibleDescription(self._custom_bg_browse_btn.toolTip())
         _cbg_file_hl.addWidget(self._custom_bg_browse_btn)
         _cbg_vl.addWidget(self._custom_bg_file_row)
         custom_bg_layout.addWidget(self._custom_bg_sub)
