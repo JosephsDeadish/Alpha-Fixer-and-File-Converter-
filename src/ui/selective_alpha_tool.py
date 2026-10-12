@@ -2230,7 +2230,7 @@ class SelectiveAlphaTool(QWidget):
         # Row 1: Save | Paste
         act_row = QHBoxLayout()
         act_row.setSpacing(4)
-        self._btn_slot_save = QPushButton("💾  Save")
+        self._btn_slot_save = QPushButton("💾  Save Zone")
         self._btn_slot_save.setMinimumHeight(26)
         self._btn_slot_save.setToolTip(
             "Save the active zone's mask into the selected slot.\n"
@@ -2382,8 +2382,8 @@ class SelectiveAlphaTool(QWidget):
         for control, name in (
             (self._btn_slot_add, "Add single-zone mask slot"),
             (self._btn_slot_del, "Delete single-zone mask slot"),
-            (self._btn_slot_save, "Save active zone mask to slot"),
-            (self._btn_slot_paste, "Paste slot mask into active zone"),
+            (self._btn_slot_save, "Save active zone to slot"),
+            (self._btn_slot_paste, "Paste zone from slot into active zone"),
             (self._btn_slot_rename, "Rename single-zone mask slot"),
             (self._btn_slot_clear, "Clear single-zone slot mask"),
             (self._btn_az_slot_add, "Add full zone layout slot"),

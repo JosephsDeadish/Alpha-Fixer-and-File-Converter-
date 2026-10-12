@@ -7919,6 +7919,8 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("save the active zone here", self._widget._slot_info_lbl.text())
         self.assertIn("Empty", self._widget._az_slot_info_lbl.text())
         self.assertIn("save all current zones here", self._widget._az_slot_info_lbl.text())
+        self.assertIn("Save Zone", self._widget._btn_slot_save.text())
+        self.assertIn("Paste Zone", self._widget._btn_slot_paste.text())
 
         self._widget._mask_slots[0] = np.zeros((2, 2), dtype=np.uint8)
         self._widget._mask_slot_info[0] = "Zone 1 – Red"
