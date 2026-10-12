@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 from .theme_engine import DEFAULT_THEME, PRESET_THEMES, HIDDEN_THEMES, THEME_DESCRIPTIONS, THEME_EFFECTS
 from .tooltip_manager import TOOLTIP_MODES
 from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI
-from .video_tool import _VIDEO_EXTS
+from .video_tool import _IMAGE_EXTS, _VIDEO_EXTS
 
 # Maximum character length accepted as a directly-typed custom emoji.
 # Emoji can be multi-codepoint sequences (e.g. 🏴‍☠️ = 7 code units) but are
@@ -46,6 +46,18 @@ def _label_width(text_sample: str) -> int:
     from PyQt6.QtGui import QFontMetrics
     fm = QFontMetrics(QApplication.font())
     return fm.horizontalAdvance(text_sample) + 4
+
+
+def _background_file_filter() -> str:
+    """Return the file-picker filter for custom background media."""
+    image_patterns = " ".join(f"*{ext}" for ext in sorted(_IMAGE_EXTS))
+    video_patterns = " ".join(f"*{ext}" for ext in sorted(_VIDEO_EXTS))
+    return ";;".join([
+        f"All Supported Media ({image_patterns} {video_patterns})",
+        f"Images ({image_patterns})",
+        f"Videos ({video_patterns})",
+        "All Files (*)",
+    ])
 
 # Human-friendly labels for click-effect keys, in display order
 _EFFECT_OPTIONS = [
@@ -310,7 +322,7 @@ class SettingsDialog(QDialog):
         self._custom_bg_check.setToolTip(
             "When enabled the application window background uses a custom image,\n"
             "animated GIF, or video file instead of the solid theme colour.\n"
-            "Supported: PNG, JPG, GIF, MP4, WebM, WebP."
+            "Supported: the app's image formats plus the video formats supported by Video Builder."
         )
         custom_bg_layout.addWidget(self._custom_bg_check)
         # Sub-container: hidden when custom bg is disabled
@@ -348,10 +360,10 @@ class SettingsDialog(QDialog):
         _cbg_file_hl.addWidget(QLabel("Background file:"))
         self._custom_bg_path_edit = QLineEdit()
         self._custom_bg_path_edit.setPlaceholderText(
-            "Path to PNG / GIF / MP4 / WebM…"
+            "Path to image, GIF, or video file…"
         )
         self._custom_bg_path_edit.setToolTip(
-            "Full path to the background image or video file.\n"
+            "Full path to the background image, animated image, or video file.\n"
             "You can also drag a file from Explorer/Finder onto this field."
         )
         self._custom_bg_path_edit.setReadOnly(False)
@@ -367,7 +379,7 @@ class SettingsDialog(QDialog):
             if not enabled or use_theme:
                 return ""
             if not path:
-                return "Choose an image, GIF, or video file to replace the solid theme background."
+                return "Choose an image, animated image, or video file to replace the solid theme background."
             if not os.path.isfile(path):
                 return "Selected background file was not found."
             ext = os.path.splitext(path)[1].lower()
@@ -375,8 +387,10 @@ class SettingsDialog(QDialog):
                 kind = "Animated GIF"
             elif ext in _VIDEO_EXTS:
                 kind = "Video"
-            else:
+            elif ext in _IMAGE_EXTS:
                 kind = "Image"
+            else:
+                kind = "Media"
             return f"{kind} selected: {os.path.basename(path)}"
 
         def _update_custom_bg_state():
@@ -399,13 +413,9 @@ class SettingsDialog(QDialog):
         self._custom_bg_sub.setVisible(False)  # hidden until enabled
 
         def _browse_bg_file():
-            video_patterns = sorted(f"*{ext}" for ext in _VIDEO_EXTS)
             path, _ = QFileDialog.getOpenFileName(
                 self, "Select Background File", "",
-                "Images & Video (*.png *.jpg *.jpeg *.jfif *.jpe *.gif *.webp *.bmp *.tif *.tiff "
-                + " ".join(video_patterns)
-                + ")"
-                ";;All Files (*)"
+                _background_file_filter()
             )
             if path:
                 self._custom_bg_path_edit.setText(path)

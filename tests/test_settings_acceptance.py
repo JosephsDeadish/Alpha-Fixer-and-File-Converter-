@@ -10,7 +10,7 @@ from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from src.core.settings_manager import SettingsManager
-from src.ui.settings_dialog import SettingsDialog
+from src.ui.settings_dialog import SettingsDialog, _background_file_filter
 
 
 @pytest.fixture
@@ -49,6 +49,16 @@ _HISTORY_CONTROLS = [
     ("gif_builder", "_history_max_gif_spin", "_chk_track_gif"),
     ("video_builder", "_history_max_video_spin", "_chk_track_video"),
 ]
+
+
+def test_custom_background_picker_covers_supported_image_and_video_formats():
+    flt = _background_file_filter()
+    assert "All Supported Media" in flt
+    assert "Images (" in flt
+    assert "Videos (" in flt
+    assert "*.avif" in flt
+    assert "*.webm" in flt
+    assert "*.mp4" in flt
 
 
 @pytest.mark.parametrize("tool,limit_control,track_control", _HISTORY_CONTROLS)
