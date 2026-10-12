@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from PIL import Image
 from PyQt6 import sip
 from PyQt6.QtCore import QSettings
 from PyQt6.QtTest import QTest
@@ -130,6 +131,35 @@ def test_custom_background_preview_updates_for_image_files(app, dialog, tmp_path
     assert not widget._custom_bg_preview.isHidden()
     assert not widget._custom_bg_preview.pixmap().isNull()
     assert "background.png" in widget._custom_bg_status_lbl.text()
+
+
+def test_custom_background_overlay_tracks_settings_state(settings_session, tmp_path):
+    app, launch, open_settings, widgets = settings_session
+    background_path = tmp_path / "background.png"
+    Image.new("RGBA", (20, 12), "#336699").save(background_path)
+
+    manager = launch()
+    manager.set("custom_bg_enabled", True)
+    manager.set("use_theme_bg", False)
+    manager.set("custom_bg_path", str(background_path))
+
+    widget = open_settings(manager)
+    widgets.append(widget)
+    try:
+        widget.show()
+        app.processEvents()
+
+        assert widget._settings_bg_overlay.isVisible()
+        assert widget._settings_bg_overlay.geometry() == widget.rect()
+        assert widget._settings_tabs.property("customBgTransparent") is True
+
+        widget._custom_bg_check.setChecked(False)
+        app.processEvents()
+
+        assert not widget._settings_bg_overlay.isVisible()
+        assert widget._settings_tabs.property("customBgTransparent") is False
+    finally:
+        widget.close()
 
 
 def test_custom_background_preview_rescales_when_resized(app, dialog, tmp_path):

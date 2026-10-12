@@ -11,7 +11,8 @@ from PyQt6.QtWidgets import (
     QComboBox, QTabWidget, QWidget, QGridLayout, QCheckBox,
     QLineEdit, QColorDialog, QGroupBox, QScrollArea,
     QMessageBox, QInputDialog, QSpinBox, QFileDialog, QSlider,
-    QAbstractSpinBox, QFrame,
+    QAbstractButton, QAbstractItemView, QAbstractSlider, QAbstractSpinBox,
+    QFrame, QPlainTextEdit, QTextEdit,
 )
 
 from .theme_engine import DEFAULT_THEME, PRESET_THEMES, HIDDEN_THEMES, THEME_DESCRIPTIONS, THEME_EFFECTS
@@ -392,6 +393,36 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
+        self._custom_bg_overlay = _BackgroundPreviewLabel(self)
+        self._custom_bg_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._custom_bg_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self._custom_bg_overlay.hide()
+        self._custom_bg_overlay.lower()
+        self._custom_bg_overlay.setStyleSheet("background: transparent; border: none;")
+        self._settings_bg_overlay = self._custom_bg_overlay
+        self._settings_bg_transparency_targets: list[QWidget] = []
+        self.setStyleSheet(
+            self.styleSheet()
+            + (
+                '\nQWidget[customBgTransparent="true"],'
+                '\nQLabel[customBgTransparent="true"],'
+                '\nQGroupBox[customBgTransparent="true"],'
+                '\nQAbstractScrollArea[customBgTransparent="true"],'
+                '\nQAbstractScrollArea[customBgTransparent="true"] > QWidget,'
+                '\nQAbstractItemView[customBgTransparent="true"],'
+                '\nQAbstractItemView[customBgTransparent="true"] > QWidget {'
+                '\n    background: transparent;'
+                '\n    background-color: transparent;'
+                '\n    border-image: none;'
+                '\n}'
+                '\nQTabWidget[customBgTransparent="true"],'
+                '\nQTabWidget[customBgTransparent="true"]::pane,'
+                '\nQTabBar[customBgTransparent="true"] {'
+                '\n    background: transparent;'
+                '\n    background-color: transparent;'
+                '\n}'
+            )
+        )
         self._live_settings_note = QLabel(
             "Changes are saved automatically and apply immediately unless stated otherwise. "
             "Close keeps your changes; there is no Apply or Cancel step."
@@ -752,6 +783,109 @@ class SettingsDialog(QDialog):
                 return [], []
             return [], []
 
+        def _settings_background_transparency_targets() -> list[QWidget]:
+            targets: list[QWidget] = []
+            seen: set[int] = set()
+
+            def _track(widget: QWidget | None) -> None:
+                if widget is None:
+                    return
+                if widget is self._settings_bg_overlay:
+                    return
+                ident = id(widget)
+                if ident in seen:
+                    return
+                seen.add(ident)
+                targets.append(widget)
+
+            def _should_skip(widget: QWidget) -> bool:
+                return isinstance(widget, (
+                    QAbstractButton, QComboBox, QAbstractSpinBox, QAbstractSlider,
+                    QLineEdit, QPlainTextEdit, QTextEdit, QAbstractItemView,
+                ))
+
+            def _inside_control(widget: QWidget) -> bool:
+                while widget is not None:
+                    if _should_skip(widget):
+                        return True
+                    widget = widget.parentWidget()
+                return False
+
+            for child in self.findChildren(QWidget):
+                if _inside_control(child):
+                    continue
+                _track(child)
+                if isinstance(child, (QAbstractScrollArea, QAbstractItemView)):
+                    _track(child.viewport())
+            _track(self._settings_tabs)
+            _track(self._settings_tabs.tabBar())
+            return targets
+
+        def _refresh_settings_background_transparency(enabled: bool) -> None:
+            changed = False
+            for widget in _settings_background_transparency_targets():
+                try:
+                    if bool(widget.property("customBgTransparent")) == enabled:
+                        continue
+                    if enabled:
+                        widget._custom_bg_auto_fill_background = widget.autoFillBackground()
+                    widget.setProperty("customBgTransparent", enabled)
+                    widget.setAutoFillBackground(
+                        False if enabled else widget._custom_bg_auto_fill_background
+                    )
+                    changed = True
+                except Exception:
+                    pass
+            if changed:
+                self.setStyleSheet(self.styleSheet())
+            self._settings_bg_transparency_targets = _settings_background_transparency_targets()
+
+        def _update_settings_background_overlay(enabled: bool, use_theme: bool, path: str) -> None:
+            overlay = self._settings_bg_overlay
+            overlay.setGeometry(self.rect())
+            if not enabled or use_theme:
+                overlay.clear_preview()
+                overlay.hide()
+                _refresh_settings_background_transparency(False)
+                return
+            if not path or not os.path.isfile(path):
+                overlay.clear_preview()
+                overlay.hide()
+                _refresh_settings_background_transparency(False)
+                return
+            movie = _background_preview_movie(path)
+            if movie is not None:
+                overlay.set_preview_movie(movie)
+                overlay.show()
+                overlay.lower()
+                _refresh_settings_background_transparency(True)
+                return
+            if os.path.splitext(path)[1].lower() in _VIDEO_EXTS:
+                frames, delays = _background_preview_video_frames(path)
+                if frames:
+                    overlay.set_preview_frames(frames, delays)
+                    overlay.show()
+                    overlay.lower()
+                    _refresh_settings_background_transparency(True)
+                    return
+            frames, delays = _background_preview_frames(path)
+            if frames:
+                overlay.set_preview_frames(frames, delays)
+                overlay.show()
+                overlay.lower()
+                _refresh_settings_background_transparency(True)
+                return
+            pixmap = _background_preview_pixmap(path)
+            if pixmap.isNull():
+                overlay.clear_preview()
+                overlay.hide()
+                _refresh_settings_background_transparency(False)
+                return
+            overlay.set_preview_pixmap(pixmap)
+            overlay.show()
+            overlay.lower()
+            _refresh_settings_background_transparency(True)
+
         def _update_custom_bg_preview(enabled: bool, use_theme: bool, path: str) -> None:
             if not enabled or use_theme:
                 self._custom_bg_preview.clear_preview()
@@ -798,6 +932,7 @@ class SettingsDialog(QDialog):
             self._custom_bg_status_lbl.setVisible(bool(status_text))
             _refresh_recent_background_combo(path)
             _update_custom_bg_preview(enabled, use_theme, path)
+            _update_settings_background_overlay(enabled, use_theme, path)
 
         self._custom_bg_check.toggled.connect(lambda _: _update_custom_bg_state())
         self._use_theme_bg_check.toggled.connect(lambda _: _update_custom_bg_state())
@@ -3375,6 +3510,9 @@ class SettingsDialog(QDialog):
     def resizeEvent(self, event):  # noqa: N802
         super().resizeEvent(event)
         self._update_footer_layout(event.size().width())
+        overlay = getattr(self, "_settings_bg_overlay", None)
+        if overlay is not None:
+            overlay.setGeometry(self.rect())
 
     def _refresh_footer_layout(self):
         self._update_footer_layout(self.width())
@@ -4524,4 +4662,11 @@ class SettingsDialog(QDialog):
         self._custom_bg_theme_info_lbl.setVisible(enabled and use_theme)
         self._custom_bg_path_edit.setEnabled(enabled and not use_theme)
         self._custom_bg_browse_btn.setEnabled(enabled and not use_theme)
+        update_overlay = getattr(self, "_settings_bg_overlay", None)
+        if update_overlay is not None:
+            update_overlay.setGeometry(self.rect())
+            update_overlay.lower()
+        updater = getattr(self, "_update_settings_background_overlay", None)
+        if callable(updater):
+            updater(enabled, use_theme, path)
         self.settings_changed.emit()
