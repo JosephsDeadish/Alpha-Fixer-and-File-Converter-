@@ -407,12 +407,13 @@ def _load_svg(path: str) -> Image.Image:
     if _has_cairosvg():
         import cairosvg
         png_bytes = cairosvg.svg2png(url=path)
-        img = Image.open(io.BytesIO(png_bytes))
-        try:
-            img.load()
-            return img.convert("RGBA")
-        finally:
-            img.close()
+        with io.BytesIO(png_bytes) as buffer:
+            img = Image.open(buffer)
+            try:
+                img.load()
+                return img.convert("RGBA")
+            finally:
+                img.close()
 
     if _has_svglib():
         from svglib.svglib import svg2rlg
@@ -421,12 +422,13 @@ def _load_svg(path: str) -> Image.Image:
         if drawing is None:
             raise ValueError(f"svglib could not parse SVG file: {path}")
         png_bytes = renderPM.drawToString(drawing, fmt="PNG")
-        img = Image.open(io.BytesIO(png_bytes))
-        try:
-            img.load()
-            return img.convert("RGBA")
-        finally:
-            img.close()
+        with io.BytesIO(png_bytes) as buffer:
+            img = Image.open(buffer)
+            try:
+                img.load()
+                return img.convert("RGBA")
+            finally:
+                img.close()
 
     raise ImportError(
         "SVG input requires bundled QtSvg, cairosvg or svglib.\n"

@@ -451,6 +451,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+SVG fallback and Wand DDS decoding close renderer-output buffers even when
+Pillow rejects the header before returning an image. Bounded generated-media
+regressions cover malformed/truncated outputs, memory failures, valid retries and
+PNG/TIFF file-handle cleanup alongside orientation/metadata checks. Optional
+renderer output is mocked in these failure tests; real-corpus, packaged-renderer
+and sustained resource qualification remain outstanding.
+
 Settings and theme backups publish through sibling staging rather than truncating
 an existing backup before writing succeeds. Injected write, close and publication
 failures verify prior bytes survive, original errors remain visible and retry

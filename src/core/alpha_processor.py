@@ -58,11 +58,12 @@ def _load_dds_via_wand(path: str) -> Image.Image:
     with WandImage(filename=path) as wimg:
         wimg.format = "png"
         blob = wimg.make_blob()
-    _tmp = Image.open(io.BytesIO(blob))
-    try:
-        return _tmp.convert("RGBA")
-    finally:
-        _tmp.close()
+    with io.BytesIO(blob) as buffer:
+        _tmp = Image.open(buffer)
+        try:
+            return _tmp.convert("RGBA")
+        finally:
+            _tmp.close()
 
 
 def _try_load_dds_via_wand(path: str, *, context: str = "") -> Optional[Image.Image]:
