@@ -144,6 +144,48 @@ class _BackgroundPathEdit(QLineEdit):
         super().dropEvent(event)
 
 
+class _BackgroundPreviewLabel(QLabel):
+    """Preview label that rescales the loaded background pixmap on resize."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._source_pixmap = QPixmap()
+        self._message_text = "No preview available"
+
+    def set_preview_pixmap(self, pixmap: QPixmap) -> None:
+        self._source_pixmap = QPixmap(pixmap)
+        self._message_text = ""
+        self._refresh_pixmap()
+
+    def set_preview_message(self, message: str) -> None:
+        self._source_pixmap = QPixmap()
+        self._message_text = message
+        self.setPixmap(QPixmap())
+        self.setText(message)
+
+    def clear_preview(self) -> None:
+        self.set_preview_message("No preview available")
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._refresh_pixmap()
+
+    def _refresh_pixmap(self) -> None:
+        if self._source_pixmap.isNull():
+            return
+        target = self.contentsRect().size()
+        if target.width() <= 0 or target.height() <= 0:
+            return
+        self.setText("")
+        self.setPixmap(
+            self._source_pixmap.scaled(
+                target,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+
+
 class SettingsDialog(QDialog):
     theme_changed = pyqtSignal(dict)
     settings_changed = pyqtSignal()
@@ -403,7 +445,7 @@ class SettingsDialog(QDialog):
         self._custom_bg_browse_btn.setAccessibleDescription(self._custom_bg_browse_btn.toolTip())
         _cbg_file_hl.addWidget(self._custom_bg_browse_btn)
         _cbg_vl.addWidget(self._custom_bg_file_row)
-        self._custom_bg_preview = QLabel("No preview available")
+        self._custom_bg_preview = _BackgroundPreviewLabel()
         self._custom_bg_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._custom_bg_preview.setFrameShape(QFrame.Shape.StyledPanel)
         self._custom_bg_preview.setMinimumSize(220, 124)
@@ -467,32 +509,21 @@ class SettingsDialog(QDialog):
 
         def _update_custom_bg_preview(enabled: bool, use_theme: bool, path: str) -> None:
             if not enabled or use_theme:
-                self._custom_bg_preview.clear()
-                self._custom_bg_preview.setText("No preview available")
+                self._custom_bg_preview.clear_preview()
                 self._custom_bg_preview.setVisible(False)
                 return
             self._custom_bg_preview.setVisible(True)
             if not path:
-                self._custom_bg_preview.setPixmap(QPixmap())
-                self._custom_bg_preview.setText("Choose a background file to preview it here.")
+                self._custom_bg_preview.set_preview_message("Choose a background file to preview it here.")
                 return
             if not os.path.isfile(path):
-                self._custom_bg_preview.setPixmap(QPixmap())
-                self._custom_bg_preview.setText("Selected background file was not found.")
+                self._custom_bg_preview.set_preview_message("Selected background file was not found.")
                 return
             pixmap = _background_preview_pixmap(path)
             if pixmap.isNull():
-                self._custom_bg_preview.setPixmap(QPixmap())
-                self._custom_bg_preview.setText(f"Preview unavailable\n{os.path.basename(path)}")
+                self._custom_bg_preview.set_preview_message(f"Preview unavailable\n{os.path.basename(path)}")
                 return
-            self._custom_bg_preview.setText("")
-            self._custom_bg_preview.setPixmap(
-                pixmap.scaled(
-                    self._custom_bg_preview.size(),
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-            )
+            self._custom_bg_preview.set_preview_pixmap(pixmap)
 
         def _update_custom_bg_state():
             enabled = self._custom_bg_check.isChecked()
