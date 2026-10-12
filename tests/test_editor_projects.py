@@ -2094,6 +2094,183 @@ def test_repeated_late_project_failure_and_cancel_release_prepared_media(
     assert project.recovery_path.read_bytes() == disk[2]
 
 
+@pytest.mark.parametrize("kind", ["gif", "video"])
+def test_mixed_project_replacement_cycles_bound_native_and_qt_ownership(
+        dialogs, tmp_path, monkeypatch, kind):
+    import copy
+    import tempfile
+    from pathlib import Path
+    from PyQt6.QtCore import QCoreApplication, QEvent
+    from src.ui import editor_project, video_tool
+
+    media_directory = tmp_path / "prepared-media"
+    media_directory.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(media_directory))
+    source, still = sources(tmp_path)
+    widget = dialogs(kind)
+    project = widget._project
+    project.timer.stop()
+    if kind == "gif":
+        widget._add_paths([str(source), str(still)])
+        control_name = "_delay_slider"
+    else:
+        executable = video_tool._get_ffmpeg_exe()
+        if not executable:
+            pytest.skip("Existing FFmpeg backend unavailable")
+        video = tmp_path / "native.mp4"
+        subprocess.run(
+            [executable, "-y", "-v", "error", "-f", "lavfi", "-i",
+             "color=c=red:s=16x16:r=20:d=0.3", "-c:v", "libx264",
+             "-pix_fmt", "yuv420p", str(video)],
+            check=True, capture_output=True, timeout=30)
+        widget._load_image_paths([str(source)])
+        widget._load_video_paths([str(video)])
+        assert len(widget._clips) == 2
+        if video_tool._get_ffprobe_exe() is None:
+            pytest.skip("Existing FFprobe backend unavailable")
+        assert widget._clips[1].preferred_video_stream_index == 0
+        control_name = "_brightness_slider"
+    control = getattr(widget, control_name)
+    path = tmp_path / "saved.json"
+    save(widget, path)
+    assert project.autosave()
+    wait(widget)
+    lock = project._lock
+    recovery_bytes = project.recovery_path.read_bytes()
+    document = read_project(path)
+    broken = copy.deepcopy(document)
+    if kind == "gif":
+        broken["entries"][-1]["png"] = "not-base64"
+    else:
+        broken["entries"][-1]["frames"] += 1
+    candidate = tmp_path / "candidate.json"
+    resources, readers, prepared_paths, workers = [], [], [], []
+    image_loader = video_tool._load_image_as_clip
+    video_loader = video_tool._load_video_clip
+    from src.core import editor_projects
+    png_decoder = editor_projects.decode_png
+
+    def track_png(entry):
+        image = png_decoder(entry)
+        image.close = Mock(wraps=image.close)
+        resources.append((image, (image,)))
+        assert sum(not resource.close.call_count for resource, _ in resources) <= 8
+        return image
+
+    def track_clip(loader, *args, **kwargs):
+        clip = loader(*args, **kwargs)
+        assert clip is not None
+        clip.close = Mock(wraps=clip.close)
+        getter = clip._get_frame
+        owned = tuple(getter._frames) if clip.clip_type == "gif" else ()
+        resources.append((clip, owned))
+        assert sum(not resource.close.call_count for resource, _ in resources) <= 4
+        if clip.clip_type == "video":
+            # Saved stream selection invokes the real FFmpeg remux fallback.
+            assert len(getter._cleanup_paths) == 1
+            prepared_paths.extend(Path(p) for p in getter._cleanup_paths)
+            with clip.get_frame(1):
+                pass
+            reader = getter._reader
+            assert reader is not None
+            reader.close = Mock(wraps=reader.close)
+            readers.append((getter, reader))
+            assert sum(not reader.close.call_count for _, reader in readers) <= 2
+            assert len(list(media_directory.iterdir())) <= 2
+        return clip
+
+    def flush_workers():
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        QApplication.processEvents()
+        assert all(sip.isdeleted(job) for job in workers)
+        assert project.findChildren(editor_project._ProjectJob) == []
+
+    def finished_job(job, callback, loading):
+        workers.append(job)
+        original_finish(job, callback, loading)
+
+    original_finish = project._finish
+    with patch.object(editor_projects, "decode_png", side_effect=track_png), \
+            patch.object(video_tool, "_load_image_as_clip",
+                         side_effect=lambda *a, **kw: track_clip(image_loader, *a, **kw)), \
+            patch.object(video_tool, "_load_video_clip",
+                         side_effect=lambda *a, **kw: track_clip(video_loader, *a, **kw)), \
+            patch.object(project, "_finish", side_effect=finished_job), \
+            patch.object(editor_project.QMessageBox, "critical") as error:
+        for cycle in range(6):
+            for outcome in ("replace", "cancel", "failure"):
+                control.setValue(document["controls"][control_name] + 1)
+                before = tuple(project.entries), project.fingerprint()
+                write_project(candidate, broken if outcome == "failure" else document)
+                with patch.object(editor_project.QMessageBox, "question",
+                                  return_value=(QMessageBox.StandardButton.Cancel if outcome == "cancel"
+                                                else QMessageBox.StandardButton.Discard)):
+                    assert project.load(candidate, recovery=bool(cycle % 2))
+                    wait(widget)
+                flush_workers()
+                if outcome == "replace":
+                    assert all(new is not old for new, old in zip(project.entries, before[0]))
+                    assert not widget._undo_stack and not widget._redo_stack
+                    assert widget._history_entries <= set(project.entries)
+                    assert project.dirty is bool(cycle % 2)
+                else:
+                    assert (tuple(project.entries), project.fingerprint()) == before
+                live_resources = [(resource, images) for resource, images in resources
+                                  if not resource.close.call_count]
+                assert len(live_resources) == (4 if kind == "gif" else 2)
+                for resource, images in resources:
+                    if resource.close.call_count:
+                        resource.close.assert_called_once()
+                        for image in images:
+                            with pytest.raises(ValueError, match="closed"):
+                                image.getpixel((0, 0))
+                if kind == "video":
+                    assert sum(not reader.close.call_count for _, reader in readers) == 1
+                    assert sum(p.exists() for p in prepared_paths) == 1
+                    assert len(list(media_directory.iterdir())) == 1
+                    assert all(getter._reader is None and not getter._cleanup_paths
+                               for getter, reader in readers if reader.close.call_count)
+                assert project._job is None and not project._loading
+                assert project._lock is lock and lock.isLocked()
+                assert project.recovery_path.read_bytes() == recovery_bytes
+                assert not candidate.with_suffix(".json.lock").exists()
+        assert error.call_count == 6
+    assert len(resources) == (66 if kind == "gif" else 36)
+    assert len(workers) == 36
+    assert len(readers) == (0 if kind == "gif" else 18)
+    assert len(prepared_paths) == len(readers)
+    try:
+        with patch.object(editor_project.QMessageBox, "question",
+                          return_value=QMessageBox.StandardButton.Discard):
+            assert widget.close()
+        flush_workers()
+        assert project._lock is None and not lock.isLocked()
+        assert not project.timer.isActive() and not widget._preview_timer.isActive()
+        assert not project.entries and not widget._history_entries
+        assert all(resource.close.call_count == 1 for resource, _ in resources)
+        for _, images in resources:
+            for image in images:
+                with pytest.raises(ValueError, match="closed"):
+                    image.getpixel((0, 0))
+        assert all(reader.close.call_count == 1 for _, reader in readers)
+        assert all(getter._reader is None and not getter._cleanup_paths for getter, _ in readers)
+        assert all(not path.exists() for path in prepared_paths)
+        assert not list(media_directory.iterdir())
+        assert not list(tmp_path.rglob("*.lock"))
+        assert not list(tmp_path.rglob(".alpha_fixer_save_*"))
+        assert project.recovery_path.read_bytes() == recovery_bytes
+    finally:
+        project.commit_close()
+        widget._preview_timer.stop()
+        if kind == "gif":
+            widget._release_frames()
+        else:
+            widget._release_clips()
+        for resource, _ in resources:
+            if not resource.close.call_count:
+                resource.close()
+
+
 def test_wrong_editor_and_bounded_images(dialogs, tmp_path):
     _, still = sources(tmp_path)
     gif = dialogs("gif")

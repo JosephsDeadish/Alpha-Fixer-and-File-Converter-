@@ -451,6 +451,14 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Bounded repeated project/recovery resource tests exercise six successful
+replacements, six cancellations and six failures per builder. Ownership checks
+cover decoded GIF images, video clips, native FFmpeg remux readers/files, Qt jobs,
+unchanged recovery snapshots and released session locks. Final assertions use
+the production dialog close path rather than directly releasing resources.
+These offscreen generated-media checks do not certify sustained hours-long
+stress, native device behavior, physical storage failure or power-loss recovery.
+
 Embedded GIF project frames undergo PNG structural verification before pixel
 decoding, rejecting corrupt IDAT checksums and missing IEND chunks rather than
 silently accepting damaged media. Open/recovery regressions verify prepared-image
