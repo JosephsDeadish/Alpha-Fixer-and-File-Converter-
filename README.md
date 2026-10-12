@@ -451,6 +451,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Embedded GIF project frames undergo PNG structural verification before pixel
+decoding, rejecting corrupt IDAT checksums and missing IEND chunks rather than
+silently accepting damaged media. Open/recovery regressions verify prepared-image
+cleanup and preservation of the existing dirty timeline, pixels, playhead,
+history, locks and last-good project/recovery bytes. These bounded checks do not
+qualify physical storage failure, power loss or complete native recovery workflows.
+
 GIF Builder imports TIFF pages as independent RGBA images, preserving each page's
 dimensions, colors, alpha and order instead of compositing pages onto one canvas.
 Animated disposal/compositing is delegated to Pillow's decoder. Import diagnostics

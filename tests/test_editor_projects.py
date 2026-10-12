@@ -1768,6 +1768,101 @@ def test_generated_video_audio_split_roundtrip(dialogs, tmp_path):
     assert recovered._project.dirty and recovered._project.path == ""
 
 
+@pytest.mark.parametrize("recovery", [False, True])
+@pytest.mark.parametrize("corruption", ["idat_crc", "missing_iend", "idat_data"])
+def test_invalid_embedded_png_keeps_live_session_and_releases_images(
+        dialogs, tmp_path, recovery, corruption):
+    import base64
+    import struct
+    import zlib
+    from src.core import editor_projects
+
+    _, still = sources(tmp_path)
+    widget = dialogs("gif")
+    project = widget._project
+    project.timer.stop()
+    widget._add_paths([str(still), str(still)])
+    path = tmp_path / "live.json"
+    save(widget, path)
+    assert project.autosave()
+    wait(widget)
+    document = read_project(path)
+    raw = bytearray(base64.b64decode(document["entries"][-1]["png"]))
+    if corruption == "missing_iend":
+        raw = raw[:-12]
+    else:
+        offset = 8
+        while raw[offset + 4:offset + 8] != b"IDAT":
+            offset += struct.unpack(">I", raw[offset:offset + 4])[0] + 12
+        length = struct.unpack(">I", raw[offset:offset + 4])[0]
+        if corruption == "idat_crc":
+            raw[offset + 8 + length] ^= 1
+        else:
+            raw[offset + 8] = 0
+            checksum = zlib.crc32(raw[offset + 4:offset + 8 + length])
+            raw[offset + 8 + length:offset + 12 + length] = struct.pack(">I", checksum)
+    document["entries"][-1]["png"] = base64.b64encode(raw).decode("ascii")
+    candidate = tmp_path / "invalid.json"
+    write_project(candidate, document)
+    widget._frame_list.setCurrentRow(1)
+    widget._scrubber.setValue(1)
+    widget._pf_check.setChecked(True)
+    widget._pf_slider.setValue(333)
+    entries = tuple(project.entries)
+    fingerprint = project.fingerprint()
+    history = list(widget._undo_stack), list(widget._redo_stack)
+    state = project.path, project._saved, project._autosaved, project._lock
+    disk = path.read_bytes(), candidate.read_bytes(), project.recovery_path.read_bytes()
+    pixels = [entry._pil.tobytes() for entry in entries]
+    prepared, opened, buffers = [], [], []
+    decode = editor_projects.decode_png
+    image_open = Image.open
+
+    def tracked_open(buffer, *args, **kwargs):
+        image = image_open(buffer, *args, **kwargs)
+        image.close = Mock(wraps=image.close)
+        opened.append(image)
+        buffers.append(buffer)
+        return image
+
+    def tracked_decode(entry):
+        with patch.object(Image, "open", side_effect=tracked_open):
+            image = decode(entry)
+        image.close = Mock(wraps=image.close)
+        prepared.append(image)
+        return image
+
+    with patch.object(editor_projects, "decode_png", side_effect=tracked_decode), \
+            patch("src.ui.editor_project.QMessageBox.critical") as error, \
+            patch("src.ui.editor_project.QMessageBox.question") as replacement:
+        assert project.load(candidate, recovery=recovery)
+        wait(widget)
+    error.assert_called_once()
+    replacement.assert_not_called()
+    assert len(prepared) == 1
+    prepared[0].close.assert_called_once()
+    with pytest.raises(ValueError, match="closed"):
+        prepared[0].getpixel((0, 0))
+    assert len(opened) == (4 if corruption == "idat_data" else 3)
+    for image in opened:
+        image.close.assert_called_once()
+        with pytest.raises(ValueError, match="closed"):
+            image.getpixel((0, 0))
+    assert all(buffer.closed for buffer in buffers)
+    assert tuple(project.entries) == entries and project.fingerprint() == fingerprint
+    assert project.dirty
+    assert (widget._undo_stack, widget._redo_stack) == history
+    assert widget._frame_list.currentRow() == 1 and widget._scrubber.value() == 1
+    assert (project.path, project._saved, project._autosaved, project._lock) == state
+    assert project._lock.isLocked()
+    assert (path.read_bytes(), candidate.read_bytes(), project.recovery_path.read_bytes()) == disk
+    assert [entry._pil.tobytes() for entry in entries] == pixels
+    assert project._job is None and not project._loading
+    assert project.open_button.isEnabled() and widget._content_scroll.isEnabled()
+    assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+    assert not list(tmp_path.glob("invalid.json.lock"))
+
+
 def test_repeated_truncated_gif_project_load_releases_partial_frames(dialogs, tmp_path):
     from src.ui import video_tool
 

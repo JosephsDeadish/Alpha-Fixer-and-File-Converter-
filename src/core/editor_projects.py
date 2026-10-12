@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+from contextlib import closing
 import io
 import hashlib
 import json
@@ -182,11 +183,16 @@ def decode_png(entry):
         raw = base64.b64decode(entry["png"], validate=True)
         if len(raw) > MAX_FRAME_BYTES:
             raise ValueError("PNG frame exceeds 8 MiB")
-        with Image.open(io.BytesIO(raw)) as image:
-            if image.format != "PNG" or list(image.size) != entry["size"] or getattr(image, "n_frames", 1) != 1:
-                raise ValueError("Invalid embedded PNG")
-            image.load()
-            return image.convert("RGBA")
+        with io.BytesIO(raw) as buffer:
+            with closing(Image.open(buffer)) as image:
+                if image.format != "PNG" or list(image.size) != entry["size"] or getattr(image, "n_frames", 1) != 1:
+                    raise ValueError("Invalid embedded PNG")
+                # Pixel loading alone accepts bad IDAT checksums and a missing IEND.
+                image.verify()
+        with io.BytesIO(raw) as buffer:
+            with closing(Image.open(buffer)) as image:
+                image.load()
+                return image.convert("RGBA")
     except Exception as error:
         raise ValueError(f"Cannot decode project frame: {error}") from error
 
