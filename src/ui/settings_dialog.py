@@ -2206,6 +2206,37 @@ class SettingsDialog(QDialog):
         scale_note.setProperty("settingsHint", True)
         scale_gl.addWidget(scale_note, 1, 0, 1, 2)
 
+        self._scale_preview_frame = QFrame()
+        self._scale_preview_frame.setObjectName("scalePreviewFrame")
+        self._scale_preview_frame.setProperty("settingsHint", True)
+        scale_preview_layout = QVBoxLayout(self._scale_preview_frame)
+        scale_preview_layout.setContentsMargins(8, 8, 8, 8)
+        scale_preview_layout.setSpacing(6)
+        self._scale_preview_title = QLabel("Live preview")
+        self._scale_preview_title.setProperty("settingsHint", True)
+        self._scale_preview_title.setWordWrap(True)
+        scale_preview_layout.addWidget(self._scale_preview_title)
+        self._scale_preview_sample_label = QLabel("Sample label follows the current UI scale.")
+        self._scale_preview_sample_label.setWordWrap(True)
+        scale_preview_layout.addWidget(self._scale_preview_sample_label)
+        sample_row = QHBoxLayout()
+        sample_row.setContentsMargins(0, 0, 0, 0)
+        sample_row.setSpacing(6)
+        self._scale_preview_button = QPushButton("Sample button")
+        self._scale_preview_combo = QComboBox()
+        self._scale_preview_combo.addItems(["Sample A", "Sample B", "Sample C"])
+        self._scale_preview_combo.setMaximumWidth(160)
+        sample_row.addWidget(self._scale_preview_button)
+        sample_row.addWidget(self._scale_preview_combo, 1)
+        scale_preview_layout.addLayout(sample_row)
+        self._scale_preview_detail = QLabel(
+            "Button height, spacing, border radius, and padding all update live."
+        )
+        self._scale_preview_detail.setWordWrap(True)
+        self._scale_preview_detail.setProperty("settingsHint", True)
+        scale_preview_layout.addWidget(self._scale_preview_detail)
+        scale_gl.addWidget(self._scale_preview_frame, 6, 0, 1, 2)
+
         # Button / Control Height (items 6/7)
         scale_gl.addWidget(QLabel("Button Height:"), 2, 0)
         self._btn_height_combo = QComboBox()
@@ -2283,6 +2314,48 @@ class SettingsDialog(QDialog):
         )
         self._panel_padding_combo.setMaximumWidth(220)
         scale_gl.addWidget(self._panel_padding_combo, 5, 1, Qt.AlignmentFlag.AlignLeft)
+
+        def _update_scale_preview() -> None:
+            btn_height_map = {"Compact": 22, "Normal": 26, "Comfortable": 32}
+            spacing_map = {"Tight": 2, "Normal": 4, "Relaxed": 8}
+            radius_map = {"None": 0, "Subtle": 3, "Normal": 6, "Rounded": 10, "Pill": 16}
+            padding_map = {"Minimal": 2, "Normal": 6, "Spacious": 12}
+            scale_key = self._settings.get("ui_scale", "Normal")
+            self._scale_preview_title.setText(
+                f"Live preview — {scale_key} scale, "
+                f"{self._font_size_spin.value()} pt tooltip font, "
+                f"{self._btn_height_combo.currentText().split('  ', 1)[0]} buttons"
+            )
+            self._scale_preview_sample_label.setText(
+                "Sample label follows the current UI scale. "
+                "Try changing scale, height, spacing, radius, or padding."
+            )
+            btn_h_key = self._btn_height_combo.currentData() or "Normal"
+            spacing_key = self._widget_spacing_combo.currentData() or "Normal"
+            radius_key = self._border_radius_combo.currentData() or "Normal"
+            padding_key = self._panel_padding_combo.currentData() or "Normal"
+            btn_h = btn_height_map.get(btn_h_key, 26)
+            spacing = spacing_map.get(spacing_key, 4)
+            radius = radius_map.get(radius_key, 6)
+            padding = padding_map.get(padding_key, 6)
+            self._scale_preview_button.setMinimumHeight(btn_h)
+            self._scale_preview_combo.setMinimumHeight(btn_h)
+            self._scale_preview_combo.setStyleSheet(
+                f"QComboBox {{ min-height: {btn_h}px; }}"
+            )
+            self._scale_preview_frame.setStyleSheet(
+                f"#scalePreviewFrame {{ border: 1px solid #666; border-radius: {radius}px; }}"
+            )
+            layout = self._scale_preview_frame.layout()
+            if layout is not None:
+                layout.setSpacing(spacing)
+                layout.setContentsMargins(padding, padding, padding, padding)
+            self._scale_preview_detail.setText(
+                f"Button height {btn_h}px • widget spacing {spacing}px • border radius {radius}px • panel padding {padding}px."
+            )
+
+        self._update_scale_preview = _update_scale_preview
+        self.settings_changed.connect(lambda: _update_scale_preview())
 
         gv.addWidget(grp_scale)
 
@@ -2896,6 +2969,7 @@ class SettingsDialog(QDialog):
         pp_val = self._settings.get("panel_padding", "Normal")
         _pp_map = {"Minimal": 0, "Normal": 1, "Spacious": 2}
         self._panel_padding_combo.setCurrentIndex(_pp_map.get(pp_val, 1))
+        self._update_scale_preview()
         # History max entries
         self._history_max_spin.setValue(self._settings.get("history_max_entries", 50))
         self._history_max_conv_spin.setValue(

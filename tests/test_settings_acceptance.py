@@ -249,6 +249,25 @@ def test_custom_background_preview_animates_video_files(app, dialog, tmp_path, m
     assert widget._custom_bg_preview._frame_timer.isActive()
 
 
+def test_ui_scale_preview_reflects_layout_controls(app, dialog):
+    widget, _ = dialog
+
+    widget._ui_scale_combo.setCurrentIndex(widget._ui_scale_combo.findText("Giant  (175%)"))
+    widget._btn_height_combo.setCurrentIndex(widget._btn_height_combo.findText("Comfortable  (32 px min)"))
+    widget._widget_spacing_combo.setCurrentIndex(widget._widget_spacing_combo.findText("Relaxed  (8 px)"))
+    widget._border_radius_combo.setCurrentIndex(widget._border_radius_combo.findText("Pill  (16 px)"))
+    widget._panel_padding_combo.setCurrentIndex(widget._panel_padding_combo.findText("Spacious  (12 px)"))
+    app.processEvents()
+
+    assert widget._scale_preview_title.text().startswith("Live preview — Giant")
+    assert widget._scale_preview_button.minimumHeight() == 32
+    assert widget._scale_preview_combo.minimumHeight() == 32
+    assert widget._scale_preview_frame.layout().spacing() == 8
+    assert widget._scale_preview_frame.layout().contentsMargins().left() == 12
+    assert "border-radius: 16px" in widget._scale_preview_frame.styleSheet()
+    assert "Button height 32px" in widget._scale_preview_detail.text()
+
+
 def test_custom_background_recent_list_is_saved_and_restored(settings_session, tmp_path):
     from PyQt6.QtGui import QColor, QImage
 
