@@ -1287,6 +1287,201 @@ def test_replace_prompt_late_edit_keeps_live_session(dialogs, tmp_path, kind):
 
 
 @pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("when", ["after_try_lock", "after_lock_stat"])
+def test_autosave_rejects_storage_replaced_during_lock_acquisition(
+        dialogs, tmp_path, kind, when):
+    from PyQt6.QtCore import QLockFile
+    from src.ui import editor_project
+
+    _, still = sources(tmp_path)
+    widget = dialogs(kind)
+    project = widget._project
+    project.timer.stop()
+    if kind == "gif":
+        widget._add_paths([str(still)])
+        control = widget._delay_slider
+    else:
+        widget._load_image_paths([str(still)])
+        control = widget._brightness_slider
+    path = tmp_path / "saved.json"
+    save(widget, path)
+    assert project.autosave()
+    wait(widget)
+    disk = path.read_bytes(), project.recovery_path.read_bytes()
+    project._release_session()
+    control.setValue(control.value() + 10)
+    state = project.path, project._saved, project._autosaved, project.fingerprint()
+    entries = tuple(project.entries)
+    detached = tmp_path / "detached-recovery"
+    lock_path = project.recovery_path.with_suffix(".json.lock")
+    acquiring = QLockFile(str(lock_path))
+    competing = QLockFile(str(lock_path))
+    competing.setStaleLockTime(0)
+    original_try_lock = acquiring.tryLock
+    original_stat = type(lock_path).stat
+    replaced = False
+
+    def replace_storage():
+        nonlocal replaced
+        project.recovery_directory.rename(detached)
+        project.recovery_directory.mkdir()
+        project.recovery_path.write_bytes(disk[1])
+        assert competing.tryLock(0)
+        replaced = True
+
+    def try_lock(timeout):
+        result = original_try_lock(timeout)
+        assert result
+        if when == "after_try_lock":
+            replace_storage()
+        return result
+
+    def stat(candidate, *args, **kwargs):
+        result = original_stat(candidate, *args, **kwargs)
+        if when == "after_lock_stat" and candidate == lock_path and not replaced:
+            replace_storage()
+        return result
+
+    try:
+        with patch.object(editor_project, "QLockFile", return_value=acquiring), \
+                patch.object(acquiring, "tryLock", side_effect=try_lock), \
+                patch.object(type(lock_path), "stat", stat):
+            assert not project.autosave()
+        assert replaced and project._job is None
+        assert "recovery lock storage changed" in project.status.text().lower()
+        assert project._retry_after > time.monotonic()
+        assert project._lock is None and project._lock_identity is None
+        assert not sip.ispyowned(acquiring)
+        assert project.dirty and tuple(project.entries) == entries
+        assert (project.path, project._saved, project._autosaved, project.fingerprint()) == state
+        assert (path.read_bytes(), project.recovery_path.read_bytes()) == disk
+        assert (detached / project.recovery_path.name).read_bytes() == disk[1]
+        competing_bytes = lock_path.read_bytes()
+        project._release_session()
+        assert competing.isLocked() and lock_path.read_bytes() == competing_bytes
+        assert not list(tmp_path.rglob(".alpha_fixer_save_*"))
+    finally:
+        competing.unlock()
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+def test_releasing_displaced_recovery_lock_keeps_competing_lock(dialogs, tmp_path, kind):
+    from PyQt6.QtCore import QLockFile
+
+    _, still = sources(tmp_path)
+    widget = dialogs(kind)
+    project = widget._project
+    project.timer.stop()
+    if kind == "gif":
+        widget._add_paths([str(still)])
+    else:
+        widget._load_image_paths([str(still)])
+    assert project.autosave()
+    wait(widget)
+    last_good = project.recovery_path.read_bytes()
+    own_lock = project._lock
+    detached = tmp_path / "detached-recovery"
+    project.recovery_directory.rename(detached)
+    project.recovery_directory.mkdir()
+    project.recovery_path.write_bytes(last_good)
+    lock_path = project.recovery_path.with_suffix(".json.lock")
+    competing = QLockFile(str(lock_path))
+    competing.setStaleLockTime(0)
+    assert competing.tryLock(0)
+    try:
+        competing_bytes = lock_path.read_bytes()
+        project._release_session()
+        assert project._lock is None and project._lock_identity is None
+        assert not sip.ispyowned(own_lock)
+        assert competing.isLocked() and lock_path.read_bytes() == competing_bytes
+        assert project.recovery_path.read_bytes() == last_good
+        assert (detached / project.recovery_path.name).read_bytes() == last_good
+    finally:
+        competing.unlock()
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("when", ["before_save", "worker"])
+@pytest.mark.parametrize("occupied", [False, True])
+def test_autosave_rejects_recreated_recovery_directory_and_retries(
+        dialogs, tmp_path, kind, when, occupied):
+    from PyQt6.QtCore import QLockFile
+    from src.ui import editor_project
+
+    _, still = sources(tmp_path)
+    widget = dialogs(kind)
+    project = widget._project
+    project.timer.stop()
+    if kind == "gif":
+        widget._add_paths([str(still)])
+        control = widget._delay_slider
+    else:
+        widget._load_image_paths([str(still)])
+        control = widget._brightness_slider
+    path = tmp_path / "saved.json"
+    save(widget, path)
+    assert project.autosave()
+    wait(widget)
+    before = path.read_bytes(), project.recovery_path.read_bytes()
+    state = project.path, project._saved, project._autosaved, project._lock
+    entries = tuple(project.entries)
+    control.setValue(control.value() + 10)
+    captured = project.fingerprint()
+    detached = tmp_path / "detached-recovery"
+    competing = QLockFile(str(project.recovery_path) + ".lock")
+    competing.setStaleLockTime(0)
+
+    def disconnect():
+        project.recovery_directory.rename(detached)
+        project.recovery_directory.mkdir()
+        project.recovery_path.write_bytes(before[1])
+        # A reader can claim this pathname while the writer still holds the old inode.
+        if occupied:
+            assert competing.tryLock(0)
+
+    function = "encode_png" if kind == "gif" else "source_signature"
+    original = getattr(editor_project, function)
+
+    def interrupted(value):
+        disconnect()
+        return original(value)
+
+    try:
+        if when == "before_save":
+            disconnect()
+            started = project.autosave()
+            wait(widget)
+        else:
+            with patch.object(editor_project, function, side_effect=interrupted):
+                started = project.autosave()
+                wait(widget)
+        assert project.recovery_path.read_bytes() == before[1]
+        assert started is (when == "worker")
+        assert project._job is None and project._retry_after > time.monotonic()
+        assert "recovery lock" in project.status.text().lower()
+        assert project.dirty and project.fingerprint() == captured
+        assert tuple(project.entries) == entries
+        assert (project.path, project._saved, project._autosaved, project._lock) == state
+        assert project._lock.isLocked() and competing.isLocked() is occupied
+        assert path.read_bytes() == before[0]
+        assert (detached / project.recovery_path.name).read_bytes() == before[1]
+        assert not list(tmp_path.rglob(".alpha_fixer_save_*"))
+    finally:
+        wait(widget)
+        competing.unlock()
+        project.recovery_path.unlink(missing_ok=True)
+        project.recovery_directory.rmdir()
+        detached.rename(project.recovery_directory)
+    assert project.autosave()
+    wait(widget)
+    assert project._autosaved == captured and project.dirty
+    assert project._lock is state[3] and project._lock.isLocked()
+    assert read_project(project.recovery_path)["controls"] == project.controls()
+    assert path.read_bytes() == before[0]
+    assert not list(tmp_path.rglob(".alpha_fixer_save_*"))
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
 @pytest.mark.parametrize("automatic", [False, True])
 @pytest.mark.parametrize("failure", ["ENOSPC", "EACCES", "EIO"])
 def test_storage_failure_preserves_project_recovery_and_retries(dialogs, tmp_path, kind, automatic, failure):
@@ -2659,10 +2854,10 @@ def test_parent_shutdown_waits_for_project_and_reopen_uses_new_identity(dialogs,
     entered, release = Event(), Event()
     writer = editor_project.write_project
 
-    def blocked_writer(*args):
+    def blocked_writer(*args, **kwargs):
         entered.set()
         assert release.wait(5)
-        writer(*args)
+        writer(*args, **kwargs)
 
     resumed = []
     with patch.object(editor_project, "write_project", side_effect=blocked_writer):
@@ -2791,10 +2986,10 @@ def test_later_shutdown_prompt_worker_retains_earlier_session(dialogs, tmp_path,
     entered, release = Event(), Event()
     writer = editor_project.write_project
 
-    def blocked_writer(*args):
+    def blocked_writer(*args, **kwargs):
         entered.set()
         assert release.wait(5)
-        writer(*args)
+        writer(*args, **kwargs)
 
     def question(widget, *_args):
         assert widget is later and project._closing_approved
@@ -3309,10 +3504,10 @@ def test_first_autosave_retains_hash_and_pending_parent_close_keeps_media(dialog
     entered, release = Event(), Event()
     writer = editor_project.write_project
     resumed = []
-    def blocked_writer(*args):
+    def blocked_writer(*args, **kwargs):
         entered.set()
         assert release.wait(5)
-        writer(*args)
+        writer(*args, **kwargs)
     with patch.object(editor_project, "write_project", side_effect=blocked_writer):
         assert widget._project.autosave()
         assert entered.wait(5)

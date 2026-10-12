@@ -451,6 +451,16 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Editor autosave verifies recovery-lock identity before starting and immediately
+before publication, and rejects directory replacement during lock acquisition.
+Displaced locks are not unlocked through a pathname that could belong to another
+writer; their native resources remain until process exit. Deterministic GIF/video
+storage-replacement regressions preserve competing locks and last-good recovery
+copies. Path checks are not atomic against subsequent external replacement.
+Physical disconnection, power-loss durability and cross-platform lock behavior
+still require qualification. Two bounded real-modal lifecycle checks timed out;
+one identical timeout also reproduced against the unchanged baseline.
+
 GIF Builder imports independent TIFF pages without carrying a preceding page's
 palette or metadata into grayscale/RGBA decoding. Generated raw/LZW mixed-page
 regressions verify pixels, alpha, dimensions, ordering and embedded project/recovery

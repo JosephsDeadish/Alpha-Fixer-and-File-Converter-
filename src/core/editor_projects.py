@@ -197,7 +197,7 @@ def decode_png(entry):
         raise ValueError(f"Cannot decode project frame: {error}") from error
 
 
-def write_project(path, document):
+def write_project(path, document, *, before_publish=None):
     from src.ui._ui_utils import staged_output_path
     validate(document)
     raw = json.dumps(document, ensure_ascii=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
@@ -208,6 +208,8 @@ def write_project(path, document):
             handle.write(raw)
             handle.flush()
             os.fsync(handle.fileno())
+        if before_publish is not None:
+            before_publish()
 
 
 def _source_stamp(stat):

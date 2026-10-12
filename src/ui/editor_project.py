@@ -6,6 +6,7 @@ from pathlib import Path
 import time
 import uuid
 
+from PyQt6 import sip
 from PyQt6.QtCore import QEvent, QObject, QThread, QTimer, QLockFile, QItemSelectionModel, pyqtSignal
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
@@ -73,6 +74,7 @@ class EditorProjectController(QObject):
         self.recovery_directory = user_data_directory() / "editor-recovery"
         self.recovery_path = self.recovery_directory / f"{kind}-{self.session_id}.json"
         self._lock = None
+        self._lock_identity = None
         self._job = None
         self._loading = False
         self._closing_approved = False
@@ -312,11 +314,23 @@ class EditorProjectController(QObject):
             if automatic:
                 self.recovery_directory.mkdir(parents=True, exist_ok=True)
                 if self._lock is None:
+                    directory_stat = self.recovery_directory.stat()
+                    directory_identity = directory_stat.st_dev, directory_stat.st_ino
                     lock = QLockFile(str(self.recovery_path) + ".lock")
                     lock.setStaleLockTime(0)
                     if not lock.tryLock(0):
                         raise OSError("Cannot claim this editor's recovery file")
+                    try:
+                        stat = Path(str(self.recovery_path) + ".lock").stat()
+                        directory_stat = self.recovery_directory.stat()
+                        if (directory_stat.st_dev, directory_stat.st_ino) != directory_identity:
+                            raise OSError("Recovery lock storage changed during acquisition")
+                    except Exception:
+                        self._abandon_recovery_lock(lock)
+                        raise
+                    self._lock_identity = stat.st_dev, stat.st_ino
                     self._lock = lock
+                self._check_recovery_lock()
         except Exception as error:
             for image in locals().get("images", []):
                 image.close()
@@ -340,7 +354,10 @@ class EditorProjectController(QObject):
                         if expected_hash is None and stamp != _source_stamp(os.stat(source)):
                             raise ValueError(f"Media changed during project I/O: {source}")
                         entry["source_sha256"] = signatures[source]
-                write_project(destination, document)
+                if automatic:
+                    write_project(destination, document, before_publish=self._check_recovery_lock)
+                else:
+                    write_project(destination, document)
                 return tuple(entry["source_sha256"] for entry in document["entries"]) if self.kind == "video" else ()
             finally:
                 for image in images:
@@ -396,6 +413,21 @@ class EditorProjectController(QObject):
 
     def autosave(self):
         return self._save(self.recovery_path, automatic=True)
+
+    def _check_recovery_lock(self):
+        # isLocked() remains true if storage is replaced beneath QLockFile.
+        try:
+            stat = Path(str(self.recovery_path) + ".lock").stat()
+        except OSError as error:
+            raise OSError("Recovery lock unavailable; restore the original recovery storage") from error
+        if (stat.st_dev, stat.st_ino) != self._lock_identity:
+            raise OSError("Recovery lock changed; restore the original recovery storage")
+
+    @staticmethod
+    def _abandon_recovery_lock(lock):
+        # Qt unlock/destruction unlinks the pathname, even if it now belongs to
+        # another writer. Keep this displaced native lock alive until process exit.
+        sip.setdeleted(lock)
 
     def confirm_replace(self):
         if not self.dirty:
@@ -700,8 +732,14 @@ class EditorProjectController(QObject):
     def _release_session(self):
         self.timer.stop()
         if self._lock is not None:
-            self._lock.unlock()
+            try:
+                self._check_recovery_lock()
+            except OSError:
+                self._abandon_recovery_lock(self._lock)
+            else:
+                self._lock.unlock()
             self._lock = None
+            self._lock_identity = None
 
     def allow_parent_close(self, resume):
         if self._loading and self._job is None:
