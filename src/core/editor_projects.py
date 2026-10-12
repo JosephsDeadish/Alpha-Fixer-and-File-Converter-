@@ -126,8 +126,18 @@ def validate(document, kind=None):
                 if not (split[0] <= entry["trim_start"] <= entry["trim_end"] <= split[6] < entry["frames"]
                         and 0 < split[2] <= split[7] and split[1] + split[2] <= split[7]):
                     raise ValueError("Invalid split audio/video span")
+                speed = entry["speed"] / 100.0
+                root_count = max(1, round((split[6] - split[0] + 1) / speed))
+                output_end = split[1] + split[2]
+                expected_start = min(split[6], split[0] + int(split[1] * speed))
+                expected_end = (split[6] if output_end == root_count else
+                                min(split[6], split[0] + int(output_end * speed) - 1))
+                if (entry["type"] == "image" or split[7] != root_count
+                        or entry["trim_start"] != expected_start or entry["trim_end"] != expected_end):
+                    raise ValueError("Split mapping does not match source cadence/audio timing")
             timeline += (entry["still_duration"] if entry["type"] == "image" else
-                         split[2] if split else max(1, round((entry["trim_end"] - entry["trim_start"] + 1) * 100 / entry["speed"])))
+                         split[2] if split else max(1, round(
+                             (entry["trim_end"] - entry["trim_start"] + 1) / (entry["speed"] / 100.0))))
     if timeline > MAX_TIMELINE_FRAMES or document["playhead"] >= max(1, timeline):
         raise ValueError("Invalid or oversized timeline/playhead")
     return document

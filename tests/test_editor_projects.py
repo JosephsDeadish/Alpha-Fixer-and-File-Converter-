@@ -1292,8 +1292,158 @@ def test_video_split_stream_mapping_data_only(dialogs, tmp_path):
             clip.close()
 
 
+@pytest.mark.parametrize("recovery", [False, True])
+@pytest.mark.parametrize("corruption", ["audio_count", "output_start", "trim_end"])
+def test_malformed_split_project_keeps_unsaved_session(dialogs, tmp_path, recovery, corruption):
+    from src.ui import editor_project
+
+    source, _ = sources(tmp_path)
+    widget = dialogs("video")
+    widget._load_image_paths([str(source)])
+    widget._clip_speed_slider.setValue(70)
+    widget._scrubber.setValue(0)
+    widget._split_clip_at_playhead()
+    path = tmp_path / "valid.json"
+    save(widget, path)
+    document = read_project(path)
+    entry = document["entries"][0]
+    if corruption == "audio_count":
+        entry["split"][7] += 1
+    elif corruption == "output_start":
+        entry["split"][1] += 1
+    else:
+        entry["trim_end"] += 1
+        entry["split"][4] = entry["trim_end"]
+    corrupt = tmp_path / "corrupt.json"
+    corrupt.write_text(json.dumps(document), encoding="utf-8")
+    corrupt_bytes = corrupt.read_bytes()
+    widget._brightness_slider.setValue(180)
+    widget._clip_list.setCurrentRow(1)
+    widget._scrubber.setValue(3)
+    project = widget._project
+    assert project.autosave()
+    wait(widget)
+    state = (project.fingerprint(), project.path, project._saved, project._autosaved,
+             project._lock, widget._clip_list.currentRow(), widget._scrubber.value())
+    entries = tuple(widget._clips)
+    history = tuple(widget._undo_stack)
+    recovery_bytes = project.recovery_path.read_bytes()
+    with patch.object(editor_project.QMessageBox, "critical") as error, \
+            patch.object(editor_project.QMessageBox, "question",
+                         return_value=QMessageBox.StandardButton.Discard) as replace, \
+            patch.object(editor_project, "prepare_entries",
+                         wraps=editor_project.prepare_entries) as prepare:
+        assert project.load(corrupt, recovery=recovery)
+        wait(widget)
+    error.assert_called_once()
+    replace.assert_not_called()
+    prepare.assert_not_called()
+    assert "kept intact" in project.status.text() and project.dirty
+    assert tuple(widget._clips) == entries and tuple(widget._undo_stack) == history
+    assert (project.fingerprint(), project.path, project._saved, project._autosaved,
+            project._lock, widget._clip_list.currentRow(), widget._scrubber.value()) == state
+    assert project._lock.isLocked()
+    assert project.recovery_path.read_bytes() == recovery_bytes
+    assert corrupt.read_bytes() == corrupt_bytes
+    assert not corrupt.with_suffix(".json.lock").exists()
+    for clip in entries:
+        with clip.get_frame(0) as frame:
+            assert frame.size == (10, 8)
+
+
+@pytest.mark.parametrize("speed", [10, 50, 70, 130, 200, 400])
+def test_nested_split_project_restores_cadence_and_live_controls(dialogs, tmp_path, speed):
+    from src.core.editor_projects import VIDEO_CONTROLS
+
+    frames = [Image.new("RGBA", (10, 8), (index * 10, 90, 180, 255)) for index in range(24)]
+    source = tmp_path / "cadence.gif"
+    try:
+        frames[0].save(source, save_all=True, append_images=frames[1:], duration=100)
+    finally:
+        for frame in frames:
+            frame.close()
+    widget = dialogs("video")
+    widget._load_image_paths([str(source)])
+    widget._trim_start_slider.setValue(2)
+    widget._trim_end_slider.setValue(21)
+    widget._clip_speed_slider.setValue(speed)
+
+    def cadence(dialog):
+        colors = []
+        for clip in dialog._clips:
+            for index in range(clip.active_frames):
+                with clip.get_frame(index) as frame:
+                    colors.append(frame.getpixel((0, 0)))
+        return colors
+
+    expected = cadence(widget)
+    widget._scrubber.setValue(0)
+    widget._split_clip_at_playhead()
+    widget._scrubber.setValue(widget._clips[0].active_frames)
+    widget._split_clip_at_playhead()
+    assert len(widget._clips) == 3 and cadence(widget) == expected
+    for name, rule in VIDEO_CONTROLS.items():
+        control = getattr(widget, name)
+        if rule is bool:
+            control.setChecked(not control.isChecked())
+        elif isinstance(rule[0], int):
+            control.setValue(rule[1] - 1)
+        else:
+            control.setCurrentIndex(control.findData(rule[-1]))
+    widget._clip_list.setCurrentRow(1)
+    widget._scrubber.setValue(len(expected) - 1)
+    controls = widget._project.controls()
+    timing = [clip._split_timing for clip in widget._clips]
+    audio = [clip._split_audio_range() for clip in widget._clips]
+    path = tmp_path / "nested.json"
+    save(widget, path)
+    loaded = dialogs("video")
+    open_project(loaded, path)
+    assert loaded._project.controls() == controls
+    assert [clip._split_timing for clip in loaded._clips] == timing
+    assert [clip._split_audio_range() for clip in loaded._clips] == audio
+    assert cadence(loaded) == expected
+    assert loaded._clip_list.currentRow() == 1
+    assert loaded._scrubber.value() == len(expected) - 1
+    assert loaded._trim_start_slider.value() == loaded._clips[1].trim_start
+    assert loaded._trim_end_slider.value() == loaded._clips[1].trim_end
+    assert loaded._clip_speed_slider.value() == speed
+    assert not loaded._project.dirty
+
+
+@pytest.mark.parametrize("frame_count,speed", [(21, 56), (145, 232)])
+def test_project_last_frame_uses_editor_rounding(dialogs, tmp_path, frame_count, speed):
+    source = tmp_path / "rounding.gif"
+    frames = [Image.new("RGBA", (10, 8), (index, 90, 180, 255)) for index in range(frame_count)]
+    try:
+        frames[0].save(source, save_all=True, append_images=frames[1:], duration=100)
+    finally:
+        for frame in frames:
+            frame.close()
+    widget = dialogs("video")
+    widget._load_image_paths([str(source)])
+    widget._clip_speed_slider.setValue(speed)
+    count = widget._clips[0].active_frames
+    widget._scrubber.setValue(count - 1)
+    path = tmp_path / "rounding.json"
+    with patch("src.ui.editor_project.QMessageBox.critical") as error:
+        save(widget, path)
+    error.assert_not_called()
+    loaded = dialogs("video")
+    open_project(loaded, path)
+    assert loaded._scrubber.maximum() == count - 1
+    assert loaded._scrubber.value() == count - 1
+    assert loaded._clips[0].active_frames == count
+    document = read_project(path)
+    document["playhead"] = count
+    with pytest.raises(ValueError, match="timeline/playhead"):
+        validate(document)
+
+
 def test_generated_video_audio_split_roundtrip(dialogs, tmp_path):
     from src.ui.video_tool import _get_ffmpeg_exe
+    from src.ui.video_preview_audio import clip_audio_target
+    from src.core.video_export import source_frame_index
     executable = _get_ffmpeg_exe()
     if not executable:
         pytest.skip("Existing FFmpeg backend unavailable")
@@ -1321,6 +1471,36 @@ def test_generated_video_audio_split_roundtrip(dialogs, tmp_path):
     assert [c._split_timing for c in loaded._clips] == [c._split_timing for c in widget._clips]
     assert all(c.has_audio for c in loaded._clips)
     assert loaded._export_fmt_combo.currentData() == "mp4"
+    expected_audio = [
+        clip_audio_target(clip, frame, widget._fps_slider.value())
+        for clip in widget._clips for frame in range(clip.active_frames)
+    ]
+    expected_snapshots = [
+        widget._snapshot_clip_render_state(clip, widget._fps_slider.value())
+        for clip in widget._clips
+    ]
+    assert widget._project.autosave()
+    wait(widget)
+    widget._project._release_session()
+    recovered = dialogs("video")
+    assert recovered._project.load(widget._project.recovery_path, recovery=True)
+    wait(recovered)
+    for restored in (loaded, recovered):
+        assert [
+            clip_audio_target(clip, frame, restored._fps_slider.value())
+            for clip in restored._clips for frame in range(clip.active_frames)
+        ] == expected_audio
+        snapshots = [
+            restored._snapshot_clip_render_state(clip, restored._fps_slider.value())
+            for clip in restored._clips
+        ]
+        for snapshot, expected in zip(snapshots, expected_snapshots):
+            for key in ("audio_start_seconds", "audio_end_seconds", "audio_tempo", "timeline_seconds"):
+                assert snapshot[key] == pytest.approx(expected[key])
+            assert [source_frame_index(snapshot, frame) for frame in range(snapshot["active_frames"])] == [
+                source_frame_index(expected, frame) for frame in range(expected["active_frames"])
+            ]
+    assert recovered._project.dirty and recovered._project.path == ""
 
 
 def test_wrong_editor_and_bounded_images(dialogs, tmp_path):

@@ -451,6 +451,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Editor projects validate split cadence/audio spans against their original source
+range before loading media. Malformed mappings cannot replace current unsaved
+edits; project playhead validation uses the same rounded duration as the editor.
+Generated-media tests cover nested splits, controls, recovery and failure-safe
+state preservation. These bounded checks do not certify native project workflows
+or physical storage recovery.
+
 Video trim and timeline seek controls accept clock timestamps in `HH:MM:SS.mmm`
 alongside frame and seconds entries. Trims use source FPS and inclusive endpoints;
 seeking uses output FPS. Valid timestamps round to the nearest frame (ties forward)
