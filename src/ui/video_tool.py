@@ -3317,7 +3317,7 @@ class VideoToolDialog(QDialog):
         trim_units = QLabel(
             "In / Out: 0-based source frames, seconds or timecode at source FPS. "
             "Clock: HH:MM:SS.mmm. SMPTE: HH:MM:SS:FF; drop-frame: HH:MM:SS;FF "
-            "(29.97/59.94 only). Right-click timecode to change its display. "
+            "(29.97/59.94 only). Right-click, Shift+F10 or Menu on timecode to change its display. "
             "Out is the included last frame's timestamp, not duration.")
         trim_units.setWordWrap(True)
         trim_vl.addWidget(trim_units)

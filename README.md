@@ -451,6 +451,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Timecode display menus are reachable with Shift+F10 or the Menu key. Cancelling
+a menu preserves an uncommitted draft; unsupported SMPTE rates correctly show
+Clock as the effective display. Invalid/skipped labels restore the current value
+with tooltip and accessible-description explanations. Bounded keyboard,
+trim/seek and drop-minute/hour regressions cover these workflows; physical
+screen-reader, audio-device and native-popup acceptance remain outstanding.
+
 SVG fallback and Wand DDS decoding close renderer-output buffers even when
 Pillow rejects the header before returning an image. Bounded generated-media
 regressions cover malformed/truncated outputs, memory failures, valid retries and

@@ -6,9 +6,10 @@ from unittest.mock import patch
 import pytest
 from PIL import Image
 from PyQt6 import sip
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer, QPoint
+from PyQt6.QtGui import QContextMenuEvent
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication, QDialog
+from PyQt6.QtWidgets import QApplication, QDialog, QMenu, QToolTip
 
 from src.ui.video_tool import VideoToolDialog, _ClipEntry
 from src.ui.clock_timecode import (
@@ -666,3 +667,184 @@ def test_clock_focus_loss_commits_and_seeking_does_not_dirty_project(video):
     assert clip.trim_start == 3
     assert video._project.dirty
     assert len(video._undo_stack) == count + 1
+
+
+@pytest.mark.parametrize("control", ["trim_start", "trim_end", "playhead"])
+@pytest.mark.parametrize("key, modifiers", [
+    (Qt.Key.Key_F10, Qt.KeyboardModifier.ShiftModifier),
+    (Qt.Key.Key_Menu, Qt.KeyboardModifier.NoModifier),
+])
+def test_keyboard_timecode_display_menu_and_exact_commit(video, control, key, modifiers):
+    clip = add_clip(video, fps=60000 / 1001)
+    entry = getattr(video, f"_{control}_timecode")
+    entry.setFocus()
+    before = len(video._undo_stack)
+    fingerprint = video._project.fingerprint()
+    observed = []
+
+    def choose_smpte():
+        menu = QApplication.activePopupWidget()
+        observed.append(isinstance(menu, QMenu))
+        if not isinstance(menu, QMenu):
+            return
+        QTest.keyClick(menu, Qt.Key.Key_Up)
+        QTest.keyClick(menu, Qt.Key.Key_Right)
+        submenu = menu.actions()[-1].menu()
+        observed.append(submenu.isVisible())
+        QTest.keyClick(submenu, Qt.Key.Key_Down)
+        QTest.keyClick(submenu, Qt.Key.Key_Return)
+
+    QTimer.singleShot(0, choose_smpte)
+    QTest.keyClick(entry, key, modifiers)
+    # Offscreen Qt has no window manager to reactivate the dialog after a popup.
+    video.activateWindow()
+    QApplication.processEvents()
+    assert observed == [True, True]
+    assert entry.hasFocus()
+    assert entry.text() == format_smpte_timecode(
+        getattr(video, f"_{control}_spin").value(),
+        25 if control == "playhead" else clip.fps)
+    assert len(video._undo_stack) == before
+    assert video._project.fingerprint() == fingerprint
+    enter(entry, "00:00:00:03")
+    assert getattr(video, f"_{control}_spin").value() == 3
+    if control == "playhead":
+        assert_playhead(video, 3, 30)
+        assert video._project.fingerprint() == fingerprint
+        assert len(video._undo_stack) == before
+    else:
+        assert getattr(clip, control) == 3
+        assert len(video._undo_stack) == before + 1
+
+
+@pytest.mark.parametrize("control", ["trim_start", "trim_end", "playhead"])
+@pytest.mark.parametrize("focus_loss", [False, True])
+def test_invalid_timecode_feedback_is_visible_accessible_and_clears(video, control, focus_loss):
+    clip = add_clip(video, fps=29.97)
+    entry = getattr(video, f"_{control}_timecode")
+    canonical = entry.text()
+    count = len(video._undo_stack)
+    fingerprint = video._project.fingerprint()
+    entry.setFocus()
+    entry.selectAll()
+    QTest.keyClicks(entry, "00:01:00;00")
+    if focus_loss:
+        video._playhead_spin.setFocus()
+    else:
+        QTest.keyClick(entry, Qt.Key.Key_Return)
+    assert entry.text() == canonical
+    assert "Invalid timecode:" in entry.accessibleDescription()
+    assert "Restored " + canonical in entry.toolTip()
+    if not focus_loss:
+        assert QToolTip.isVisible()
+    assert len(video._undo_stack) == count
+    assert video._project.fingerprint() == fingerprint
+    entry.setFocus()
+    entry.selectAll()
+    QTest.keyClicks(entry, "00:00:00:03")
+    assert "Invalid timecode:" not in entry.accessibleDescription()
+    QTest.keyClick(entry, Qt.Key.Key_Return)
+    assert getattr(video, f"_{control}_spin").value() == 3
+    assert "Invalid timecode:" not in entry.toolTip()
+    if control != "playhead":
+        assert getattr(clip, control) == 3
+    QToolTip.hideText()
+
+
+def test_display_fallback_menu_matches_actual_label_and_restores_preference(video):
+    add_clip(video, fps=29.97)
+    entry = video._trim_start_timecode
+    entry.setDisplayFormat("drop")
+    add_clip(video, fps=25)
+    assert entry.text() == "00:00:00.000"
+    menu = entry.createStandardContextMenu()
+    actions = menu.actions()[-1].menu().actions()
+    assert [action.isChecked() for action in actions] == [True, False, False]
+    assert not actions[2].isEnabled()
+    menu.deleteLater()
+    video._clip_list.setCurrentRow(0)
+    assert entry.text() == "00:00:00;00"
+    menu = entry.createStandardContextMenu()
+    assert [action.isChecked() for action in menu.actions()[-1].menu().actions()] == [
+        False, False, True]
+    menu.deleteLater()
+
+
+@pytest.mark.parametrize("reason", [
+    QContextMenuEvent.Reason.Keyboard, QContextMenuEvent.Reason.Mouse,
+])
+def test_context_event_cancel_preserves_uncommitted_draft(video, reason):
+    clip = add_clip(video)
+    entry = video._trim_start_timecode
+    entry.setFocus()
+    entry.selectAll()
+    QTest.keyClicks(entry, "00:00:00:03")
+    before = len(video._undo_stack)
+    observed = []
+
+    def cancel():
+        menu = QApplication.activePopupWidget()
+        observed.append(isinstance(menu, QMenu))
+        if isinstance(menu, QMenu):
+            QTest.keyClick(menu, Qt.Key.Key_Escape)
+
+    QTimer.singleShot(0, cancel)
+    event = QContextMenuEvent(reason, QPoint(-1, -1), entry.mapToGlobal(entry.rect().center()))
+    QApplication.sendEvent(entry, event)
+    video.activateWindow()
+    QApplication.processEvents()
+    assert observed == [True]
+    assert entry.hasFocus()
+    assert entry.isModified()
+    assert entry.text() == "00:00:00:03"
+    assert clip.trim_start == 0
+    assert len(video._undo_stack) == before
+    QTest.keyClick(entry, Qt.Key.Key_Return)
+    assert clip.trim_start == 3
+    assert len(video._undo_stack) == before + 1
+
+
+@pytest.mark.parametrize("fps, frames", [
+    (30000 / 1001, (1799, 1800, 17981, 17982, 107891, 107892)),
+    (60000 / 1001, (3599, 3600, 35963, 35964, 215783, 215784)),
+])
+def test_drop_frame_trim_keyboard_carries_preserve_source_frame_mapping(video, fps, frames):
+    clip = add_clip(video, fps=fps)
+    clip.total_frames = frames[-1] + 2
+    clip.trim_end = clip.total_frames - 1
+    clip._get_frame = lambda index: Image.new("RGBA", (8, 8), (index % 256, 0, 0, 255))
+    video._on_clip_selected(0)
+    entry = video._trim_start_timecode
+    entry.setDisplayFormat("drop")
+    for frame in frames:
+        count = len(video._undo_stack)
+        enter(entry, format_smpte_timecode(frame, fps, True))
+        assert clip.trim_start == video._trim_start_spin.value() == frame
+        assert entry.text() == format_smpte_timecode(frame, fps, True)
+        assert video._scrubber.value() == 0
+        assert video._preview_lbl.pixmap().toImage().pixelColor(0, 0).red() == frame % 256
+        assert len(video._undo_stack) == count + 1
+    video._undo()
+    assert clip.trim_start == frames[-2]
+    assert entry.text() == format_smpte_timecode(frames[-2], fps, True)
+    video._redo()
+    assert clip.trim_start == frames[-1]
+
+
+def test_smpte_seek_rate_change_keeps_frame_and_updates_label(video):
+    clip = add_clip(video, count=100, fps=29.97)
+    clip._get_frame = lambda index: Image.new("RGBA", (8, 8), (index, 0, 0, 255))
+    video._playhead_timecode.setDisplayFormat("smpte")
+    enter(video._playhead_timecode, "00:00:02:12")
+    assert_playhead(video, 62, 62)
+    source_start = video._trim_start_timecode.text()
+    source_end = video._trim_end_timecode.text()
+    video._fps_slider.setValue(60)
+    assert video._playhead_timecode.text() == "00:00:01:02"
+    assert video._scrubber.value() == 62
+    assert (video._trim_start_timecode.text(), video._trim_end_timecode.text()) == (
+        source_start, source_end)
+    assert clip.trim_start == 0
+    video._undo()
+    assert video._playhead_timecode.text() == "00:00:02:12"
+    assert video._scrubber.value() == 62
