@@ -213,6 +213,42 @@ def test_custom_background_preview_animates_multi_frame_images(app, dialog, tmp_
     assert widget._custom_bg_preview._frame_timer.isActive()
 
 
+def test_custom_background_preview_animates_video_files(app, dialog, tmp_path, monkeypatch):
+    import numpy as np
+
+    widget, _ = dialog
+    preview_path = tmp_path / "background.mp4"
+    preview_path.write_bytes(b"fake video")
+
+    class _Reader:
+        def __init__(self):
+            self._frames = [
+                np.zeros((8, 12, 4), dtype=np.uint8),
+                np.full((8, 12, 4), 255, dtype=np.uint8),
+            ]
+
+        def get_meta_data(self):
+            return {"fps": 10}
+
+        def get_data(self, index):
+            if index >= len(self._frames):
+                raise IndexError
+            return self._frames[index]
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("imageio.v2.get_reader", lambda path: _Reader())
+
+    widget._custom_bg_check.setChecked(True)
+    widget._custom_bg_path_edit.setText(str(preview_path))
+    app.processEvents()
+
+    assert widget._custom_bg_preview.movie() is None
+    assert len(widget._custom_bg_preview._frames) == 2
+    assert widget._custom_bg_preview._frame_timer.isActive()
+
+
 def test_custom_background_group_accepts_dragged_local_files(dialog):
     widget, _ = dialog
 

@@ -619,6 +619,7 @@ class SettingsDialog(QDialog):
                             rgba.tobytes("raw", "RGBA"),
                             rgba.width,
                             rgba.height,
+                            rgba.width * 4,
                             QImage.Format.Format_RGBA8888,
                         )
                         frames.append(QPixmap.fromImage(qimg.copy()))
@@ -626,6 +627,55 @@ class SettingsDialog(QDialog):
                     return frames, delays
             except Exception:
                 return [], []
+
+        def _background_preview_video_frames(path: str, max_frames: int = 24) -> tuple[list[QPixmap], list[int]]:
+            try:
+                import imageio.v2 as imageio
+
+                reader = imageio.get_reader(path)
+                try:
+                    meta = reader.get_meta_data()
+                    try:
+                        fps = float(meta.get("fps") or 24.0)
+                    except Exception:
+                        fps = 24.0
+                    fps = fps if fps > 0 else 24.0
+                    delay = max(20, int(round(1000.0 / fps)))
+                    frames: list[QPixmap] = []
+                    for frame_index in range(max_frames):
+                        try:
+                            frame = reader.get_data(frame_index)
+                        except IndexError:
+                            break
+                        except Exception:
+                            if frame_index == 0:
+                                raise
+                            break
+                        if getattr(frame, "ndim", 0) == 2:
+                            h, w = frame.shape
+                            qimg = QImage(
+                                frame.data,
+                                w,
+                                h,
+                                frame.strides[0],
+                                QImage.Format.Format_Grayscale8,
+                            )
+                        else:
+                            h, w = frame.shape[:2]
+                            fmt = (
+                                QImage.Format.Format_RGBA8888
+                                if frame.shape[2] == 4
+                                else QImage.Format.Format_RGB888
+                            )
+                            qimg = QImage(frame.data, w, h, frame.strides[0], fmt)
+                        frames.append(QPixmap.fromImage(qimg.copy()))
+                    if len(frames) > 1:
+                        return frames, [delay] * len(frames)
+                finally:
+                    reader.close()
+            except Exception:
+                return [], []
+            return [], []
 
         def _update_custom_bg_preview(enabled: bool, use_theme: bool, path: str) -> None:
             if not enabled or use_theme:
@@ -643,6 +693,11 @@ class SettingsDialog(QDialog):
             if movie is not None:
                 self._custom_bg_preview.set_preview_movie(movie)
                 return
+            if os.path.splitext(path)[1].lower() in _VIDEO_EXTS:
+                frames, delays = _background_preview_video_frames(path)
+                if frames:
+                    self._custom_bg_preview.set_preview_frames(frames, delays)
+                    return
             frames, delays = _background_preview_frames(path)
             if frames:
                 self._custom_bg_preview.set_preview_frames(frames, delays)
