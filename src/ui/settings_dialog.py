@@ -5,7 +5,7 @@ import json
 import os
 
 from PyQt6.QtCore import pyqtSignal, Qt, QRect, QTimer, QSignalBlocker, QEvent
-from PyQt6.QtGui import QColor, QPixmap
+from PyQt6.QtGui import QColor, QMovie, QPixmap
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QTabWidget, QWidget, QGridLayout, QCheckBox,
@@ -150,16 +150,33 @@ class _BackgroundPreviewLabel(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._source_pixmap = QPixmap()
-        self._message_text = "No preview available"
+        self._movie: QMovie | None = None
 
     def set_preview_pixmap(self, pixmap: QPixmap) -> None:
+        if self._movie is not None:
+            self._movie.stop()
+            self._movie = None
         self._source_pixmap = QPixmap(pixmap)
-        self._message_text = ""
         self._refresh_pixmap()
 
-    def set_preview_message(self, message: str) -> None:
+    def set_preview_movie(self, movie: QMovie) -> None:
         self._source_pixmap = QPixmap()
-        self._message_text = message
+        if self._movie is not None:
+            self._movie.stop()
+        self._movie = movie
+        movie.setParent(self)
+        target = self.contentsRect().size()
+        if target.width() > 0 and target.height() > 0:
+            movie.setScaledSize(target)
+        self.setText("")
+        self.setMovie(movie)
+        movie.start()
+
+    def set_preview_message(self, message: str) -> None:
+        if self._movie is not None:
+            self._movie.stop()
+            self._movie = None
+        self._source_pixmap = QPixmap()
         self.setPixmap(QPixmap())
         self.setText(message)
 
@@ -168,10 +185,16 @@ class _BackgroundPreviewLabel(QLabel):
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
+        if self._movie is not None:
+            target = self.contentsRect().size()
+            if target.width() > 0 and target.height() > 0:
+                self._movie.setScaledSize(target)
         self._refresh_pixmap()
 
     def _refresh_pixmap(self) -> None:
         if self._source_pixmap.isNull():
+            return
+        if self._movie is not None:
             return
         target = self.contentsRect().size()
         if target.width() <= 0 or target.height() <= 0:
@@ -507,6 +530,12 @@ class SettingsDialog(QDialog):
             except Exception:
                 return QPixmap()
 
+        def _background_preview_movie(path: str) -> QMovie | None:
+            if os.path.splitext(path)[1].lower() != ".gif":
+                return None
+            movie = QMovie(path)
+            return movie if movie.isValid() else None
+
         def _update_custom_bg_preview(enabled: bool, use_theme: bool, path: str) -> None:
             if not enabled or use_theme:
                 self._custom_bg_preview.clear_preview()
@@ -518,6 +547,10 @@ class SettingsDialog(QDialog):
                 return
             if not os.path.isfile(path):
                 self._custom_bg_preview.set_preview_message("Selected background file was not found.")
+                return
+            movie = _background_preview_movie(path)
+            if movie is not None:
+                self._custom_bg_preview.set_preview_movie(movie)
                 return
             pixmap = _background_preview_pixmap(path)
             if pixmap.isNull():

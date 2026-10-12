@@ -155,6 +155,39 @@ def test_custom_background_preview_rescales_when_resized(app, dialog, tmp_path):
     assert first_size != second_size
 
 
+def test_custom_background_preview_plays_gif_backgrounds(app, dialog, tmp_path):
+    from PIL import Image
+    from PyQt6.QtGui import QMovie
+
+    widget, _ = dialog
+    preview_path = tmp_path / "background.gif"
+    frames = [
+        Image.new("RGBA", (24, 12), color)
+        for color in ("#ff3366", "#3366ff")
+    ]
+    frames[0].save(
+        preview_path,
+        save_all=True,
+        append_images=frames[1:],
+        duration=50,
+        loop=0,
+    )
+
+    widget._custom_bg_check.setChecked(True)
+    widget._custom_bg_path_edit.setText(str(preview_path))
+    app.processEvents()
+
+    movie = widget._custom_bg_preview.movie()
+    assert movie is not None
+    assert isinstance(movie, QMovie)
+    assert movie.state() == QMovie.MovieState.Running
+    original_size = movie.scaledSize()
+
+    widget._custom_bg_preview.resize(180, 90)
+    app.processEvents()
+    assert movie.scaledSize() != original_size
+
+
 def test_custom_background_group_accepts_dragged_local_files(dialog):
     widget, _ = dialog
 
