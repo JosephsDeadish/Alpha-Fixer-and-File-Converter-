@@ -1112,6 +1112,11 @@ def convert_file(
 
             # --- GIF (palette mode; optionally 1-colour transparency) ---
             if ext == ".gif":
+                if img.mode == "LA":
+                    rgba = img.convert("RGBA")
+                    if img is not src_img:
+                        img.close()
+                    img = rgba
                 if img.mode == "RGBA":
                     gif_img = img.quantize(colors=255, method=Image.Quantize.FASTOCTREE, dither=0)
                     try:

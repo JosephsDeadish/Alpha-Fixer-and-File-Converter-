@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PIL import Image, ImageCms, features
 
-from src.core.file_converter import convert_file
+from src.core.file_converter import _open_image, convert_file, output_format_available
 
 
 class TestColorKeyConversion(unittest.TestCase):
@@ -94,3 +94,55 @@ class TestColorKeyConversion(unittest.TestCase):
                     self.assertEqual(saved.tobytes(), original.tobytes())
                     if mode == "P":
                         self.assertEqual(saved.getpalette(), original.getpalette())
+
+    def test_grayscale_transparency_gif_uses_binary_alpha_after_resize(self):
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            keyed_source, expected, _ = self._make_source(directory, "L")
+            native_source = Path(directory) / "native-la.png"
+            try:
+                with expected.convert("LA") as native:
+                    native.save(native_source)
+                for source in (keyed_source, native_source):
+                    for resize in (None, (9, 7)):
+                        for keep in (False, True):
+                            with self.subTest(source=source.name, resize=resize, keep=keep):
+                                output = Path(directory) / "grayscale.gif"
+                                convert_file(str(source), str(output), "GIF",
+                                             resize=resize, keep_metadata=keep)
+                                with Image.open(output) as saved, saved.convert("RGBA") as actual, (
+                                    expected.resize(resize, Image.LANCZOS) if resize
+                                    else expected.copy()
+                                ) as reference, reference.getchannel("A") as original_alpha, (
+                                    actual.getchannel("A")
+                                ) as saved_alpha, original_alpha.point(
+                                    lambda value: 0 if value == 0 else 255
+                                ) as binary_alpha:
+                                    self.assertEqual(actual.size, reference.size)
+                                    self.assertEqual(saved_alpha.tobytes(), binary_alpha.tobytes())
+                                    self.assertEqual(saved_alpha.getextrema(), (0, 255))
+            finally:
+                expected.close()
+
+    def test_native_grayscale_alpha_other_advertised_outputs(self):
+        formats = [("PNG", ".png"), ("TIFF", ".tiff"), ("TGA", ".tga"),
+                   ("QOI", ".qoi"), ("DDS", ".dds"), ("XNB", ".xnb"), ("ICO", ".ico")]
+        if features.check("jpg_2000"):
+            formats.append(("JPEG2000", ".jp2"))
+        for target, extension in (("WEBP", ".webp"), ("AVIF", ".avif")):
+            if output_format_available(target):
+                formats.append((target, extension))
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source = Path(directory) / "native-la.png"
+            with Image.new("LA", (16, 16)) as image:
+                image.putdata([((x * 13 + y * 19) % 256, (0, 73, 255)[(x + y) % 3])
+                               for y in range(16) for x in range(16)])
+                image.save(source)
+                with image.getchannel("A") as expected_alpha:
+                    for target, extension in formats:
+                        with self.subTest(target=target):
+                            output = Path(directory) / f"native{extension}"
+                            convert_file(str(source), str(output), target, quality=100)
+                            with _open_image(str(output)) as saved:
+                                with saved.convert("RGBA") as rgba, rgba.getchannel("A") as alpha:
+                                    self.assertEqual(saved.size, image.size)
+                                    self.assertEqual(alpha.tobytes(), expected_alpha.tobytes())

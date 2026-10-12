@@ -451,6 +451,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Conversion materializes palette/color-key transparency before resizing or saving
+to TIFF, TGA, QOI and JPEG2000, avoiding silent alpha loss. Grayscale-alpha GIF
+conversion uses the existing binary-transparency path. Generated-pixel checks
+cover orientation, resizing, metadata choices and decoded alpha across supported
+outputs; existing multipage TIFF regressions also passed. Real-corpus fidelity,
+broader multipage editing and cross-platform packaged codecs remain unqualified.
+
 Application project shutdown revalidates each editor's approved state after all
 unsaved-project prompts finish. Edits or newly started I/O during a later editor's
 modal prompt prevent shutdown from releasing earlier editors' recovery sessions.
