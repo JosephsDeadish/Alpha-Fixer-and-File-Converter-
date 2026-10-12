@@ -451,6 +451,20 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Additional TIFF qualification covers 13 native image modes, raw/LZW compression,
+mixed orientation, per-page metadata and truncated trailing strips. Palette-alpha
+pages now resize through true-color RGBA rather than filtering palette indices,
+and single-image exports materialize explicit palette alpha. Cyclic page-directory
+chains fail instead of silently dropping pages; rollback and handle cleanup are
+checked with generated corrupt files. This is Pillow/generated-media coverage,
+not universal TIFF or real-corpus fidelity certification.
+
+Bounded project/recovery lifecycle tests exercised three cycles per editor,
+60 real Qt modal interactions and 60 project workers. Worker wrappers were deleted,
+owned media closed once, and last-good recovery survived cancellation/reopening.
+These checks found no production lifecycle defect and do not establish hours-long
+resource stability, physical power-loss durability or complete native acceptance.
+
 Conversion materializes palette/color-key transparency before resizing or saving
 to TIFF, TGA, QOI and JPEG2000, avoiding silent alpha loss. Grayscale-alpha GIF
 conversion uses the existing binary-transparency path. Generated-pixel checks

@@ -869,6 +869,11 @@ def _convert_tiff_pages(source: Image.Image, output_path: str,
     first_info = source.info.copy()
     first_palette = source.palette.copy() if source.palette else None
     count = source.n_frames
+    source.seek(count - 1)
+    if source.tag_v2.next:
+        # Pillow counts a repeated IFD offset as the end of the document.
+        # A genuine final directory must instead have a null next pointer.
+        raise OSError("Cyclic TIFF page directory chain.")
     source.seek(0)
     source.palette = first_palette
     source.info.clear()
@@ -893,7 +898,12 @@ def _convert_tiff_pages(source: Image.Image, output_path: str,
                 pass
             _load_image_pixels(source)
             _normalize_image_orientation(source)
-            page = source.resize(resize, Image.LANCZOS) if resize else source.copy()
+            if resize and source.mode == "PA":
+                # Filtering palette indices loses their colors and alpha.
+                with source.convert("RGBA") as rgba:
+                    page = rgba.resize(resize, Image.LANCZOS)
+            else:
+                page = source.resize(resize, Image.LANCZOS) if resize else source.copy()
             try:
                 if page.mode == "I;16B":
                     # All appended pages need II headers. Decode the byte order
@@ -988,10 +998,12 @@ def convert_file(
             warnings.warn(page_note, UserWarning, stacklevel=2)
 
         ext = Path(output_path).suffix.lower()
-        if (img.mode in ("P", "RGB", "L") and "transparency" in img.info
-                and (resize or ext in (".tiff", ".tif", ".tga", ".qoi", ".jp2"))):
+        if (img.mode == "PA"
+                or (img.mode in ("P", "RGB", "L") and "transparency" in img.info
+                    and (resize or ext in (".tiff", ".tif", ".tga", ".qoi", ".jp2")))):
             # These encoders cannot store PNG palette/color-key alpha. Materialize
-            # it before resampling too, so interpolated pixels retain their alpha.
+            # it before resampling too. PA's explicit alpha also needs true colors
+            # rather than filtered palette indices or an unsupported output mode.
             img = img.convert("LA" if img.mode == "L" else "RGBA")
 
         if resize:
