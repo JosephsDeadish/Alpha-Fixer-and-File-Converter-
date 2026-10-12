@@ -114,6 +114,24 @@ def test_custom_background_path_clear_button_empties_the_field(app, dialog):
     assert "Choose an image" in widget._custom_bg_status_lbl.text()
 
 
+def test_custom_background_preview_updates_for_image_files(app, dialog, tmp_path):
+    from PyQt6.QtGui import QColor, QImage
+
+    widget, _ = dialog
+    preview_path = tmp_path / "background.png"
+    image = QImage(12, 12, QImage.Format.Format_ARGB32)
+    image.fill(QColor("#336699"))
+    assert image.save(str(preview_path))
+
+    widget._custom_bg_check.setChecked(True)
+    widget._custom_bg_path_edit.setText(str(preview_path))
+    app.processEvents()
+
+    assert not widget._custom_bg_preview.isHidden()
+    assert not widget._custom_bg_preview.pixmap().isNull()
+    assert "background.png" in widget._custom_bg_status_lbl.text()
+
+
 def test_custom_background_group_accepts_dragged_local_files(dialog):
     widget, _ = dialog
 

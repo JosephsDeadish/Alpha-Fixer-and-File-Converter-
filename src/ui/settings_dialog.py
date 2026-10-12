@@ -5,7 +5,7 @@ import json
 import os
 
 from PyQt6.QtCore import pyqtSignal, Qt, QRect, QTimer, QSignalBlocker, QEvent
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QPixmap
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QTabWidget, QWidget, QGridLayout, QCheckBox,
@@ -403,6 +403,14 @@ class SettingsDialog(QDialog):
         self._custom_bg_browse_btn.setAccessibleDescription(self._custom_bg_browse_btn.toolTip())
         _cbg_file_hl.addWidget(self._custom_bg_browse_btn)
         _cbg_vl.addWidget(self._custom_bg_file_row)
+        self._custom_bg_preview = QLabel("No preview available")
+        self._custom_bg_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._custom_bg_preview.setFrameShape(QFrame.Shape.StyledPanel)
+        self._custom_bg_preview.setMinimumSize(220, 124)
+        self._custom_bg_preview.setProperty("settingsHint", True)
+        self._custom_bg_preview.setWordWrap(True)
+        self._custom_bg_preview.setVisible(False)
+        _cbg_vl.addWidget(self._custom_bg_preview)
         custom_bg_layout.addWidget(self._custom_bg_sub)
 
         def _background_status_text(enabled: bool, use_theme: bool, path: str) -> str:
@@ -428,6 +436,64 @@ class SettingsDialog(QDialog):
                 kind = "Media"
             return f"{kind} selected: {os.path.basename(path)}"
 
+        def _background_preview_pixmap(path: str) -> QPixmap:
+            if not path or not os.path.isfile(path):
+                return QPixmap()
+            pixmap = QPixmap(path)
+            if not pixmap.isNull():
+                return pixmap
+            ext = os.path.splitext(path)[1].lower()
+            if ext not in _VIDEO_EXTS:
+                return QPixmap()
+            try:
+                import imageio.v2 as imageio
+                from PyQt6.QtGui import QImage
+
+                reader = imageio.get_reader(path)
+                try:
+                    frame = reader.get_data(0)
+                finally:
+                    reader.close()
+                if getattr(frame, "ndim", 0) == 2:
+                    h, w = frame.shape
+                    qimg = QImage(frame.data, w, h, frame.strides[0], QImage.Format.Format_Grayscale8)
+                else:
+                    h, w = frame.shape[:2]
+                    fmt = QImage.Format.Format_RGBA8888 if frame.shape[2] == 4 else QImage.Format.Format_RGB888
+                    qimg = QImage(frame.data, w, h, frame.strides[0], fmt)
+                return QPixmap.fromImage(qimg.copy())
+            except Exception:
+                return QPixmap()
+
+        def _update_custom_bg_preview(enabled: bool, use_theme: bool, path: str) -> None:
+            if not enabled or use_theme:
+                self._custom_bg_preview.clear()
+                self._custom_bg_preview.setText("No preview available")
+                self._custom_bg_preview.setVisible(False)
+                return
+            self._custom_bg_preview.setVisible(True)
+            if not path:
+                self._custom_bg_preview.setPixmap(QPixmap())
+                self._custom_bg_preview.setText("Choose a background file to preview it here.")
+                return
+            if not os.path.isfile(path):
+                self._custom_bg_preview.setPixmap(QPixmap())
+                self._custom_bg_preview.setText("Selected background file was not found.")
+                return
+            pixmap = _background_preview_pixmap(path)
+            if pixmap.isNull():
+                self._custom_bg_preview.setPixmap(QPixmap())
+                self._custom_bg_preview.setText(f"Preview unavailable\n{os.path.basename(path)}")
+                return
+            self._custom_bg_preview.setText("")
+            self._custom_bg_preview.setPixmap(
+                pixmap.scaled(
+                    self._custom_bg_preview.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+
         def _update_custom_bg_state():
             enabled = self._custom_bg_check.isChecked()
             use_theme = self._use_theme_bg_check.isChecked()
@@ -440,6 +506,7 @@ class SettingsDialog(QDialog):
             status_text = _background_status_text(enabled, use_theme, path)
             self._custom_bg_status_lbl.setText(status_text)
             self._custom_bg_status_lbl.setVisible(bool(status_text))
+            _update_custom_bg_preview(enabled, use_theme, path)
 
         self._custom_bg_check.toggled.connect(lambda _: _update_custom_bg_state())
         self._use_theme_bg_check.toggled.connect(lambda _: _update_custom_bg_state())
