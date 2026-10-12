@@ -1172,13 +1172,13 @@ class SelectiveAlphaCanvas(QWidget):
         act_paste_all = menu.addAction("Paste All Zones")
         act_paste_all.setEnabled(self.has_image() and self._paste_all_available)
         menu.addSeparator()
-        act_paste_alpha = menu.addAction("📋  Paste Zone from Alpha/RGBA Tool")
+        act_paste_alpha = menu.addAction("📋  Paste Zone from Alpha & RGBA Adjuster")
         act_paste_alpha.setEnabled(self.has_image() and self._alpha_paste_available)
         act_paste_alpha.setToolTip(
             "Paste the alpha zone received from the Alpha & RGBA Adjuster\n"
             "into the currently active zone on this canvas."
         )
-        act_paste_all_alpha = menu.addAction("📋  Paste All Zones from Alpha/RGBA Tool")
+        act_paste_all_alpha = menu.addAction("📋  Paste All Zones from Alpha & RGBA Adjuster")
         act_paste_all_alpha.setEnabled(self.has_image() and self._alpha_paste_available)
         act_paste_all_alpha.setToolTip(
             "Paste all alpha zones received from the Alpha & RGBA Adjuster\n"
@@ -2423,7 +2423,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_import_shared = QPushButton("📥 Import Zones to Canvas")
         self._btn_import_shared.setEnabled(False)
         self._btn_import_shared.setToolTip(
-            "Load the shared Alpha & RGBA zones onto the Alpha Painter canvas.\n\n"
+            "Load the shared zones from Alpha & RGBA Adjuster onto the Alpha Painter canvas.\n\n"
             "Each detected alpha value becomes its own editable zone."
         )
         self._btn_import_shared.clicked.connect(self._on_import_shared_zones)
@@ -3154,7 +3154,7 @@ class SelectiveAlphaTool(QWidget):
         """Paste the first shared zone from the Alpha/RGBA tool into the active zone (item 67)."""
         if not self._shared_zones:
             QMessageBox.information(
-                self, "No zone from Alpha/RGBA Tool",
+                self, "No zone from Alpha & RGBA Adjuster",
                 "No zones have been copied from the Alpha & RGBA Adjuster yet.\n\n"
                 "In the Alpha & RGBA Adjuster tab, right-click the preview and\n"
                 "choose 'Copy zones → Alpha Painter tool'."
@@ -3175,7 +3175,7 @@ class SelectiveAlphaTool(QWidget):
         """Paste all shared zones from the Alpha/RGBA tool into corresponding canvas zones (item 67)."""
         if not self._shared_zones:
             QMessageBox.information(
-                self, "No zones from Alpha/RGBA Tool",
+                self, "No zones from Alpha & RGBA Adjuster",
                 "No zones have been copied from the Alpha & RGBA Adjuster yet.\n\n"
                 "In the Alpha & RGBA Adjuster tab, right-click the preview and\n"
                 "choose 'Copy zones → Alpha Painter tool'."

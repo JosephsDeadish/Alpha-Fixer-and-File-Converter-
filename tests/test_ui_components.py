@@ -7935,6 +7935,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
     def test_selective_alpha_shared_zone_status_points_to_import_actions(self):
         self.assertIn("No shared zones ready yet", self._widget._import_shared_status.text())
         self.assertIn("right-click the preview", self._widget._import_shared_status.text())
+        self.assertIn("Alpha & RGBA Adjuster", self._widget._btn_import_shared.toolTip())
 
         self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=bool))])
         text = self._widget._import_shared_status.text()
