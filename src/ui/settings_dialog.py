@@ -338,6 +338,7 @@ class SettingsDialog(QDialog):
 
         # ---- Custom Background GroupBox (item 81) ----
         grp_custom_bg = QGroupBox("Custom Background")
+        grp_custom_bg.setAcceptDrops(True)
         custom_bg_layout = QVBoxLayout(grp_custom_bg)
         custom_bg_layout.setSpacing(6)
         self._custom_bg_check = QCheckBox("Enable custom background (image / GIF / video)")
@@ -456,6 +457,8 @@ class SettingsDialog(QDialog):
                 self._on_custom_bg_changed()
 
         self._custom_bg_browse_btn.clicked.connect(_browse_bg_file)
+        self._custom_bg_group = grp_custom_bg
+        grp_custom_bg.installEventFilter(self)
         tv.addWidget(grp_custom_bg)
 
         grp_colors = QGroupBox("Theme Colors")
@@ -2280,6 +2283,22 @@ class SettingsDialog(QDialog):
             if self._theme_preset_combo.isEnabled():
                 self._theme_preset_combo.setFocus()
             return True
+        if watched is getattr(self, "_custom_bg_group", None) and event.type() in (
+            QEvent.Type.DragEnter, QEvent.Type.DragMove, QEvent.Type.Drop,
+        ):
+            mime = event.mimeData()
+            if mime.hasUrls() and any(url.isLocalFile() for url in mime.urls()):
+                if event.type() in (QEvent.Type.DragEnter, QEvent.Type.DragMove):
+                    event.acceptProposedAction()
+                else:
+                    for url in mime.urls():
+                        if url.isLocalFile():
+                            self._custom_bg_check.setChecked(True)
+                            self._use_theme_bg_check.setChecked(False)
+                            self._custom_bg_path_edit.setText(url.toLocalFile())
+                            event.acceptProposedAction()
+                            return True
+            return False
         return super().eventFilter(watched, event)
 
     def _active_theme_combo_index(self) -> int:

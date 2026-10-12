@@ -114,6 +114,46 @@ def test_custom_background_path_clear_button_empties_the_field(app, dialog):
     assert "Choose an image" in widget._custom_bg_status_lbl.text()
 
 
+def test_custom_background_group_accepts_dragged_local_files(dialog):
+    widget, _ = dialog
+
+    class _Url:
+        def __init__(self, path: str):
+            self._path = path
+        def isLocalFile(self):
+            return True
+        def toLocalFile(self):
+            return self._path
+
+    class _Mime:
+        def __init__(self, path: str):
+            self._url = _Url(path)
+        def hasUrls(self):
+            return True
+        def urls(self):
+            return [self._url]
+
+    class _Event:
+        def __init__(self, path: str):
+            self._mime = _Mime(path)
+            self.accepted = False
+        def type(self):
+            from PyQt6.QtCore import QEvent
+            return QEvent.Type.Drop
+        def mimeData(self):
+            return self._mime
+        def acceptProposedAction(self):
+            self.accepted = True
+
+    event = _Event("/tmp/background.webm")
+    handled = widget.eventFilter(widget._custom_bg_group, event)
+    assert handled is True
+    assert event.accepted
+    assert widget._custom_bg_check.isChecked()
+    assert not widget._use_theme_bg_check.isChecked()
+    assert widget._custom_bg_path_edit.text() == "/tmp/background.webm"
+
+
 @pytest.mark.parametrize("tool,limit_control,track_control", _HISTORY_CONTROLS)
 def test_opening_existing_ini_does_not_rewrite_legacy_history_policy(
         settings_session, tool, limit_control, track_control):
