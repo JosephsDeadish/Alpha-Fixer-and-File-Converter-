@@ -16,7 +16,12 @@ from PyQt6.QtWidgets import (
     QMessageBox, QFileDialog,
 )
 
-from ..core.settings_manager import SettingsManager, DEFAULT_CUSTOM_EMOJI, SELECTIVE_ALPHA_UI_ZONE_COUNT
+from ..core.settings_manager import (
+    SettingsManager,
+    DEFAULT_CUSTOM_EMOJI,
+    SELECTIVE_ALPHA_UI_ZONE_COUNT,
+    get_ui_scale_factor,
+)
 from ..core.presets import PresetManager
 from .alpha_tool import AlphaFixerTab, _alpha_capability_details
 from .converter_tool import ConverterTab, _converter_capability_details, _converter_capability_summary
@@ -2439,9 +2444,8 @@ class MainWindow(QMainWindow):
         base_size = self._settings.get("font_size", 10)
         base_size = max(8, min(24, int(base_size)))
         # Apply UI scale factor on top of the base font size.
-        _scale_factors = {"Tiny": 0.70, "Compact": 0.85, "Normal": 1.0, "Large": 1.15, "Extra Large": 1.30, "Huge": 1.50}
         scale_key = self._settings.get("ui_scale", "Normal")
-        factor = _scale_factors.get(scale_key, 1.0)
+        factor = get_ui_scale_factor(scale_key)
         size = max(7, int(round(base_size * factor)))
         app = QApplication.instance()
         if app is None:
@@ -2584,13 +2588,8 @@ class MainWindow(QMainWindow):
             # Inject font-size overrides so ui_scale affects ALL widgets (item 6).
             # Tooltips are kept at the unscaled base size (item 53).
             try:
-                _scale_factors = {
-                    "Tiny": 0.70, "Compact": 0.85, "Normal": 1.0,
-                    "Large": 1.15, "Extra Large": 1.30, "Huge": 1.50,
-                }
                 _base_pt = max(8, min(32, int(self._settings.get("font_size", 10))))
-                _factor = _scale_factors.get(
-                    self._settings.get("ui_scale", "Normal"), 1.0)
+                _factor = get_ui_scale_factor(self._settings.get("ui_scale", "Normal"))
                 scaled_px = max(8, min(32, int(round(_base_pt * _factor * 1.33))))
                 unscaled_px = max(8, min(32, int(round(_base_pt * 1.33))))
                 new_ss += f"\nQWidget {{ font-size: {scaled_px}px; }}"

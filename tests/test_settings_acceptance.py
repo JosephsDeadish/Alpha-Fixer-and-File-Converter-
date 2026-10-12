@@ -369,7 +369,7 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
 
     widget._theme_preset_combo.setCurrentText("Bat Cave")
     widget._font_size_spin.setValue(12)
-    widget._ui_scale_combo.setCurrentIndex(3)  # Large
+    widget._ui_scale_combo.setCurrentIndex(widget._ui_scale_combo.findText("Large  (115%)"))
     widget._btn_height_combo.setCurrentIndex(2)  # Comfortable
     widget._widget_spacing_combo.setCurrentIndex(0)  # Tight
     widget._border_radius_combo.setCurrentIndex(3)  # Rounded

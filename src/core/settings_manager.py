@@ -23,6 +23,41 @@ ORG_NAME = "PandaTools"
 DEFAULT_CUSTOM_EMOJI = "✨ ⭐ 💫"
 SELECTIVE_ALPHA_UI_ZONE_COUNT = 7
 
+UI_SCALE_PRESETS: tuple[tuple[str, str, float, str], ...] = (
+    ("Micro", "Micro  (60%)", 0.60, "Smallest size — dense layouts and very high DPI screens."),
+    ("Tiny", "Tiny  (70%)", 0.70, "Minimum size — tiny text and controls. For very small screens or ultra-high DPI."),
+    ("Compact", "Compact  (85%)", 0.85, "Slightly smaller text and controls — useful on small or dense-DPI screens."),
+    ("Normal", "Normal  (100%)", 1.00, "Default size. Best for most standard 1080p and larger displays."),
+    ("Large", "Large  (115%)", 1.15, "Slightly larger — good for high-DPI displays or accessibility needs."),
+    ("Extra Large", "Extra Large  (130%)", 1.30, "Large size. Great for 4K monitors or accessibility."),
+    ("Huge", "Huge  (150%)", 1.50, "Maximum size. Very large text and controls — best for 4K or low-vision users."),
+    ("Giant", "Giant  (175%)", 1.75, "Very large size — oversized controls for extremely large displays."),
+)
+
+_UI_SCALE_FACTORS = {key: factor for key, _label, factor, _tip in UI_SCALE_PRESETS}
+_UI_SCALE_LABELS = {key: label for key, label, _factor, _tip in UI_SCALE_PRESETS}
+_UI_SCALE_TIPS = {key: tip for key, _label, _factor, tip in UI_SCALE_PRESETS}
+
+
+def get_ui_scale_presets() -> tuple[tuple[str, str, float, str], ...]:
+    """Return the supported UI scale presets."""
+    return UI_SCALE_PRESETS
+
+
+def get_ui_scale_factor(scale_key: str) -> float:
+    """Return the font-size multiplier for *scale_key*."""
+    return _UI_SCALE_FACTORS.get(scale_key, 1.0)
+
+
+def get_ui_scale_label(scale_key: str) -> str:
+    """Return the menu label for *scale_key*."""
+    return _UI_SCALE_LABELS.get(scale_key, scale_key)
+
+
+def get_ui_scale_tip(scale_key: str) -> str:
+    """Return the explanatory tip for *scale_key*."""
+    return _UI_SCALE_TIPS.get(scale_key, "")
+
 
 def _settings_ini_path() -> str:
     """Return the absolute path to the INI file that stores all settings.
@@ -122,7 +157,7 @@ class SettingsManager:
         "trail_intensity": 100,   # 10–100 % max trail opacity
         # Appearance
         "font_size": 10,
-        "ui_scale": "Normal",          # Compact / Normal / Large / Extra Large
+        "ui_scale": "Normal",          # Micro / Tiny / Compact / Normal / Large / Extra Large / Huge / Giant
         "btn_height": "Normal",
         "widget_spacing": "Normal",
         "border_radius": "Normal",

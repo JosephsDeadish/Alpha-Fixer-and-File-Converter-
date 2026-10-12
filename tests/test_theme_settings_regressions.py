@@ -1246,6 +1246,24 @@ def test_loading_scale_sound_path_and_history_does_not_apply_live_changes(dialog
     assert widget._click_sound_path_edit.text() == preferences["click_sound_path"]
 
 
+def test_ui_scale_presets_include_extremes_and_share_helpers(dialog):
+    from src.core.settings_manager import get_ui_scale_factor, get_ui_scale_presets
+
+    widget, manager = dialog
+    labels = [label for _key, label, _factor, _tip in get_ui_scale_presets()]
+    assert labels[0].startswith("Micro")
+    assert labels[-1].startswith("Giant")
+    assert get_ui_scale_factor("Micro") == 0.60
+    assert get_ui_scale_factor("Giant") == 1.75
+
+    manager.set("ui_scale", "Micro")
+    widget._load_values()
+    assert widget._ui_scale_combo.currentText().startswith("Micro")
+    manager.set("ui_scale", "Giant")
+    widget._load_values()
+    assert widget._ui_scale_combo.currentText().startswith("Giant")
+
+
 def test_declined_reset_preserves_preferences_and_pending_changes(dialog):
     widget, manager = dialog
     widget._theme_preset_combo.setCurrentText("Bat Cave")

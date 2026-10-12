@@ -16,7 +16,11 @@ from PyQt6.QtWidgets import (
 
 from .theme_engine import DEFAULT_THEME, PRESET_THEMES, HIDDEN_THEMES, THEME_DESCRIPTIONS, THEME_EFFECTS
 from .tooltip_manager import TOOLTIP_MODES
-from ..core.settings_manager import DEFAULT_CUSTOM_EMOJI
+from ..core.settings_manager import (
+    DEFAULT_CUSTOM_EMOJI,
+    get_ui_scale_factor,
+    get_ui_scale_presets,
+)
 from .video_tool import _IMAGE_EXTS, _VIDEO_EXTS
 
 # Maximum character length accepted as a directly-typed custom emoji.
@@ -2184,15 +2188,7 @@ class SettingsDialog(QDialog):
 
         scale_gl.addWidget(QLabel("UI Scale:"), 0, 0)
         self._ui_scale_combo = QComboBox()
-        _SCALE_OPTIONS = [
-            ("Tiny  (70%)",       "Tiny",       "Minimum size — tiny text and controls. For very small screens or ultra-high DPI."),
-            ("Compact  (85%)",    "Compact",    "Slightly smaller text and controls — useful on small or dense-DPI screens."),
-            ("Normal  (100%)",    "Normal",     "Default size. Best for most standard 1080p and larger displays."),
-            ("Large  (115%)",     "Large",      "Slightly larger — good for high-DPI displays or accessibility needs."),
-            ("Extra Large  (130%)", "Extra Large", "Large size. Great for 4K monitors or accessibility."),
-            ("Huge  (150%)",      "Huge",       "Maximum size. Very large text and controls — best for 4K or low-vision users."),
-        ]
-        for label, _key, tip in _SCALE_OPTIONS:
+        for _key, label, _factor, tip in get_ui_scale_presets():
             self._ui_scale_combo.addItem(label)
             idx = self._ui_scale_combo.count() - 1
             self._ui_scale_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
@@ -2882,8 +2878,8 @@ class SettingsDialog(QDialog):
         self._font_size_spin.setValue(self._settings.get("font_size", 10))
         # UI Scale
         scale_val = self._settings.get("ui_scale", "Normal")
-        _scale_map = {"Tiny": 0, "Compact": 1, "Normal": 2, "Large": 3, "Extra Large": 4, "Huge": 5}
-        self._ui_scale_combo.setCurrentIndex(_scale_map.get(scale_val, 2))
+        _scale_map = {key: idx for idx, (key, _label, _factor, _tip) in enumerate(get_ui_scale_presets())}
+        self._ui_scale_combo.setCurrentIndex(_scale_map.get(scale_val, _scale_map.get("Normal", 0)))
         # Button height
         btn_h_val = self._settings.get("btn_height", "Normal")
         _btn_h_map = {"Compact": 0, "Normal": 1, "Comfortable": 2}
@@ -4108,13 +4104,12 @@ class SettingsDialog(QDialog):
         self.settings_changed.emit()
 
     def _on_ui_scale_changed(self) -> None:
-        _scale_keys = ["Tiny", "Compact", "Normal", "Large", "Extra Large", "Huge"]
+        _scale_keys = [key for key, _label, _factor, _tip in get_ui_scale_presets()]
         idx = self._ui_scale_combo.currentIndex()
         key = _scale_keys[idx] if 0 <= idx < len(_scale_keys) else "Normal"
         self._settings.set("ui_scale", key)
         # Apply the scale immediately by adjusting the base font size
-        _scale_factors = {"Tiny": 0.70, "Compact": 0.85, "Normal": 1.0, "Large": 1.15, "Extra Large": 1.30, "Huge": 1.50}
-        factor = _scale_factors.get(key, 1.0)
+        factor = get_ui_scale_factor(key)
         base_pt = self._settings.get("font_size", 10)
         scaled_pt = max(7, int(round(base_pt * factor)))
         try:
