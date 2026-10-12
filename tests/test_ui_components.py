@@ -7894,8 +7894,9 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
 
     def test_selective_alpha_status_bar_text_tracks_loaded_image_and_shared_state(self):
         self.assertIn("Tool status:", self._widget._session_status_lbl.text())
-        self.assertIn("Ready:", self._widget._capability_lbl.text())
+        self.assertIn("paint zones", self._widget._capability_lbl.text())
         self.assertIn("Alpha Painter ready", self._widget.get_status_bar_text())
+        self.assertIn("Alpha & RGBA Adjuster", self._widget._next_step_lbl.text())
         self._widget._src_path = "/tmp/sample.png"
         self._widget._shared_zones = [(64, np.zeros((2, 2), dtype=np.uint8))]
         self._widget._mask_clipboard = np.zeros((2, 2), dtype=np.uint8)

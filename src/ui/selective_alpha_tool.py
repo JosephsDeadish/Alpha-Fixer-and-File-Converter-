@@ -90,7 +90,7 @@ def _np_to_qimage(arr: np.ndarray) -> QImage:
 
 def _selective_alpha_capability_summary() -> str:
     return (
-        "Ready: Alpha Painter editing, shared-zone import, undo/redo, saved layouts, and preview/export tools are available."
+        "Ready: paint zones, import shared zones, undo/redo, save layouts, and preview/export tools are available."
     )
 
 
@@ -105,7 +105,7 @@ def _selective_alpha_capability_details() -> str:
             "",
             "Alpha Painter tools available here:",
             f"• Paint, flood-fill, move, and transform {SELECTIVE_ALPHA_UI_ZONE_COUNT} independent alpha zones.",
-            "• Copy zones from the Alpha & RGBA tool, the single-zone clipboard, or saved full-layout slots.",
+        "• Copy zones from the Alpha & RGBA Adjuster, the single-zone clipboard, or saved full-layout slots.",
             "• Preview overlays, alpha labels, and the saved result before exporting the edited image.",
         ]
     )
@@ -1765,10 +1765,10 @@ class SelectiveAlphaTool(QWidget):
     def _next_step_text(src_path: str, has_shared_zones: bool, result_ready: bool) -> str:
         if not src_path:
             if has_shared_zones:
-                return "Next step: open an image, then use Import Zones to Canvas or save the shared zones into a Full Layout Slot."
-            return "Next step: open an image or copy zones from the Alpha tab to begin editing."
+                return "Next step: open an image, then import the shared zones or save them into a Full Layout Slot."
+            return "Next step: open an image or copy zones from Alpha & RGBA Adjuster to begin painting."
         if result_ready:
-            return "Next step: save the current result, or keep refining the mask and save again when ready."
+            return "Next step: save the current result, or keep refining the zones and save again when ready."
         if has_shared_zones:
             return "Next step: import the shared zones, refine any masks you need, then save when the preview looks right."
         return "Next step: paint or refine your zones, then save when the preview looks right."
@@ -1865,7 +1865,7 @@ class SelectiveAlphaTool(QWidget):
         # ── Workflow group: Open → Paint → Save ───────────────────────────
         # All primary actions are grouped here at the top so the workflow
         # is immediately obvious.
-        wf_box = QGroupBox("Workflow  \u2460Open  \u2461Paint  \u2462Save")
+        wf_box = QGroupBox("Workflow: Open → Paint → Save")
         wf_lay = QVBoxLayout(wf_box)
         wf_lay.setSpacing(4)
 
@@ -1879,11 +1879,19 @@ class SelectiveAlphaTool(QWidget):
         self._session_status_lbl.setWordWrap(True)
         self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._session_status_lbl.setProperty("toolGuidance", True)
+        self._session_status_lbl.setAccessibleName("Alpha Painter session status")
+        self._session_status_lbl.setAccessibleDescription(
+            "Summarizes the current tool, loaded image, and what to do next."
+        )
         wf_lay.addWidget(self._session_status_lbl)
-        self._next_step_lbl = QLabel("Next step: open an image or copy zones from the Alpha tab to begin editing.")
+        self._next_step_lbl = QLabel("Next step: open an image or copy zones from Alpha & RGBA Adjuster to begin painting.")
         self._next_step_lbl.setWordWrap(True)
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._next_step_lbl.setProperty("toolGuidance", True)
+        self._next_step_lbl.setAccessibleName("Alpha Painter next step")
+        self._next_step_lbl.setAccessibleDescription(
+            "Short action hint that explains the next recommended Alpha Painter task."
+        )
         wf_lay.addWidget(self._next_step_lbl)
 
         # Row 1b: Overlay opacity slider (item 16)
