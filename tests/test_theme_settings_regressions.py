@@ -1,4 +1,7 @@
+import errno
 import json
+import os
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import Mock
 from unittest.mock import patch
@@ -36,6 +39,133 @@ def dialog(app, tmp_path):
         sip.delete(widget)
         manager.sync()
         sip.delete(manager._qs)
+
+
+@pytest.mark.parametrize("kind", ["manager", "backup_ui", "theme"])
+@pytest.mark.parametrize("phase,code", [
+    ("create", errno.ENOSPC), ("create", errno.EACCES),
+    ("write", errno.ENOSPC), ("write", errno.EIO),
+    ("close", errno.ENOSPC), ("close", errno.EIO),
+    ("publish", errno.ENOSPC), ("publish", errno.EIO),
+    ("publish", errno.EACCES), ("mode", errno.EACCES),
+])
+def test_settings_exports_storage_failure_preserves_backup_and_retries(
+        dialog, tmp_path, kind, phase, code):
+    from src.ui.main_window import MainWindow
+
+    if phase == "mode" and os.name != "posix":
+        pytest.skip("Existing output mode preservation is POSIX-only")
+    widget, manager = dialog
+    widget._flush_pending_preferences()
+    manager.set("custom_emoji", "Backup 🦇")
+    before = {key: manager.get(key) for key in manager.EXPORT_KEYS}
+    target = tmp_path / "export.json"
+    target.write_bytes(b"existing backup")
+    if os.name == "posix":
+        target.chmod(0o640)
+    failure = OSError(code, os.strerror(code))
+    module = "src.ui.settings_dialog" if kind == "theme" else "src.core.settings_manager"
+    real_open, real_replace = open, os.replace
+
+    class FailingWriter:
+        def __init__(self, path, *args, **kwargs):
+            assert Path(path).parent == target.parent
+            assert Path(path) != target
+            self.stream = real_open(path, *args, **kwargs)
+
+        def __enter__(self):
+            return self
+
+        def write(self, text):
+            result = self.stream.write(text)
+            if phase == "write":
+                self.stream.flush()
+                raise failure
+            return result
+
+        def __exit__(self, *_args):
+            self.stream.close()
+            if phase == "close":
+                raise failure
+
+    def fail_publication(source, destination):
+        if Path(destination) == target:
+            raise failure
+        real_replace(source, destination)
+
+    def export():
+        if kind == "manager":
+            manager.export_settings(str(target))
+        elif kind == "backup_ui":
+            MainWindow._export_settings(widget)
+        else:
+            widget._export_theme()
+
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName",
+               return_value=(str(target), "")), \
+            patch.object(QMessageBox, "warning") as warning, \
+            patch.object(QMessageBox, "critical") as critical, \
+            patch.object(QMessageBox, "information") as success:
+        with ExitStack() as stack:
+            if phase == "create":
+                stack.enter_context(patch("tempfile.NamedTemporaryFile", side_effect=failure))
+            elif phase in ("write", "close"):
+                stack.enter_context(patch(f"{module}.open", FailingWriter, create=True))
+            elif phase == "publish":
+                stack.enter_context(patch("os.replace", fail_publication))
+            else:
+                stack.enter_context(patch.object(Path, "chmod", side_effect=failure))
+            if kind == "manager":
+                with pytest.raises(OSError) as caught:
+                    export()
+                assert caught.value is failure
+                assert caught.value.errno == code
+                warning.assert_not_called()
+                critical.assert_not_called()
+            else:
+                export()
+                error = warning if kind == "theme" else critical
+                error.assert_called_once()
+                assert str(failure) in error.call_args.args[2]
+            success.assert_not_called()
+        assert target.read_bytes() == b"existing backup"
+        assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+        assert {key: manager.get(key) for key in manager.EXPORT_KEYS} == before
+        if os.name == "posix":
+            assert target.stat().st_mode & 0o777 == 0o640
+        warning.reset_mock()
+        critical.reset_mock()
+        export()
+        warning.assert_not_called()
+        critical.assert_not_called()
+        if kind != "manager":
+            success.assert_called_once()
+    payload = json.loads(target.read_text(encoding="utf-8"))
+    if kind == "theme":
+        assert payload == widget._theme
+    else:
+        assert payload["custom_emoji"] == "Backup 🦇"
+    assert target.read_text(encoding="utf-8") == json.dumps(
+        payload, indent=2, ensure_ascii=False)
+    assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+    assert {key: manager.get(key) for key in manager.EXPORT_KEYS} == before
+    if os.name == "posix":
+        assert target.stat().st_mode & 0o777 == 0o640
+
+
+def test_direct_settings_export_serialization_failure_preserves_backup(dialog, tmp_path):
+    _, manager = dialog
+    target = tmp_path / "backup.json"
+    target.write_bytes(b"existing backup")
+    manager.set("custom_emoji", "Backup 🦇")
+    with patch.object(manager._qs, "value", return_value=object()):
+        with pytest.raises(TypeError, match="not JSON serializable"):
+            manager.export_settings(str(target))
+    assert target.read_bytes() == b"existing backup"
+    assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+    manager.export_settings(str(target))
+    assert json.loads(target.read_text(encoding="utf-8"))["custom_emoji"] == "Backup 🦇"
+    assert not list(tmp_path.glob(".alpha_fixer_save_*"))
 
 
 @pytest.mark.parametrize("name", list(PRESET_THEMES) + list(HIDDEN_THEMES))

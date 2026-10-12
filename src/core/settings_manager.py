@@ -14,6 +14,7 @@ from PyQt6.QtCore import QSettings
 from PyQt6.QtGui import QColor
 
 from .app_paths import writable_app_directory
+from .atomic_output import staged_output_path
 
 APP_NAME = "AlphaFixerConverter"
 ORG_NAME = "PandaTools"
@@ -743,13 +744,14 @@ class SettingsManager:
     ]
 
     def export_settings(self, path: str) -> None:
-        """Write a subset of settings to *path* as JSON."""
+        """Atomically write a subset of settings to *path* as JSON."""
         data = {}
         for key in self.EXPORT_KEYS:
             val = self._qs.value(key, None)
             if val is not None:
                 data[key] = val
-        with open(path, "w", encoding="utf-8") as f:
+        with staged_output_path(path, preserve_existing_mode=True) as staged_path, \
+                open(staged_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
     @classmethod

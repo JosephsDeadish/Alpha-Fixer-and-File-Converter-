@@ -3932,7 +3932,7 @@ class MainWindow(QMainWindow):
         if not confirm_normalized_save_path(self, chosen_path, path):
             return
         try:
-            with staged_output_path(path) as staged_path:
+            with staged_output_path(path, preserve_existing_mode=True) as staged_path:
                 self._settings.export_settings(staged_path)
             QMessageBox.information(self, "Export Settings",
                                     f"Settings exported to:\n{path}")

@@ -451,6 +451,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Settings and theme backups publish through sibling staging rather than truncating
+an existing backup before writing succeeds. Injected write, close and publication
+failures verify prior bytes survive, original errors remain visible and retry
+succeeds; existing POSIX destination permissions are preserved. This is
+transactional failure-injection coverage, not power-loss durability or physical
+full-disk/disconnected-storage qualification.
+
 Editor autosave verifies recovery-lock identity before starting and immediately
 before publication, and rejects directory replacement during lock acquisition.
 Displaced locks are not unlocked through a pathname that could belong to another

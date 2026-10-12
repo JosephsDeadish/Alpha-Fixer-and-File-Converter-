@@ -4,7 +4,7 @@ Shared UI helper utilities used by multiple tool widgets.
 Qt helpers import lazily so this module can be imported early without
 pulling in heavy Qt or Pillow dependencies.
 """
-from contextlib import contextmanager
+from src.core.atomic_output import staged_output_path
 
 
 def reserve_space_for_focused_control(dialog, event):
@@ -58,41 +58,6 @@ def confirm_normalized_save_path(parent, chosen_path, final_path):
         QMessageBox.StandardButton.No,
     )
     return reply == QMessageBox.StandardButton.Yes
-
-
-@contextmanager
-def staged_output_path(destination, *, preserve_existing_mode=False):
-    """Replace a destination only after successfully writing a sibling file."""
-    import os
-    import stat
-    from pathlib import Path
-    import tempfile
-
-    path = Path(destination)
-    handle = tempfile.NamedTemporaryFile(
-        prefix=".alpha_fixer_save_", suffix=path.suffix,
-        dir=str(path.absolute().parent), delete=False,
-    )
-    staged = Path(handle.name)
-    try:
-        handle.close()
-        yield str(staged)
-        if preserve_existing_mode and os.name == "posix":
-            try:
-                mode = stat.S_IMODE(path.stat().st_mode)
-            except FileNotFoundError:
-                pass
-            else:
-                staged.chmod(mode)
-        os.replace(staged, path)
-    except BaseException:
-        # Cleanup may also fail on a disconnected/full filesystem. Preserve the
-        # save error (or cancellation), not the secondary cleanup error.
-        try:
-            staged.unlink(missing_ok=True)
-        except OSError:
-            pass
-        raise
 
 
 def scrollable_dialog_layout(dialog):

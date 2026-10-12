@@ -3034,7 +3034,8 @@ class SettingsDialog(QDialog):
         export_data = dict(self._theme)
         export_data["_effect"] = self._effect_combo.currentData() or "default"
         try:
-            with staged_output_path(path) as staged_path, open(staged_path, "w", encoding="utf-8") as f:
+            with staged_output_path(path, preserve_existing_mode=True) as staged_path, \
+                    open(staged_path, "w", encoding="utf-8") as f:
                 json.dump(export_data, f, indent=2, ensure_ascii=False)
             QMessageBox.information(self, "Export Theme", f"Theme exported to:\n{path}")
         except OSError as exc:

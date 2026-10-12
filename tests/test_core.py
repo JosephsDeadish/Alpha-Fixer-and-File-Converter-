@@ -8767,7 +8767,9 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
         self.assertIn("with staged_output_path(settings.output) as staged_path:", worker)
         self.assertNotIn("Path(out_path).unlink(missing_ok=True)", src)
         self.assertNotIn("Path(settings.output).unlink(missing_ok=True)", worker)
-        helper = self._src("ui/_ui_utils.py")
+        self.assertIn("from src.core.atomic_output import staged_output_path",
+                      self._src("ui/_ui_utils.py"))
+        helper = self._src("core/atomic_output.py")
         self.assertIn("staged.unlink(missing_ok=True)", helper)
 
     def test_history_gif_delegate_paint_has_no_model_side_effects(self):
