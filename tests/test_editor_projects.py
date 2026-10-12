@@ -1768,6 +1768,77 @@ def test_generated_video_audio_split_roundtrip(dialogs, tmp_path):
     assert recovered._project.dirty and recovered._project.path == ""
 
 
+def test_repeated_truncated_gif_project_load_releases_partial_frames(dialogs, tmp_path):
+    from src.ui import video_tool
+
+    source, still = sources(tmp_path)
+    widget = dialogs("video")
+    widget._project.timer.stop()
+    widget._load_image_paths([str(still), str(source)])
+    path = tmp_path / "partial-decode.json"
+    save(widget, path)
+    broken = tmp_path / "broken.gif"
+    broken.write_bytes(source.read_bytes()[:-3])
+    document = read_project(path)
+    document["entries"][1]["source"] = broken.name
+    document["entries"][1]["source_sha256"] = source_signature(broken)
+    write_project(path, document)
+    widget._brightness_slider.setValue(177)
+    project = widget._project
+    entries = tuple(project.entries)
+    fingerprint = project.fingerprint()
+    history = list(widget._undo_stack), list(widget._redo_stack)
+    saved, autosaved = project._saved, project._autosaved
+    before = path.read_bytes()
+    copied, prepared = [], []
+    copy = Image.Image.copy
+    loader = video_tool._load_image_as_clip
+
+    def tracked_copy(image):
+        result = copy(image)
+        result.close = Mock(wraps=result.close)
+        copied.append(result)
+        return result
+
+    def tracked_loader(source_path):
+        if source_path == str(broken):
+            with patch.object(Image.Image, "copy", tracked_copy):
+                return loader(source_path)
+        result = loader(source_path)
+        result.close = Mock(wraps=result.close)
+        prepared.append(result)
+        return result
+
+    with patch.object(video_tool, "_load_image_as_clip", side_effect=tracked_loader), \
+            patch("src.ui.editor_project.QMessageBox.critical") as error, \
+            patch("src.ui.editor_project.QMessageBox.question") as replacement:
+        for iteration in range(20):
+            start = len(copied)
+            assert project.load(path, recovery=bool(iteration % 2))
+            wait(widget)
+            assert len(copied) - start == 6
+            for image in copied[start:]:
+                image.close.assert_called_once()
+                with pytest.raises(ValueError, match="closed"):
+                    image.getpixel((0, 0))
+            prepared[-1].close.assert_called_once()
+            assert tuple(project.entries) == entries
+            assert project.fingerprint() == fingerprint and project.dirty
+            assert (project._saved, project._autosaved) == (saved, autosaved)
+            assert (widget._undo_stack, widget._redo_stack) == history
+            assert project.path == str(path) and path.read_bytes() == before
+            assert project._job is None and not project._loading
+            assert project.open_button.isEnabled() and widget._content_scroll.isEnabled()
+            assert not widget._preview_timer.isActive()
+        assert error.call_count == 20
+        replacement.assert_not_called()
+    assert len(prepared) == 20 and len(copied) == 120
+    with entries[1].get_frame(0) as frame:
+        assert frame.getpixel((0, 0)) == (255, 0, 0, 255)
+    assert not list(tmp_path.glob(".alpha_fixer_save_*"))
+    assert not list(tmp_path.glob("*.lock"))
+
+
 def test_wrong_editor_and_bounded_images(dialogs, tmp_path):
     _, still = sources(tmp_path)
     gif = dialogs("gif")

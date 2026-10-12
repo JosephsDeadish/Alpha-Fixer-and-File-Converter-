@@ -2886,13 +2886,13 @@ def _load_image_as_clip(path: str) -> Optional["_ClipEntry"]:
 
 def _decode_image_as_clip(path: str) -> Optional["_ClipEntry"]:
     """Wrap a still image or animated GIF file as a clip."""
+    frames = []
     try:
         from PIL import Image
 
         ext = Path(path).suffix.lower()
         if ext == ".gif":
             gif = Image.open(path)
-            frames: list[Image.Image] = []
             durations: list[int] = []
             try:
                 n = getattr(gif, "n_frames", 1)
@@ -2959,6 +2959,8 @@ def _decode_image_as_clip(path: str) -> Optional["_ClipEntry"]:
         img = load_image(path)
         return _ClipEntry(path, 1, _ImageFrameGetter(img), 25.0, frame_size=img.size, clip_type="image")
     except Exception:
+        for frame in frames:
+            frame.close()
         return None
 
 

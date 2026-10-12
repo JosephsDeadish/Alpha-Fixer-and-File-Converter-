@@ -451,6 +451,14 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Repeated builder project replacement and failed open/recovery checks exercise
+image, reader, temporary-remux and audio-player cleanup. A truncated-GIF regression
+now closes copied frames when decoding fails partway through. Bounded checks
+released 140 entries, closed 30 readers, removed 20 remux files and destroyed 41
+audio players; 20 failed open/recovery attempts preserved unsaved edits and closed
+120 tracked image copies. These are bounded resource-ownership checks, not
+sustained leak, physical audio, power-loss or native release certification.
+
 Builder project/recovery storage tests exercise injected I/O/read-permission
 failures, missing inputs and disappearing destination directories, followed by
 retry. They verify last-good project bytes, dirty/saved/autosaved state, session
