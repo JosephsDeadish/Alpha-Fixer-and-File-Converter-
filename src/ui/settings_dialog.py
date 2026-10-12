@@ -5,7 +5,7 @@ import json
 import os
 
 from PyQt6.QtCore import pyqtSignal, Qt, QRect, QTimer, QSignalBlocker, QEvent
-from PyQt6.QtGui import QColor, QMovie, QPixmap
+from PyQt6.QtGui import QColor, QImage, QMovie, QPixmap
 from PyQt6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QTabWidget, QWidget, QGridLayout, QCheckBox,
@@ -151,16 +151,28 @@ class _BackgroundPreviewLabel(QLabel):
         super().__init__(parent)
         self._source_pixmap = QPixmap()
         self._movie: QMovie | None = None
+        self._frame_timer = QTimer(self)
+        self._frame_timer.setSingleShot(False)
+        self._frame_timer.timeout.connect(self._advance_frame)
+        self._frames: list[QPixmap] = []
+        self._frame_delays: list[int] = []
+        self._frame_index = 0
 
     def set_preview_pixmap(self, pixmap: QPixmap) -> None:
         if self._movie is not None:
             self._movie.stop()
             self._movie = None
+        self._frame_timer.stop()
+        self._frames = []
+        self._frame_delays = []
         self._source_pixmap = QPixmap(pixmap)
         self._refresh_pixmap()
 
     def set_preview_movie(self, movie: QMovie) -> None:
         self._source_pixmap = QPixmap()
+        self._frame_timer.stop()
+        self._frames = []
+        self._frame_delays = []
         if self._movie is not None:
             self._movie.stop()
         self._movie = movie
@@ -172,11 +184,30 @@ class _BackgroundPreviewLabel(QLabel):
         self.setMovie(movie)
         movie.start()
 
+    def set_preview_frames(self, frames: list[QPixmap], delays_ms: list[int]) -> None:
+        if self._movie is not None:
+            self._movie.stop()
+            self._movie = None
+        self._source_pixmap = QPixmap()
+        self._frame_timer.stop()
+        self._frames = [QPixmap(frame) for frame in frames if not frame.isNull()]
+        self._frame_delays = [max(20, int(delay)) for delay in delays_ms[:len(self._frames)]]
+        self._frame_index = 0
+        if not self._frames:
+            self.set_preview_message("Preview unavailable")
+            return
+        self._refresh_animated_frame()
+        if len(self._frames) > 1:
+            self._schedule_next_frame()
+
     def set_preview_message(self, message: str) -> None:
         if self._movie is not None:
             self._movie.stop()
             self._movie = None
         self._source_pixmap = QPixmap()
+        self._frame_timer.stop()
+        self._frames = []
+        self._frame_delays = []
         self.setPixmap(QPixmap())
         self.setText(message)
 
@@ -189,12 +220,16 @@ class _BackgroundPreviewLabel(QLabel):
             target = self.contentsRect().size()
             if target.width() > 0 and target.height() > 0:
                 self._movie.setScaledSize(target)
+        elif self._frames:
+            self._refresh_animated_frame()
         self._refresh_pixmap()
 
     def _refresh_pixmap(self) -> None:
         if self._source_pixmap.isNull():
             return
         if self._movie is not None:
+            return
+        if self._frames:
             return
         target = self.contentsRect().size()
         if target.width() <= 0 or target.height() <= 0:
@@ -207,6 +242,37 @@ class _BackgroundPreviewLabel(QLabel):
                 Qt.TransformationMode.SmoothTransformation,
             )
         )
+
+    def _refresh_animated_frame(self) -> None:
+        if not self._frames:
+            return
+        target = self.contentsRect().size()
+        if target.width() <= 0 or target.height() <= 0:
+            return
+        frame = self._frames[self._frame_index % len(self._frames)]
+        self.setText("")
+        self.setPixmap(
+            frame.scaled(
+                target,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+
+    def _schedule_next_frame(self) -> None:
+        if not self._frames:
+            self._frame_timer.stop()
+            return
+        delay = self._frame_delays[self._frame_index % len(self._frame_delays)] if self._frame_delays else 100
+        self._frame_timer.start(delay)
+
+    def _advance_frame(self) -> None:
+        if not self._frames:
+            self._frame_timer.stop()
+            return
+        self._frame_index = (self._frame_index + 1) % len(self._frames)
+        self._refresh_animated_frame()
+        self._schedule_next_frame()
 
 
 class SettingsDialog(QDialog):
@@ -536,6 +602,31 @@ class SettingsDialog(QDialog):
             movie = QMovie(path)
             return movie if movie.isValid() else None
 
+        def _background_preview_frames(path: str) -> tuple[list[QPixmap], list[int]]:
+            try:
+                from PIL import Image as _PILImage
+
+                with _PILImage.open(path) as img:
+                    frame_count = int(getattr(img, "n_frames", 1) or 1)
+                    if frame_count <= 1:
+                        return [], []
+                    frames: list[QPixmap] = []
+                    delays: list[int] = []
+                    for idx in range(frame_count):
+                        img.seek(idx)
+                        rgba = img.convert("RGBA")
+                        qimg = QImage(
+                            rgba.tobytes("raw", "RGBA"),
+                            rgba.width,
+                            rgba.height,
+                            QImage.Format.Format_RGBA8888,
+                        )
+                        frames.append(QPixmap.fromImage(qimg.copy()))
+                        delays.append(max(20, int(img.info.get("duration", 100) or 100)))
+                    return frames, delays
+            except Exception:
+                return [], []
+
         def _update_custom_bg_preview(enabled: bool, use_theme: bool, path: str) -> None:
             if not enabled or use_theme:
                 self._custom_bg_preview.clear_preview()
@@ -551,6 +642,10 @@ class SettingsDialog(QDialog):
             movie = _background_preview_movie(path)
             if movie is not None:
                 self._custom_bg_preview.set_preview_movie(movie)
+                return
+            frames, delays = _background_preview_frames(path)
+            if frames:
+                self._custom_bg_preview.set_preview_frames(frames, delays)
                 return
             pixmap = _background_preview_pixmap(path)
             if pixmap.isNull():

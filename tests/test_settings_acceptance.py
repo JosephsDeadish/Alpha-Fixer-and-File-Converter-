@@ -188,6 +188,31 @@ def test_custom_background_preview_plays_gif_backgrounds(app, dialog, tmp_path):
     assert movie.scaledSize() != original_size
 
 
+def test_custom_background_preview_animates_multi_frame_images(app, dialog, tmp_path):
+    from PIL import Image
+
+    widget, _ = dialog
+    preview_path = tmp_path / "background.tiff"
+    frames = [
+        Image.new("RGBA", (16, 10), color)
+        for color in ("#ffcc00", "#00ccff")
+    ]
+    frames[0].save(
+        preview_path,
+        save_all=True,
+        append_images=frames[1:],
+        format="TIFF",
+    )
+
+    widget._custom_bg_check.setChecked(True)
+    widget._custom_bg_path_edit.setText(str(preview_path))
+    app.processEvents()
+
+    assert widget._custom_bg_preview.movie() is None
+    assert len(widget._custom_bg_preview._frames) == 2
+    assert widget._custom_bg_preview._frame_timer.isActive()
+
+
 def test_custom_background_group_accepts_dragged_local_files(dialog):
     widget, _ = dialog
 
