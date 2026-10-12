@@ -1784,7 +1784,7 @@ class SelectiveAlphaTool(QWidget):
     def _empty_single_zone_slot_text(cls) -> str:
         return (
             "Empty — save the active zone here, or bring in one shared zone and use "
-            "'Copy Single Zone → Clipboard' before pasting."
+            "'Copy One Zone → Clipboard' before pasting."
         )
 
     @classmethod
@@ -1865,7 +1865,7 @@ class SelectiveAlphaTool(QWidget):
         # ── Workflow group: Open → Paint → Save ───────────────────────────
         # All primary actions are grouped here at the top so the workflow
         # is immediately obvious.
-        wf_box = QGroupBox("Workflow: Open → Paint → Save")
+        wf_box = QGroupBox("Workflow: Open, Paint, Save")
         wf_lay = QVBoxLayout(wf_box)
         wf_lay.setSpacing(4)
 
@@ -2399,7 +2399,7 @@ class SelectiveAlphaTool(QWidget):
         # RGBA Adjuster tab and selects "Copy zones → Alpha Painter tool",
         # the zone data is deposited here so the user can import it into the
         # painting canvas with a single button click.
-        import_box = QGroupBox("Import Zones from Alpha & RGBA Adjuster")
+        import_box = QGroupBox("Import Shared Zones from Alpha & RGBA Adjuster")
         iv = QVBoxLayout(import_box)
         iv.setSpacing(4)
         iv.setContentsMargins(4, 4, 4, 4)
@@ -2420,7 +2420,7 @@ class SelectiveAlphaTool(QWidget):
         self._import_shared_status.setProperty("toolGuidance", True)
         iv.addWidget(self._import_shared_status)
 
-        self._btn_import_shared = QPushButton("📥 Import Zones to Canvas")
+        self._btn_import_shared = QPushButton("📥 Import Shared Zones to Canvas")
         self._btn_import_shared.setEnabled(False)
         self._btn_import_shared.setToolTip(
             "Load the shared zones from Alpha & RGBA Adjuster onto the Alpha Painter canvas.\n\n"
@@ -2430,7 +2430,7 @@ class SelectiveAlphaTool(QWidget):
         iv.addWidget(self._btn_import_shared)
 
         # Item 22: save ALL shared zones into the current full-layout slot
-        self._btn_import_to_az_slot = QPushButton("💾 Save All → Full Layout Slot")
+        self._btn_import_to_az_slot = QPushButton("💾 Save Shared Zones → Full Layout Slot")
         self._btn_import_to_az_slot.setMinimumHeight(26)
         self._btn_import_to_az_slot.setEnabled(False)
         self._btn_import_to_az_slot.setToolTip(
@@ -2441,7 +2441,7 @@ class SelectiveAlphaTool(QWidget):
         iv.addWidget(self._btn_import_to_az_slot)
 
         # Item 23: copy one shared zone to the single-zone clipboard
-        self._btn_import_zone_to_clipboard = QPushButton("📋 Copy Single Zone → Clipboard")
+        self._btn_import_zone_to_clipboard = QPushButton("📋 Copy One Zone → Clipboard")
         self._btn_import_zone_to_clipboard.setMinimumHeight(26)
         self._btn_import_zone_to_clipboard.setEnabled(False)
         self._btn_import_zone_to_clipboard.setToolTip(
@@ -3333,9 +3333,9 @@ class SelectiveAlphaTool(QWidget):
         else:
             clipboard_note = ""
 
-        next_actions = "Next: Import Zones to Canvas, Save All → Full Layout Slot, or Copy Single Zone → Clipboard."
+        next_actions = "Next: Import Shared Zones to Canvas, Save Shared Zones → Full Layout Slot, or Copy One Zone → Clipboard."
         if count == 1:
-            next_actions = "Next: open an image, use Import Zones to Canvas, or press Paste Mask to apply the pre-loaded clipboard zone."
+            next_actions = "Next: open an image, use Import Shared Zones to Canvas, or press Paste Mask to apply the pre-loaded clipboard zone."
         self._import_shared_status.setText(
             f"✅ {count} zone(s) ready"
             f" (α: {', '.join(str(v) for v, _ in displayed)}{suffix})"
