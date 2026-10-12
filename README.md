@@ -451,6 +451,14 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+GIF Builder imports TIFF pages as independent RGBA images, preserving each page's
+dimensions, colors, alpha and order instead of compositing pages onto one canvas.
+Animated disposal/compositing is delegated to Pillow's decoder. Import diagnostics
+include every page size; a malformed page rejects that source atomically, and
+cancellation before publication closes decoded pages. Generated-media regressions
+cover these behaviors. Video Builder TIFF import remains a first-page still;
+dedicated multipage editing and real-corpus fidelity qualification remain pending.
+
 Bounded project/recovery acceptance covers late malformed media and cancellation
 for both builders. Forty rejected replacements preserved current edits, pixels,
 selection, playhead, history, controls, locks and project/recovery bytes; checks

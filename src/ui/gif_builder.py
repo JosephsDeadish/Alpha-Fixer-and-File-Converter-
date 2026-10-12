@@ -95,76 +95,24 @@ class _FrameEdit:
     after: _FrameState
 
 
-def _gif_frame_rect(gif, frame_img) -> tuple[int, int, int, int]:
-    """Return the logical update rectangle for the current GIF frame."""
-    rect = getattr(gif, "dispose_extent", None)
-    if isinstance(rect, tuple) and len(rect) == 4:
-        return rect
-    tile = getattr(gif, "tile", None)
-    if tile:
-        candidate = tile[0][1]
-        if isinstance(candidate, tuple) and len(candidate) == 4:
-            return candidate
-    return (0, 0, frame_img.width, frame_img.height)
-
-
 def _load_pillow_rgba(path: str) -> list["PIL.Image.Image"]:
-    """Return a list of composited RGBA frames from *path*.
+    """Decode independent RGBA pages/frames, publishing only a complete source.
 
-    For animated GIFs every frame is composited onto an accumulating canvas
-    (GIF delta encoding) before being returned.  All other formats return a
-    single RGBA frame.
+    Pillow handles animated disposal/compositing during seek; TIFF pages must
+    retain their own dimensions and alpha rather than sharing an animation canvas.
     """
     from PIL import Image
-    img = Image.open(path)
     frames: list[Image.Image] = []
+    page_index = 0
     try:
-        n = getattr(img, "n_frames", 1)
-        if n <= 1:
-            frames.append(img.convert("RGBA"))
-        else:
-            canvas = Image.new("RGBA", img.size, (0, 0, 0, 0))
-            for i in range(n):
-                img.seek(i)
-                curr = img.convert("RGBA")
-                previous_canvas = canvas.copy()
-                composite = canvas.copy()
-                rect = _gif_frame_rect(img, curr)
-                left, top, right, bottom = rect
-                rect_size = (max(0, right - left), max(0, bottom - top))
-                if curr.size == rect_size:
-                    paste_img = curr
-                elif curr.width >= right and curr.height >= bottom:
-                    paste_img = curr.crop(rect)
-                else:
-                    paste_img = curr
-                try:
-                    composite.paste(paste_img, (left, top), paste_img)
-                finally:
-                    if paste_img is not curr:
-                        paste_img.close()
-                    curr.close()
-                composited_frame = composite.copy()
-                if img.format == "GIF" and "duration" in img.info:
-                    composited_frame.info["duration"] = img.info["duration"]
-                frames.append(composited_frame)
-                disposal = getattr(img, "disposal_method", img.info.get("disposal", 0))
-                canvas.close()
-                if disposal == 2:
-                    canvas = Image.new("RGBA", img.size, (0, 0, 0, 0))
-                    composite.close()
-                    previous_canvas.close()
-                elif disposal == 3:
-                    canvas = previous_canvas
-                    composite.close()
-                else:
-                    canvas = composite
-                    previous_canvas.close()
-            canvas.close()
-    except EOFError:
-        pass
-    finally:
-        img.close()
+        with Image.open(path) as img:
+            for page_index in range(getattr(img, "n_frames", 1)):
+                img.seek(page_index)
+                frames.append(img.convert("RGBA"))
+    except Exception as exc:
+        for frame in frames:
+            frame.close()
+        raise ValueError(f"Cannot decode page/frame {page_index + 1}: {exc}") from exc
     return frames
 
 
@@ -1020,6 +968,10 @@ class GifBuilderDialog(QDialog):
                 else:
                     failures.append((Path(path).name, detail))
                     continue
+            if progress.wasCanceled():
+                for frame in pil_frames:
+                    frame.close()
+                break
             loaded_sources += 1
             added_frames += len(pil_frames)
             source_kind = "video" if treat_as_video else _frame_source_kind(path, len(pil_frames))
@@ -1030,10 +982,11 @@ class GifBuilderDialog(QDialog):
                     frame_width, frame_height = pil_frames[0].size
                 except Exception:
                     frame_width = frame_height = 0
-            if frame_width * frame_height > largest_frame[0] * largest_frame[1]:
-                largest_frame = (frame_width, frame_height)
-            if frame_width > 0 and frame_height > 0:
-                size_key = f"{frame_width}×{frame_height}"
+            for frame in pil_frames:
+                width, height = frame.size
+                if width * height > largest_frame[0] * largest_frame[1]:
+                    largest_frame = (width, height)
+                size_key = f"{width}×{height}"
                 frame_size_counts[size_key] = frame_size_counts.get(size_key, 0) + 1
             if any(("A" in frame.getbands()) or ("transparency" in getattr(frame, "info", {})) for frame in pil_frames):
                 alpha_source_count += 1

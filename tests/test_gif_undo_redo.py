@@ -137,7 +137,7 @@ def test_partial_import_cancel_is_one_edit_and_reentrant_edits_are_blocked(build
         observed.append(len(builder._frames))
         builder._undo()
         builder._clear_all()
-        return len(observed) > 1
+        return bool(builder._frames)
 
     with patch("src.ui.gif_builder.QProgressDialog.wasCanceled", side_effect=canceled):
         builder.add_media_paths([str(source), str(source)])

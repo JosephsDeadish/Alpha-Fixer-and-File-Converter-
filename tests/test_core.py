@@ -9329,9 +9329,8 @@ class TestRound47HistoryPreviewVideoRegressions(unittest.TestCase):
 
     def test_gif_paths_use_frame_rects_for_partial_updates(self):
         picker_src = self._src("ui/gif_frame_picker.py")
-        builder_src = self._src("ui/gif_builder.py")
         converter_src = self._src("ui/converter_tool.py")
-        for src in (picker_src, builder_src, converter_src):
+        for src in (picker_src, converter_src):
             self.assertIn("def _gif_frame_rect(", src)
             self.assertIn('rect = getattr(gif, "dispose_extent", None)', src)
             self.assertIn("if curr.size == rect_size:", src)
