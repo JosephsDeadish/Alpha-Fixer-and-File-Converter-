@@ -23,6 +23,7 @@ from .video_tool import _IMAGE_EXTS, _VIDEO_EXTS
 # Emoji can be multi-codepoint sequences (e.g. 🏴‍☠️ = 7 code units) but are
 # never longer than ~8 chars; this guards against adding entire search strings.
 _MAX_CUSTOM_EMOJI_LEN = 8
+_MAX_CUSTOM_BG_RECENTS = 5
 
 # Trail slider range constants
 _TRAIL_LENGTH_MIN = 10
@@ -58,6 +59,25 @@ def _background_file_filter() -> str:
         f"Videos ({video_patterns})",
         "All Files (*)",
     ])
+
+
+def _parse_recent_background_paths(raw) -> list[str]:
+    """Return a de-duplicated list of recent custom background paths."""
+    if not raw:
+        return []
+    try:
+        paths = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return []
+    if not isinstance(paths, list):
+        return []
+    result: list[str] = []
+    for item in paths:
+        if isinstance(item, str):
+            path = item.strip()
+            if path and path not in result:
+                result.append(path)
+    return result[:_MAX_CUSTOM_BG_RECENTS]
 
 # Human-friendly labels for click-effect keys, in display order
 _EFFECT_OPTIONS = [
@@ -542,6 +562,19 @@ class SettingsDialog(QDialog):
         self._custom_bg_preview.setWordWrap(True)
         self._custom_bg_preview.setVisible(False)
         _cbg_vl.addWidget(self._custom_bg_preview)
+        self._custom_bg_recent_row = QWidget()
+        _cbg_recent_hl = QHBoxLayout(self._custom_bg_recent_row)
+        _cbg_recent_hl.setContentsMargins(0, 0, 0, 0)
+        _cbg_recent_hl.addWidget(QLabel("Recent backgrounds:"))
+        self._custom_bg_recent_combo = QComboBox()
+        self._custom_bg_recent_combo.setMinimumWidth(220)
+        self._custom_bg_recent_combo.setToolTip(
+            "Choose from recently used background files.\n"
+            "Selecting an entry will fill the background path field."
+        )
+        self._custom_bg_recent_combo.setAccessibleDescription(self._custom_bg_recent_combo.toolTip())
+        _cbg_recent_hl.addWidget(self._custom_bg_recent_combo, 1)
+        _cbg_vl.addWidget(self._custom_bg_recent_row)
         custom_bg_layout.addWidget(self._custom_bg_sub)
 
         def _background_status_text(enabled: bool, use_theme: bool, path: str) -> str:
@@ -601,6 +634,44 @@ class SettingsDialog(QDialog):
                 return None
             movie = QMovie(path)
             return movie if movie.isValid() else None
+
+        def _refresh_recent_background_combo(selected_path: str = "") -> None:
+            recent_paths = _parse_recent_background_paths(
+                self._settings.get("custom_bg_recent_paths", "[]")
+            )
+            selected_path = selected_path.strip()
+            with QSignalBlocker(self._custom_bg_recent_combo):
+                self._custom_bg_recent_combo.clear()
+                self._custom_bg_recent_combo.addItem("Choose a recent background…", "")
+                for path in recent_paths:
+                    label = os.path.basename(path) or path
+                    if not os.path.isfile(path):
+                        label = f"{label} (missing)"
+                    self._custom_bg_recent_combo.addItem(label, path)
+                if selected_path:
+                    idx = self._custom_bg_recent_combo.findData(selected_path)
+                    if idx >= 0:
+                        self._custom_bg_recent_combo.setCurrentIndex(idx)
+                    else:
+                        self._custom_bg_recent_combo.setCurrentIndex(0)
+                else:
+                    self._custom_bg_recent_combo.setCurrentIndex(0)
+
+        def _remember_recent_background(path: str) -> None:
+            path = path.strip()
+            if not path or not os.path.isfile(path):
+                return
+            recent_paths = [p for p in _parse_recent_background_paths(
+                self._settings.get("custom_bg_recent_paths", "[]")
+            ) if p != path and os.path.isfile(p)]
+            recent_paths.insert(0, path)
+            self._settings.set("custom_bg_recent_paths", json.dumps(recent_paths[:_MAX_CUSTOM_BG_RECENTS]))
+            _refresh_recent_background_combo(path)
+
+        def _on_recent_background_selected(index: int) -> None:
+            path = self._custom_bg_recent_combo.itemData(index)
+            if isinstance(path, str) and path:
+                self._custom_bg_path_edit.setText(path)
 
         def _background_preview_frames(path: str) -> tuple[list[QPixmap], list[int]]:
             try:
@@ -714,17 +785,22 @@ class SettingsDialog(QDialog):
             path = self._custom_bg_path_edit.text().strip()
             self._custom_bg_sub.setVisible(enabled)
             self._custom_bg_file_row.setVisible(enabled and not use_theme)
+            self._custom_bg_recent_row.setVisible(enabled and not use_theme)
             self._custom_bg_theme_info_lbl.setVisible(enabled and use_theme)
             self._custom_bg_path_edit.setEnabled(enabled and not use_theme)
             self._custom_bg_browse_btn.setEnabled(enabled and not use_theme)
             status_text = _background_status_text(enabled, use_theme, path)
             self._custom_bg_status_lbl.setText(status_text)
             self._custom_bg_status_lbl.setVisible(bool(status_text))
+            _refresh_recent_background_combo(path)
             _update_custom_bg_preview(enabled, use_theme, path)
 
         self._custom_bg_check.toggled.connect(lambda _: _update_custom_bg_state())
         self._use_theme_bg_check.toggled.connect(lambda _: _update_custom_bg_state())
         self._custom_bg_path_edit.textChanged.connect(lambda _: _update_custom_bg_state())
+        self._custom_bg_recent_combo.currentIndexChanged.connect(_on_recent_background_selected)
+        self._refresh_recent_background_combo = _refresh_recent_background_combo
+        self._remember_recent_background = _remember_recent_background
         self._update_custom_bg_state = _update_custom_bg_state
         self._custom_bg_sub.setVisible(False)  # hidden until enabled
 
@@ -3086,9 +3162,11 @@ class SettingsDialog(QDialog):
         )
         self._custom_bg_sub.setVisible(custom_bg_enabled)
         self._custom_bg_file_row.setVisible(custom_bg_enabled and not use_theme_bg)
+        self._custom_bg_recent_row.setVisible(custom_bg_enabled and not use_theme_bg)
         self._custom_bg_theme_info_lbl.setVisible(custom_bg_enabled and use_theme_bg)
         self._custom_bg_path_edit.setEnabled(custom_bg_enabled and not use_theme_bg)
         self._custom_bg_browse_btn.setEnabled(custom_bg_enabled and not use_theme_bg)
+        self._refresh_recent_background_combo(self._custom_bg_path_edit.text().strip())
         self._update_custom_bg_state()
         self._sync_use_theme_combos()
         for c in controls:
@@ -4356,9 +4434,12 @@ class SettingsDialog(QDialog):
         self._settings.set("custom_bg_enabled", enabled)
         self._settings.set("use_theme_bg", use_theme)
         self._settings.set("custom_bg_path", path)
+        if enabled and not use_theme and path:
+            self._remember_recent_background(path)
         # Show/hide sub-settings
         self._custom_bg_sub.setVisible(enabled)
         self._custom_bg_file_row.setVisible(enabled and not use_theme)
+        self._custom_bg_recent_row.setVisible(enabled and not use_theme)
         self._custom_bg_theme_info_lbl.setVisible(enabled and use_theme)
         self._custom_bg_path_edit.setEnabled(enabled and not use_theme)
         self._custom_bg_browse_btn.setEnabled(enabled and not use_theme)

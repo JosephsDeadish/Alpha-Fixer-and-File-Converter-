@@ -249,6 +249,41 @@ def test_custom_background_preview_animates_video_files(app, dialog, tmp_path, m
     assert widget._custom_bg_preview._frame_timer.isActive()
 
 
+def test_custom_background_recent_list_is_saved_and_restored(settings_session, tmp_path):
+    from PyQt6.QtGui import QColor, QImage
+
+    app, launch, open_settings, widgets = settings_session
+    manager = launch()
+    widget = open_settings(manager)
+    widgets.append(widget)
+
+    recent_path = tmp_path / "background.png"
+    image = QImage(10, 10, QImage.Format.Format_ARGB32)
+    image.fill(QColor("#884422"))
+    assert image.save(str(recent_path))
+
+    widget._custom_bg_check.setChecked(True)
+    widget._custom_bg_path_edit.setText(str(recent_path))
+    app.processEvents()
+
+    combo = widget._custom_bg_recent_combo
+    idx = combo.findData(str(recent_path))
+    assert idx > 0
+    combo.setCurrentIndex(idx)
+    app.processEvents()
+    assert widget._custom_bg_path_edit.text() == str(recent_path)
+
+    widget.close()
+    reopened = open_settings(manager)
+    widgets.append(reopened)
+    try:
+        reopened_idx = reopened._custom_bg_recent_combo.findData(str(recent_path))
+        assert reopened_idx > 0
+        assert reopened._custom_bg_recent_combo.itemText(reopened_idx).startswith("background.png")
+    finally:
+        reopened.close()
+
+
 def test_custom_background_group_accepts_dragged_local_files(dialog):
     widget, _ = dialog
 
