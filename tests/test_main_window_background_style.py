@@ -165,3 +165,33 @@ def test_animated_image_background_uses_multi_frame_pil_fallback(app, tmp_path):
         sip.delete(window)
         settings.sync()
         sip.delete(settings._qs)
+
+
+def test_svg_custom_background_loads_as_static_image(app, tmp_path):
+    background = tmp_path / "background.svg"
+    background.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">'
+        '<rect width="16" height="16" fill="rgb(0,128,255)"/>'
+        '</svg>',
+        encoding="utf-8",
+    )
+    with patch("src.core.settings_manager._settings_ini_path",
+               return_value=str(tmp_path / "settings-svg.ini")):
+        settings = SettingsManager()
+        settings.set("custom_bg_enabled", True)
+        settings.set("use_theme_bg", False)
+        settings.set("custom_bg_path", str(background))
+        window = MainWindow(settings)
+    try:
+        window.show()
+        app.processEvents()
+        window._apply_custom_background()
+        assert window._bg_overlay.isVisible()
+        assert window._bg_movie is None
+        assert not window._bg_animated_frames
+        assert window._bg_video_reader is None
+    finally:
+        window.close()
+        sip.delete(window)
+        settings.sync()
+        sip.delete(settings._qs)

@@ -2838,20 +2838,7 @@ class MainWindow(QMainWindow):
                 applied = self._start_animated_image_background(path)
                 if not applied:
                     self._stop_custom_background_media()
-                    px = QPixmap(path)
-                    if px.isNull():
-                        try:
-                            from PIL import Image as _PILImage
-                            from PIL.ImageQt import ImageQt as _IQt
-
-                            with _PILImage.open(path) as pil_img:
-                                rgba_img = pil_img.convert("RGBA")
-                                try:
-                                    px = QPixmap.fromImage(_IQt(rgba_img))
-                                finally:
-                                    rgba_img.close()
-                        except Exception:
-                            pass
+                    px = self._pixmap_from_custom_background_image(path)
                     if not px.isNull():
                         self._bg_overlay.setPixmap(px)
                         self._bg_overlay.setMovie(None)  # type: ignore[arg-type]
@@ -3205,6 +3192,49 @@ class MainWindow(QMainWindow):
         self._restack_background_overlay()
         self._bg_animated_timer.start(self._bg_animated_durations[0])
         return True
+
+    def _pixmap_from_custom_background_image(self, path: str) -> QPixmap:
+        """Load a static image background, including SVG fallback rendering."""
+        px = QPixmap(path)
+        if not px.isNull():
+            return px
+        ext = os.path.splitext(path)[1].lower()
+        if ext == ".svg":
+            try:
+                from PyQt6.QtSvg import QSvgRenderer
+
+                renderer = QSvgRenderer(path)
+                if renderer.isValid():
+                    size = renderer.defaultSize()
+                    if not size.isValid() or size.isEmpty():
+                        size = self.size()
+                    if not size.isValid() or size.isEmpty():
+                        size = self.rect().size()
+                    if not size.isValid() or size.isEmpty():
+                        size = QPixmap(1, 1).size()
+                    svg_px = QPixmap(size)
+                    svg_px.fill(Qt.GlobalColor.transparent)
+                    painter = QPainter(svg_px)
+                    try:
+                        renderer.render(painter)
+                    finally:
+                        painter.end()
+                    if not svg_px.isNull():
+                        return svg_px
+            except Exception:
+                pass
+        try:
+            from PIL import Image as _PILImage
+            from PIL.ImageQt import ImageQt as _IQt
+
+            with _PILImage.open(path) as pil_img:
+                rgba_img = pil_img.convert("RGBA")
+                try:
+                    return QPixmap.fromImage(_IQt(rgba_img))
+                finally:
+                    rgba_img.close()
+        except Exception:
+            return QPixmap()
 
     def _start_video_background(self, path: str) -> bool:
         from .video_tool import _open_video_reader
