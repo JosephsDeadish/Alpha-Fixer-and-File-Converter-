@@ -451,6 +451,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Malformed-image and allocation-failure regressions cover GIF source/scratch image
+cleanup, cancelled/failed frame-extraction staging, and converted-preview image
+and buffer cleanup. Painter prepares new masks before replacing an existing edit
+session, preserving edits/history if allocation fails. Generated fixtures verify
+retry and successful outputs; this does not establish native-codec fuzzing,
+sustained resource stability or physical storage recovery.
+
 Timecode display menus are reachable with Shift+F10 or the Menu key. Cancelling
 a menu preserves an uncommitted draft; unsupported SMPTE rates correctly show
 Clock as the effective display. Invalid/skipped labels restore the current value

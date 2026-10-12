@@ -1869,6 +1869,7 @@ class ConverterTab(QWidget):
             dlg = GifFramePickerDialog(src, parent=self)
             if dlg.exec() != dlg.DialogCode.Accepted:
                 # User cancelled – abort the whole run
+                self._cleanup_gif_temp_dir()
                 return None, {}
 
             chosen = dlg.selected_indices()
@@ -1885,6 +1886,7 @@ class ConverterTab(QWidget):
             stem = Path(src).stem
             try:
                 gif = Image.open(src)
+                canvas = curr = previous_canvas = composite = paste_img = None
                 try:
                     canvas_size = gif.size
                     n_frames = getattr(gif, 'n_frames', 1)
@@ -1941,8 +1943,12 @@ class ConverterTab(QWidget):
 
                     canvas.close()
                 finally:
+                    for image in (canvas, curr, previous_canvas, composite, paste_img):
+                        if image is not None:
+                            image.close()
                     gif.close()
             except Exception as exc:
+                self._cleanup_gif_temp_dir()
                 QMessageBox.warning(
                     self, "GIF Frame Extraction Error",
                     f"Could not extract frames from {Path(src).name}:\n{exc}"

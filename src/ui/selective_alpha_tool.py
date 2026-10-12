@@ -404,6 +404,10 @@ class SelectiveAlphaCanvas(QWidget):
                 img.close()
             new_arr = np.array(rgba, dtype=np.uint8).copy()
             src_qimage = _pil_to_qimage(rgba)
+            new_masks = [
+                np.zeros((rgba.height, rgba.width), dtype=np.uint8)
+                for _ in range(NUM_ZONES)
+            ]
         except MemoryError:
             if rgba is not None and rgba is not img:
                 rgba.close()
@@ -422,10 +426,7 @@ class SelectiveAlphaCanvas(QWidget):
         rgba = None
         self._src_arr = new_arr
         self._img_w, self._img_h = self._src_img.size
-        self._masks = [
-            np.zeros((self._img_h, self._img_w), dtype=np.uint8)
-            for _ in range(NUM_ZONES)
-        ]
+        self._masks = new_masks
         self._src_qimage = src_qimage
         self._undo_stack.clear()
         self._redo_stack.clear()

@@ -278,6 +278,7 @@ class _ConvertedThumbLoader(QThread):
 
     def run(self):
         img = None
+        buf = save_img = preview_img = None
         try:
             import io
             from PIL import Image
@@ -378,8 +379,11 @@ class _ConvertedThumbLoader(QThread):
                 except RuntimeError:
                     pass  # receiver destroyed; nothing to do
         finally:
-            if img is not None:
-                img.close()
+            for image in (img, save_img, preview_img):
+                if image is not None:
+                    image.close()
+            if buf is not None:
+                buf.close()
 
 
 # ---------------------------------------------------------------------------

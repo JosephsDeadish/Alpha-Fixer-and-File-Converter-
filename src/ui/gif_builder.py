@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import datetime
 import os
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -105,7 +106,7 @@ def _load_pillow_rgba(path: str) -> list["PIL.Image.Image"]:
     frames: list[Image.Image] = []
     page_index = 0
     try:
-        with Image.open(path) as img:
+        with closing(Image.open(path)) as img:
             for page_index in range(getattr(img, "n_frames", 1)):
                 if page_index and img.format == "TIFF":
                     # TIFF pages are independent; Pillow can retain the preceding

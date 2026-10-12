@@ -162,6 +162,7 @@ class GifFramePickerDialog(QDialog):
         from PIL import Image
 
         gif = None
+        canvas = curr = previous_canvas = composite = paste_img = None
         frames = []
         try:
             gif = Image.open(self._path)
@@ -228,6 +229,9 @@ class GifFramePickerDialog(QDialog):
                     pass
             return
         finally:
+            for image in (canvas, curr, previous_canvas, composite, paste_img):
+                if image is not None:
+                    image.close()
             if gif is not None:
                 gif.close()
 
