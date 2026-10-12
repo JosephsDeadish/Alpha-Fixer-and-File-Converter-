@@ -134,3 +134,34 @@ def test_repeated_native_main_window_theme_and_background_lifecycle(app, tmp_pat
                 QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     finally:
         app.setStyleSheet(original_stylesheet)
+
+
+def test_animated_image_background_uses_multi_frame_pil_fallback(app, tmp_path):
+    background = tmp_path / "background.tiff"
+    with Image.new("RGBA", (16, 16), (255, 0, 0, 255)) as first, \
+            Image.new("RGBA", (16, 16), (0, 0, 255, 255)) as second:
+        first.save(background, save_all=True, append_images=[second], compression="tiff_deflate")
+    with patch("src.core.settings_manager._settings_ini_path",
+               return_value=str(tmp_path / "settings.ini")):
+        settings = SettingsManager()
+        settings.set("custom_bg_enabled", True)
+        settings.set("use_theme_bg", False)
+        settings.set("custom_bg_path", str(background))
+        window = MainWindow(settings)
+    try:
+        window.show()
+        app.processEvents()
+        window._apply_custom_background()
+        assert window._bg_overlay.isVisible()
+        assert window._bg_movie is None
+        assert len(window._bg_animated_frames) == 2
+        assert window._bg_animated_timer is not None and window._bg_animated_timer.isActive()
+        assert window._bg_animated_path == str(background)
+        assert window._bg_animated_index == 0
+        assert window._advance_animated_background_frame()
+        assert window._bg_animated_index == 1
+    finally:
+        window.close()
+        sip.delete(window)
+        settings.sync()
+        sip.delete(settings._qs)

@@ -1256,6 +1256,11 @@ class MainWindow(QMainWindow):
         # Custom background overlay (item 81)
         self._bg_overlay: "QLabel | None" = None
         self._bg_movie: "QMovie | None" = None
+        self._bg_animated_frames: list[QPixmap] = []
+        self._bg_animated_durations: list[int] = []
+        self._bg_animated_index: int = 0
+        self._bg_animated_path: str = ""
+        self._bg_animated_timer: "QTimer | None" = None
         self._bg_video_reader = None
         self._bg_video_path: str = ""
         self._bg_video_timer: "QTimer | None" = None
@@ -2821,34 +2826,38 @@ class MainWindow(QMainWindow):
                     self._bg_movie.start()
                 applied = bool(self._bg_movie is not None and self._bg_movie.isValid())
                 if not applied:
-                    notice = "Custom background GIF could not be loaded."
+                    applied = self._start_animated_image_background(path)
+                    if not applied:
+                        notice = "Custom background GIF could not be loaded."
             elif ext in self._custom_background_video_exts():
                 applied = self._start_video_background(path)
                 if not applied:
                     notice = "Custom background video could not be loaded."
             else:
-                # Static image via pixmap.
-                self._stop_custom_background_media()
-                px = QPixmap(path)
-                if px.isNull():
-                    try:
-                        from PIL import Image as _PILImage
-                        from PIL.ImageQt import ImageQt as _IQt
+                # Animated image or static image via pixmap.
+                applied = self._start_animated_image_background(path)
+                if not applied:
+                    self._stop_custom_background_media()
+                    px = QPixmap(path)
+                    if px.isNull():
+                        try:
+                            from PIL import Image as _PILImage
+                            from PIL.ImageQt import ImageQt as _IQt
 
-                        with _PILImage.open(path) as pil_img:
-                            rgba_img = pil_img.convert("RGBA")
-                            try:
-                                px = QPixmap.fromImage(_IQt(rgba_img))
-                            finally:
-                                rgba_img.close()
-                    except Exception:
-                        pass
-                if not px.isNull():
-                    self._bg_overlay.setPixmap(px)
-                    self._bg_overlay.setMovie(None)  # type: ignore[arg-type]
-                    applied = True
-                else:
-                    notice = "Custom background image could not be loaded."
+                            with _PILImage.open(path) as pil_img:
+                                rgba_img = pil_img.convert("RGBA")
+                                try:
+                                    px = QPixmap.fromImage(_IQt(rgba_img))
+                                finally:
+                                    rgba_img.close()
+                        except Exception:
+                            pass
+                    if not px.isNull():
+                        self._bg_overlay.setPixmap(px)
+                        self._bg_overlay.setMovie(None)  # type: ignore[arg-type]
+                        applied = True
+                    else:
+                        notice = "Custom background image could not be loaded."
         except Exception as exc:
             applied = False
             notice = str(exc).strip() or "Custom background could not be loaded."
@@ -2861,6 +2870,21 @@ class MainWindow(QMainWindow):
         self._bg_overlay.setVisible(True)
         self._restack_background_overlay()
         self._clear_custom_background_notice()
+
+    def _advance_animated_background_frame(self) -> bool:
+        if self._bg_overlay is None or not self._bg_animated_frames:
+            return False
+        self._bg_animated_index = (self._bg_animated_index + 1) % len(self._bg_animated_frames)
+        frame = self._bg_animated_frames[self._bg_animated_index]
+        if frame.isNull():
+            return False
+        self._bg_overlay.setPixmap(frame)
+        self._bg_overlay.setVisible(True)
+        self._restack_background_overlay()
+        if self._bg_animated_timer is not None and self._bg_animated_durations:
+            duration = self._bg_animated_durations[self._bg_animated_index % len(self._bg_animated_durations)]
+            self._bg_animated_timer.start(max(15, duration))
+        return True
 
     def resizeEvent(self, event: "QResizeEvent") -> None:  # noqa: N802
         """Keep the background overlay and effect overlays in sync with window size."""
@@ -3128,12 +3152,59 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
             self._bg_movie = None
+        if self._bg_animated_timer is not None:
+            self._bg_animated_timer.stop()
+        self._bg_animated_frames.clear()
+        self._bg_animated_durations.clear()
+        self._bg_animated_index = 0
+        self._bg_animated_path = ""
         if self._bg_overlay is not None:
             try:
                 self._bg_overlay.clear()
                 self._bg_overlay.setMovie(None)  # type: ignore[arg-type]
             except Exception:
                 pass
+
+    def _start_animated_image_background(self, path: str) -> bool:
+        if self._bg_overlay is None:
+            return False
+        try:
+            from PIL import Image as _PILImage
+            from PIL.ImageQt import ImageQt as _IQt
+
+            frames: list[QPixmap] = []
+            durations: list[int] = []
+            with _PILImage.open(path) as img:
+                frame_count = int(getattr(img, "n_frames", 1) or 1)
+                if frame_count <= 1:
+                    return False
+                for idx in range(frame_count):
+                    img.seek(idx)
+                    rgba = img.convert("RGBA")
+                    try:
+                        frames.append(QPixmap.fromImage(_IQt(rgba)))
+                        durations.append(max(15, int(img.info.get("duration", 100) or 100)))
+                    finally:
+                        rgba.close()
+        except Exception:
+            return False
+        if not frames:
+            return False
+
+        self._stop_custom_background_media()
+        self._bg_animated_frames = frames
+        self._bg_animated_durations = durations
+        self._bg_animated_index = 0
+        self._bg_animated_path = path
+        if self._bg_animated_timer is None:
+            self._bg_animated_timer = QTimer(self)
+            self._bg_animated_timer.timeout.connect(self._advance_animated_background_frame)
+        self._bg_overlay.setMovie(None)  # type: ignore[arg-type]
+        self._bg_overlay.setPixmap(self._bg_animated_frames[0])
+        self._bg_overlay.setVisible(True)
+        self._restack_background_overlay()
+        self._bg_animated_timer.start(self._bg_animated_durations[0])
+        return True
 
     def _start_video_background(self, path: str) -> bool:
         from .video_tool import _open_video_reader

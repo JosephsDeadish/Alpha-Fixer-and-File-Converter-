@@ -410,7 +410,12 @@ class SettingsDialog(QDialog):
             elif ext in _VIDEO_EXTS:
                 kind = "Video"
             elif ext in _IMAGE_EXTS:
-                kind = "Image"
+                try:
+                    from PIL import Image as _PILImage
+                    with _PILImage.open(path) as img:
+                        kind = "Animated image" if int(getattr(img, "n_frames", 1) or 1) > 1 else "Image"
+                except Exception:
+                    kind = "Image"
             else:
                 kind = "Media"
             return f"{kind} selected: {os.path.basename(path)}"
