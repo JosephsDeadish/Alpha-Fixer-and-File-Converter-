@@ -3324,8 +3324,10 @@ class VideoToolDialog(QDialog):
             "Inclusive trim start at source FPS")
         self._trim_start_timecode.secondsCommitted.connect(
             lambda value: self._on_trim_seconds_changed(value, start=True))
+        self._trim_start_timecode.framesCommitted.connect(
+            lambda value: self._on_timecode_frame_committed(value, "trim_start"))
         start_clock_row = QHBoxLayout()
-        start_clock_label = QLabel("In clock (HH:MM:SS.mmm):")
+        start_clock_label = QLabel("In timecode:")
         start_clock_label.setWordWrap(True)
         start_clock_label.setBuddy(self._trim_start_timecode)
         start_clock_row.addWidget(start_clock_label)
@@ -3335,16 +3337,19 @@ class VideoToolDialog(QDialog):
             "Inclusive trim end frame timestamp at source FPS, not duration")
         self._trim_end_timecode.secondsCommitted.connect(
             lambda value: self._on_trim_seconds_changed(value, start=False))
+        self._trim_end_timecode.framesCommitted.connect(
+            lambda value: self._on_timecode_frame_committed(value, "trim_end"))
         end_clock_row = QHBoxLayout()
-        end_clock_label = QLabel("Out clock (HH:MM:SS.mmm):")
+        end_clock_label = QLabel("Out timecode:")
         end_clock_label.setWordWrap(True)
         end_clock_label.setBuddy(self._trim_end_timecode)
         end_clock_row.addWidget(end_clock_label)
         end_clock_row.addWidget(self._trim_end_timecode, 1)
         trim_vl.addLayout(end_clock_row)
         trim_units = QLabel(
-            "In / Out: 0-based source frames, seconds or clock time at source FPS. "
-            "Clock HH:MM:SS.mmm is not SMPTE/drop-frame. "
+            "In / Out: 0-based source frames, seconds or timecode at source FPS. "
+            "Clock: HH:MM:SS.mmm. SMPTE: HH:MM:SS:FF; drop-frame: HH:MM:SS;FF "
+            "(29.97/59.94 only). Right-click timecode to change its display. "
             "Out is the included last frame's timestamp, not duration.")
         trim_units.setWordWrap(True)
         trim_vl.addWidget(trim_units)
@@ -3489,8 +3494,10 @@ class VideoToolDialog(QDialog):
         self._playhead_timecode = ClockTimecodeEdit(
             "Rendered timeline seek at output FPS, after trims, speed changes and splits")
         self._playhead_timecode.secondsCommitted.connect(self._on_playhead_seconds_changed)
+        self._playhead_timecode.framesCommitted.connect(
+            lambda value: self._on_timecode_frame_committed(value, "playhead"))
         seek_clock_row = QHBoxLayout()
-        seek_clock_label = QLabel("Seek clock (HH:MM:SS.mmm):")
+        seek_clock_label = QLabel("Seek timecode:")
         seek_clock_label.setWordWrap(True)
         seek_clock_label.setBuddy(self._playhead_timecode)
         seek_clock_row.addWidget(seek_clock_label)
@@ -5289,6 +5296,14 @@ class VideoToolDialog(QDialog):
         self._scrubber.setValue(
             max(self._scrubber.minimum(), min(self._scrubber.maximum(), frame)))
         self._sync_playhead_frame_entry()
+
+    def _on_timecode_frame_committed(self, frame: int, control: str) -> None:
+        spin = getattr(self, f"_{control}_spin")
+        spin.setValue(max(spin.minimum(), min(spin.maximum(), frame)))
+        if control == "playhead":
+            self._sync_playhead_frame_entry()
+        else:
+            self._sync_trim_frame_entries()
 
     def _sync_trim_frame_entries(self) -> None:
         row = self._clip_list.currentRow()

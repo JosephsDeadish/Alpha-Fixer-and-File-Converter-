@@ -107,7 +107,7 @@ def validate(document, kind=None):
                     or entry["type"] not in ("image", "gif", "video")):
                 raise ValueError("Invalid clip source/type")
             _integer(entry["frames"], 1, MAX_TIMELINE_FRAMES)
-            if type(entry["fps"]) not in (int, float) or not math.isfinite(entry["fps"]) or not 0.1 <= entry["fps"] <= 1000:
+            if type(entry["fps"]) not in (int, float) or not 0.1 <= entry["fps"] <= 1000:
                 raise ValueError("Invalid source FPS")
             _integer(entry["trim_start"], 0, entry["frames"] - 1)
             _integer(entry["trim_end"], entry["trim_start"], entry["frames"] - 1)

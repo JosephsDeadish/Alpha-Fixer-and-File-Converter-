@@ -382,7 +382,8 @@ def test_prepare_rejects_nonfinite_decoded_fps_and_releases_media(dialogs, tmp_p
         clip.close.assert_called_once()
 
 
-@pytest.mark.parametrize("token", ["NaN", "Infinity", "-Infinity", "1e999", "-1e999"])
+@pytest.mark.parametrize("token", ["NaN", "Infinity", "-Infinity", "1e999", "-1e999",
+                                  "1" + "0" * 400])
 def test_nonfinite_project_fps_rejected_before_decode(dialogs, tmp_path, token):
     _, still = sources(tmp_path)
     widget = dialogs("video")
@@ -1603,7 +1604,9 @@ def test_video_split_stream_mapping_data_only(dialogs, tmp_path):
 
 
 @pytest.mark.parametrize("recovery", [False, True])
-@pytest.mark.parametrize("corruption", ["audio_count", "output_start", "trim_end"])
+@pytest.mark.parametrize("corruption", ["audio_count", "output_start", "trim_end",
+                                      "missing_fps", "missing_trim", "reversed_trim",
+                                      "last_frame_overflow", "fps_overflow"])
 def test_malformed_split_project_keeps_unsaved_session(dialogs, tmp_path, recovery, corruption):
     from src.ui import editor_project
 
@@ -1621,9 +1624,19 @@ def test_malformed_split_project_keeps_unsaved_session(dialogs, tmp_path, recove
         entry["split"][7] += 1
     elif corruption == "output_start":
         entry["split"][1] += 1
-    else:
+    elif corruption == "trim_end":
         entry["trim_end"] += 1
         entry["split"][4] = entry["trim_end"]
+    elif corruption == "missing_fps":
+        del entry["fps"]
+    elif corruption == "missing_trim":
+        del entry["trim_end"]
+    elif corruption == "reversed_trim":
+        entry["trim_start"] = entry["trim_end"] + 1
+    elif corruption == "fps_overflow":
+        entry["fps"] = 10 ** 400
+    else:
+        entry["trim_end"] = entry["frames"]
     corrupt = tmp_path / "corrupt.json"
     corrupt.write_text(json.dumps(document), encoding="utf-8")
     corrupt_bytes = corrupt.read_bytes()

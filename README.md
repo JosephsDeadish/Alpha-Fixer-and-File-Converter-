@@ -451,6 +451,19 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Precise Video timecode fields now accept exact SMPTE frame labels and
+29.97/59.94 drop-frame labels, reject skipped labels, and support timelines beyond
+24 hours. The field context menu selects clock, SMPTE or drop-frame display;
+source trims and output seeks retain their respective FPS and existing bounds.
+Preview audio waits for loaded media, verified tracks and seekability regardless
+of Qt signal order; readiness loss pauses audio and uses an independent deadline
+even when video is paused. Device outages suspend that deadline, and stale
+deadlines are cancelled on replacement/reset/close. Project validation rejects
+oversized source FPS cleanly and has additional malformed/missing-timing checks.
+Focused generated-media and fake-device regressions cover these changes; physical
+audio/device latency, waveforms, full native recovery and sustained stress remain
+outstanding.
+
 GIF project/recovery loading preserves an explicit absence of imported source
 timing instead of inventing a source hold from an edited delay. Generated-image
 roundtrips cover reopening, resaving and undo, alongside bounded failed-load and
@@ -539,8 +552,9 @@ alongside frame and seconds entries. Trims use source FPS and inclusive endpoint
 seeking uses output FPS. Valid timestamps round to the nearest frame (ties forward)
 and clamp to available frames; invalid input reverts without changing the edit.
 Keyboard, fractional-FPS, undo and project restoration regressions cover these
-controls. This is clock editing, not SMPTE/drop-frame timecode; waveforms, full
-timecode workflows and physical audible synchronization remain outstanding.
+controls. SMPTE/drop-frame entry and display are also supported as described above;
+waveforms, embedded timecode interchange and physical audible synchronization
+remain outstanding.
 
 Failed project open/recovery keeps retained playback paused while the error
 dialog is displayed, then resumes previously active playback after dismissal.

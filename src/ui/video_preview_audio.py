@@ -44,10 +44,13 @@ def clip_audio_target(clip, frame: float, output_fps: float) -> AudioTarget:
 class PreviewAudioController:
     """Backend-neutral follower; the video clock never waits for audio."""
 
-    def __init__(self, backend, status, clock=time.monotonic):
+    def __init__(self, backend, status, clock=time.monotonic, schedule=None):
         self.backend = backend
         self.status = status
         self.clock = clock
+        self.schedule = schedule or getattr(backend, "schedule_readiness", None)
+        self._cancel_deadline = None
+        self._deadline_generation = 0
         self.enabled = False
         self.muted = False
         self.volume = 0.7
@@ -55,6 +58,7 @@ class PreviewAudioController:
         self.playing = False
         self.path = None
         self.ready = False
+        self.media_loaded = False
         self.failed = False
         self.ended = False
         self.closed = False
@@ -63,14 +67,36 @@ class PreviewAudioController:
         self.last_seek = float("-inf")
         backend.event = self.media_event
 
+    def _clear_deadline(self):
+        self._deadline_generation += 1
+        if self._cancel_deadline is not None:
+            self._cancel_deadline()
+            self._cancel_deadline = None
+
+    def _arm_deadline(self):
+        if self.schedule is None or self._cancel_deadline is not None:
+            return
+        generation = self._deadline_generation
+
+        def expired():
+            # A canceled timer may already have a queued notification.
+            if generation != self._deadline_generation or self.closed:
+                return
+            self._clear_deadline()
+            self.sync(self.target, self.playing)
+
+        self._cancel_deadline = self.schedule(
+            max(0.0, 8.0 - (self.clock() - self.loaded_at)), expired)
+
     def configure(self, enabled, volume, muted):
         self.enabled, self.volume, self.muted = enabled, volume, muted
         self.sync(self.target, self.playing, force=True, retry=True)
 
     def reset(self):
+        self._clear_deadline()
         self.path = None
         self.target = None
-        self.ready = self.failed = self.ended = False
+        self.ready = self.media_loaded = self.failed = self.ended = False
         self.device_lost_at = None
         self.backend.stop()
         self.backend.load(None)
@@ -92,15 +118,23 @@ class PreviewAudioController:
             return
         if self.path is None:
             return
-        if event == "ready":
-            if self.failed or self.ready:
+        if event in ("ready", "readiness"):
+            if self.failed:
                 return
-            self.ready = True
-            if self.backend.track_count() != 1:
-                self.media_event("error", "The loaded media does not expose exactly one verified audio track.")
-                return
-            if not self.backend.seekable():
-                self.media_event("error", "The loaded media is not seekable.")
+            if event == "ready":
+                self.media_loaded = True
+                if self.ready:
+                    return
+            elif self.ready:
+                if self.backend.seekable() and self.backend.track_count() == 1:
+                    return
+                self.ready = False
+                self._clear_deadline()
+                self.loaded_at = self.clock()
+                if self.device_lost_at is not None:
+                    self.device_lost_at = self.loaded_at
+                self.backend.pause()
+            if not self.media_loaded:
                 return
             self.sync(self.target, self.playing, force=True)
         elif event == "ended":
@@ -108,7 +142,9 @@ class PreviewAudioController:
             self.backend.pause()
             self.status("Preview audio: source ended; video continues in silence.")
         elif event == "error":
+            self._clear_deadline()
             self.failed = True
+            self.ready = False
             self.backend.stop()
             self.status(f"Preview audio unavailable: {detail or 'media backend error'}. Video continues silently.")
 
@@ -124,6 +160,7 @@ class PreviewAudioController:
                         (target.reason if target is not None else "Preview audio: no clip."))
             return
         if not self.backend.has_device():
+            self._clear_deadline()
             if self.device_lost_at is None:
                 self.device_lost_at = self.clock()
             self.backend.pause()
@@ -134,19 +171,31 @@ class PreviewAudioController:
             self.device_lost_at = None
         # Automatic wraps and clip boundaries force seeks, not decoder retries.
         if self.path != target.path or (self.failed and retry):
+            self._clear_deadline()
             self.backend.stop()
             self.path = target.path
-            self.ready = self.failed = self.ended = False
+            self.ready = self.media_loaded = self.failed = self.ended = False
             self.loaded_at = self.clock()
             self.backend.load(target.path)
         if self.failed:
             return
         if not self.ready:
-            if self.clock() - self.loaded_at > 8.0:
-                self.media_event("error", "media loading timed out")
+            # LoadedMedia can precede tracksChanged/seekableChanged. Readiness
+            # requires all three, not a particular Qt signal delivery order.
+            if self.media_loaded and self.backend.track_count() > 1:
+                self.media_event("error", "The loaded media does not expose exactly one verified audio track.")
+                return
+            if self.media_loaded and self.backend.track_count() == 1 and self.backend.seekable():
+                self.ready = True
+                self._clear_deadline()
+                force = True
             else:
-                self.status("Preview audio: loading; video continues.")
-            return
+                if self.clock() - self.loaded_at >= 8.0:
+                    self.media_event("error", "media loading timed out (audio track/seekability not ready)")
+                else:
+                    self._arm_deadline()
+                    self.status("Preview audio: loading; video continues.")
+                return
         duration = self.backend.duration()
         if duration > 0 and target.seconds >= duration:
             self.backend.pause()
@@ -227,6 +276,12 @@ class QtAudioBackend:
         player.mediaStatusChanged.connect(lambda status: self._status(status, player))
         player.errorOccurred.connect(
             lambda _error, message: self._error(player, message))
+        player.seekableChanged.connect(lambda *_: self._readiness(player))
+        player.tracksChanged.connect(lambda: self._readiness(player))
+
+    def _readiness(self, player):
+        if player is self.player:
+            self.event("readiness")
 
     def _error(self, player, message):
         if player is self.player:
@@ -253,6 +308,20 @@ class QtAudioBackend:
 
     def has_device(self):
         return not self.devices.defaultAudioOutput().isNull()
+
+    def schedule_readiness(self, seconds, callback):
+        from PyQt6.QtCore import QTimer, Qt
+        timer = QTimer(self.parent)
+        timer.setSingleShot(True)
+        timer.setTimerType(Qt.TimerType.PreciseTimer)
+        timer.timeout.connect(callback)
+        timer.start(max(1, round(seconds * 1000)))
+
+        def cancel():
+            timer.stop()
+            timer.deleteLater()
+
+        return cancel
 
     def load(self, path):
         if self._closed:

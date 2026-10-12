@@ -41,6 +41,140 @@ def follower():
     return controller, backend, messages, clock
 
 
+@pytest.fixture
+def scheduled_follower(follower):
+    controller, _, _, clock = follower
+    deadlines = []
+
+    def schedule(seconds, callback):
+        deadline = {"at": clock[0] + seconds, "callback": callback, "canceled": False}
+        deadlines.append(deadline)
+
+        def cancel():
+            deadline["canceled"] = True
+
+        return cancel
+
+    controller.schedule = schedule
+
+    def advance(seconds):
+        clock[0] = seconds
+        for deadline in list(deadlines):
+            if not deadline["canceled"] and deadline["at"] <= seconds:
+                deadline["callback"]()
+
+    return follower, deadlines, advance
+
+
+@pytest.mark.parametrize("tracks,seekable", [(0, True), (1, False), (0, False)])
+@pytest.mark.parametrize("loaded", [False, True])
+def test_paused_readiness_times_out_without_sync_or_signals(
+        scheduled_follower, tracks, seekable, loaded):
+    (c, b, messages, _), deadlines, advance = scheduled_follower
+    b.tracks, b.can_seek = tracks, seekable
+    c.configure(True, 0.7, False)
+    c.sync(AudioTarget("clip.mp4", 2, 1), False)
+    if loaded:
+        b.event("ready")
+    assert not c.ready and not c.failed
+    assert len(deadlines) == 1
+    advance(8)
+    assert c.failed and not c.ready
+    assert "loading timed out" in messages[-1]
+    assert deadlines[0]["canceled"]
+    assert not any(call[0] in ("play", "seek") for call in b.calls)
+
+
+def test_replacement_ignores_stale_readiness_deadline(scheduled_follower):
+    (c, b, messages, clock), deadlines, advance = scheduled_follower
+    b.tracks = 0
+    c.configure(True, 0.7, False)
+    c.sync(AudioTarget("a.mp4", 0, 1), False)
+    b.event("ready")
+    first = deadlines[-1]
+    clock[0] = 4
+    c.sync(AudioTarget("b.mp4", 1, 1), False)
+    b.event("ready")
+    assert first["canceled"] and deadlines[-1]["at"] == 12
+    before = list(b.calls), list(messages)
+    clock[0] = 8
+    first["callback"]()
+    assert (b.calls, messages) == before
+    assert not c.failed and c.path == "b.mp4"
+    advance(12)
+    assert c.failed and "loading timed out" in messages[-1]
+
+
+@pytest.mark.parametrize("finish", ["ready", "reset", "close", "error"])
+def test_readiness_deadline_canceled_on_completion(scheduled_follower, finish):
+    (c, b, messages, clock), deadlines, _ = scheduled_follower
+    b.can_seek = False
+    c.configure(True, 0.7, False)
+    c.sync(AudioTarget("clip.mp4", 2, 1), False)
+    b.event("ready")
+    pending = deadlines[-1]
+    if finish == "ready":
+        b.can_seek = True
+        b.event("readiness")
+    elif finish == "error":
+        b.event("error", "decoder failed")
+    else:
+        getattr(c, finish)()
+    assert pending["canceled"]
+    before = list(b.calls), list(messages)
+    clock[0] = 20
+    pending["callback"]()
+    assert (b.calls, messages) == before
+
+
+@pytest.mark.parametrize("recover", [False, True])
+def test_paused_readiness_deadline_excludes_device_outage(scheduled_follower, recover):
+    (c, b, messages, clock), deadlines, advance = scheduled_follower
+    b.can_seek = False
+    c.configure(True, 0.7, False)
+    c.sync(AudioTarget("clip.mp4", 2, 1), False)
+    b.event("ready")
+    clock[0] = 2
+    b.device = False
+    b.event("device")
+    pending = deadlines[-1]
+    assert pending["canceled"]
+    advance(30)
+    pending["callback"]()
+    assert not c.failed
+    assert "no output device" in messages[-1]
+    b.device = True
+    b.event("device")
+    assert deadlines[-1]["at"] == 36
+    advance(35)
+    assert not c.failed
+    if recover:
+        b.can_seek = True
+        b.event("readiness")
+    advance(36)
+    assert c.ready == recover and c.failed != recover
+    assert not any(call[0] == "play" for call in b.calls)
+    if recover:
+        assert ("seek", 2) in b.calls and messages[-1] == "Preview audio: paused."
+    else:
+        assert "loading timed out" in messages[-1]
+
+
+def test_paused_capability_loss_starts_new_readiness_deadline(scheduled_follower):
+    (c, b, messages, clock), deadlines, advance = scheduled_follower
+    c.configure(True, 0.7, False)
+    c.sync(AudioTarget("clip.mp4", 2, 1), False)
+    b.event("ready")
+    assert c.ready and deadlines[-1]["canceled"]
+    clock[0] = 20
+    b.can_seek = False
+    b.event("readiness")
+    assert not c.ready and deadlines[-1]["at"] == 28
+    advance(28)
+    assert c.failed and "loading timed out" in messages[-1]
+    assert not any(call[0] == "play" for call in b.calls)
+
+
 def ready(follower, target=AudioTarget("clip.mp4", 1.0, 1.0)):
     controller, backend, _, _ = follower
     controller.configure(True, 0.7, False)
@@ -134,6 +268,10 @@ def test_unavailable_backend_is_inline_and_silent(follower, failure):
         clock[0] = 9
         c.sync(target, True)
     elif failure != "device": b.event("ready")
+    if failure == "seekable":
+        assert not c.failed
+        clock[0] = 9
+        c.sync(target, True)
     assert ("play",) not in b.calls
     assert "unavailable" in messages[-1]
 
@@ -210,6 +348,84 @@ def test_device_return_retries_failed_load(follower):
     assert b.calls[-1] == ("play",)
 
 
+def test_loaded_before_seekability_waits_for_latest_target(follower):
+    c, b, messages, _ = follower
+    b.can_seek = False
+    c.configure(True, 0.7, False)
+    c.sync(AudioTarget("clip.mp4", 1, 1), True)
+    b.event("ready")
+    assert not c.failed and not c.ready
+    assert not any(call[0] in ("play", "seek") for call in b.calls)
+    c.sync(AudioTarget("clip.mp4", 4, 2), True)
+    b.can_seek = True
+    b.event("readiness")
+    assert c.ready and not c.failed
+    assert ("seek", 4) in b.calls and ("rate", 2) in b.calls
+    assert messages[-1].startswith("Preview audio on")
+
+
+def test_seekability_loss_pauses_and_recovery_realigns(follower):
+    c, b = ready(follower)
+    b.calls.clear()
+    b.can_seek = False
+    b.event("readiness")
+    assert not c.ready and not c.failed
+    assert b.calls[-1] == ("pause",)
+    c.sync(AudioTarget("clip.mp4", 7, 1), True)
+    assert ("play",) not in b.calls
+    b.can_seek = True
+    b.event("readiness")
+    assert b.calls[-1] == ("play",)
+    assert ("seek", 7) in b.calls
+    assert not any(call[0] == "load" for call in b.calls)
+
+
+@pytest.mark.parametrize("order", [
+    ("loaded", "tracks", "seekable"), ("loaded", "seekable", "tracks"),
+    ("tracks", "loaded", "seekable"), ("tracks", "seekable", "loaded"),
+    ("seekable", "loaded", "tracks"), ("seekable", "tracks", "loaded"),
+])
+def test_readiness_signal_orders_never_play_or_seek_early(follower, order):
+    c, b, _, _ = follower
+    b.tracks, b.can_seek = 0, False
+    c.configure(True, 0.7, False)
+    c.sync(AudioTarget("clip.mp4", 3, 1), True)
+    for index, event in enumerate(order):
+        if event == "tracks":
+            b.tracks = 1
+        elif event == "seekable":
+            b.can_seek = True
+        b.event("ready" if event == "loaded" else "readiness")
+        if index < 2:
+            assert not c.ready and not c.failed
+            assert not any(call[0] in ("play", "seek") for call in b.calls)
+    assert c.ready and b.calls[-1] == ("play",)
+    assert b.calls.count(("seek", 3)) == 1
+
+
+def test_pending_seekability_deadline_excludes_device_outage(follower):
+    c, b, messages, clock = follower
+    b.can_seek = False
+    c.configure(True, 0.7, False)
+    target = AudioTarget("clip.mp4", 2, 1)
+    c.sync(target, True)
+    b.event("ready")
+    clock[0] = 1
+    b.device = False
+    b.event("device")
+    clock[0] = 30
+    b.device = True
+    b.event("device")
+    assert not c.failed
+    clock[0] = 38
+    c.sync(target, True)
+    assert c.failed and not c.ready
+    assert "seekability not ready" in messages[-1]
+    b.can_seek = True
+    b.event("readiness")
+    assert not any(call[0] in ("play", "seek") for call in b.calls)
+
+
 def test_no_device_time_does_not_exhaust_loading_deadline(follower):
     c, b, messages, clock = follower
     c.configure(True, 0.7, False)
@@ -284,6 +500,32 @@ def add_clip(widget, path="clip.mp4", count=100, kind="video", probe=None):
     widget._update_preview()
     widget._update_ui_state()
     return clip
+
+
+def test_qt_readiness_timer_runs_while_ui_preview_is_paused(video):
+    from PyQt6.QtCore import QTimer
+    from src.ui.video_preview_audio import QtAudioBackend
+    widget, backend = video
+    scheduler = QtAudioBackend.__new__(QtAudioBackend)
+    scheduler.parent = widget
+    backend.schedule_readiness = scheduler.schedule_readiness
+    backend.tracks = 0
+    clock = [0.0]
+    widget._preview_clock = lambda: clock[0]
+    add_clip(widget)
+    widget._preview_audio_check.setChecked(True)
+    backend.event("ready")
+    assert not widget._preview_timer.isActive()
+    timers = [timer for timer in widget.findChildren(QTimer)
+              if timer.isActive() and timer.isSingleShot() and timer.interval() == 8000]
+    assert len(timers) == 1
+    clock[0] = 8
+    # Deliver the independent Qt timer deterministically, without waiting eight seconds.
+    timers[0].timeout.emit()
+    assert widget._preview_audio.failed
+    assert "loading timed out" in widget._preview_audio_status.text()
+    assert not timers[0].isActive()
+    assert not any(call[0] in ("play", "seek") for call in backend.calls)
 
 
 @pytest.mark.parametrize("speed", [50, 100, 175, 400])
@@ -481,6 +723,7 @@ def qt_backend():
 
         def __init__(self, parent):
             self.mediaStatusChanged, self.errorOccurred = Signal(), Signal()
+            self.seekableChanged, self.tracksChanged = Signal(), Signal()
             self.destroyed = Signal()
             self.source = ""
             self.status = self.MediaStatus.LoadedMedia
@@ -539,6 +782,8 @@ def test_qt_source_switch_discards_delayed_prior_player_events(follower, qt_back
         for status in (1, 2, 3, 4):
             old.mediaStatusChanged.callback(status)
         old.errorOccurred.callback(None, "delayed old error")
+        old.seekableChanged.callback(True)
+        old.tracksChanged.callback()
         old.destroyed.callback()
         assert id(old) not in backend._retired_players
     assert (fake.calls, messages) == before
@@ -546,6 +791,32 @@ def test_qt_source_switch_discards_delayed_prior_player_events(follower, qt_back
     current.mediaStatusChanged.callback(1)
     assert c.ready and fake.calls[-1] == ("play",)
     assert ("seek", 2) in fake.calls
+
+
+def test_qt_capability_notifications_complete_delayed_readiness(follower, qt_backend):
+    c, fake, _, _ = follower
+    backend, _ = qt_backend
+    backend.event = c.media_event
+    fake.load = backend.load
+    fake.can_seek = False
+    fake.tracks = 0
+    c.configure(True, 0.7, False)
+    c.sync(AudioTarget("a.mp4", 2, 1), True)
+    player = backend.player
+    player.tracksChanged.callback()
+    assert not c.media_loaded and not c.ready
+    player.mediaStatusChanged.callback(1)
+    assert c.media_loaded and not c.ready and not c.failed
+    fake.tracks = 1
+    player.tracksChanged.callback()
+    assert not c.ready
+    fake.can_seek = True
+    player.seekableChanged.callback(True)
+    assert c.ready and ("seek", 2) in fake.calls
+    before = list(fake.calls)
+    player.tracksChanged.callback()
+    player.seekableChanged.callback(True)
+    assert fake.calls == before
 
 
 def test_qt_seek_after_eof_discards_queued_same_player_end(follower, qt_backend):
@@ -722,12 +993,18 @@ def test_generated_media_qt_async_load_seek_and_shutdown(app, tmp_path):
     # Decode/load even on headless runners; no claim of audible hardware output.
     loop = QEventLoop()
     events = []
-    backend.event = lambda event, detail="": (events.append((event, detail)), loop.quit())
+    def observe(event, detail=""):
+        events.append((event, detail))
+        if event == "error" or (any(item[0] == "ready" for item in events)
+                               and backend.track_count() == 1 and backend.seekable()):
+            loop.quit()
+    backend.event = observe
     backend.load(str(media))
     QTimer.singleShot(4000, loop.quit)
     loop.exec()
     assert events, "Qt media loading did not respond asynchronously"
-    assert events[0][0] == "ready", events
+    assert any(event == "ready" for event, _ in events), events
+    assert not any(event == "error" for event, _ in events), events
     assert backend.track_count() == 1
     assert backend.seekable()
     backend.seek(0.2)
