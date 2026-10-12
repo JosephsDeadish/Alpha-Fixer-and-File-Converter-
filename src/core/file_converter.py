@@ -960,7 +960,7 @@ def convert_file(
     :param quality:        JPEG/WEBP/AVIF/JPEG2000 quality (1-100). 100 = lossless for JPEG2000.
     :param resize:         Optional (width, height) tuple.
     :param keep_metadata:  Copy supported EXIF/ICC/DPI, updating raster dimensions.
-                           Native decoded pixels are not EXIF-transposed.
+                           Pixels are display-oriented regardless of this option.
     :returns: output_path on success.
     :raises:  Exception on failure.
     """
@@ -987,17 +987,26 @@ def convert_file(
         if page_note:
             warnings.warn(page_note, UserWarning, stacklevel=2)
 
+        ext = Path(output_path).suffix.lower()
+        if (img.mode in ("P", "RGB", "L") and "transparency" in img.info
+                and (resize or ext in (".tiff", ".tif", ".tga", ".qoi", ".jp2"))):
+            # These encoders cannot store PNG palette/color-key alpha. Materialize
+            # it before resampling too, so interpolated pixels retain their alpha.
+            img = img.convert("LA" if img.mode == "L" else "RGBA")
+
         if resize:
             w, h = _validated_resize(resize)
             try:
-                img = img.resize((w, h), Image.LANCZOS)
+                resized = img.resize((w, h), Image.LANCZOS)
+                if img is not src_img:
+                    img.close()
+                img = resized
             except MemoryError:
                 raise MemoryError(
                     f"Not enough memory to resize image to {w}×{h}. "
                     "Try a smaller target size."
                 )
 
-        ext = Path(output_path).suffix.lower()
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
         if ext in (".tiff", ".tif"):

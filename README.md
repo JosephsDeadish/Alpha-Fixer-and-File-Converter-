@@ -451,6 +451,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Application project shutdown revalidates each editor's approved state after all
+unsaved-project prompts finish. Edits or newly started I/O during a later editor's
+modal prompt prevent shutdown from releasing earlier editors' recovery sessions.
+Bounded offscreen regressions cover approval invalidation, rollback, locks and
+repeated teardown; they do not resolve the earlier native teardown crash or
+certify sustained stability and physical power-loss recovery.
+
 Precise Video timecode fields now accept exact SMPTE frame labels and
 29.97/59.94 drop-frame labels, reject skipped labels, and support timelines beyond
 24 hours. The field context menu selects clock, SMPTE or drop-frame display;

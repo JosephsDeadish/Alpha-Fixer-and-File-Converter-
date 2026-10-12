@@ -24,11 +24,19 @@ def approve_parent_projects(dialogs, resume):
     """Keep recovery sessions live until every editor accepts shutdown."""
     projects = [dialog._project for dialog in dialogs if getattr(dialog, "_project", None) is not None]
     approved = [project._closing_approved for project in projects]
+    snapshots = []
     for project in projects:
         if not project.allow_parent_close(resume):
             for candidate, previous in zip(projects, approved):
                 candidate._closing_approved = previous
             return False
+        snapshots.append(project.fingerprint())
+    # A later editor's modal prompt can edit an already-approved editor or start I/O.
+    if any(project._busy() or project.fingerprint() != snapshot
+           for project, snapshot in zip(projects, snapshots)):
+        for candidate, previous in zip(projects, approved):
+            candidate._closing_approved = previous
+        return False
     for project in projects:
         project.commit_close()
         if project.kind == "video":

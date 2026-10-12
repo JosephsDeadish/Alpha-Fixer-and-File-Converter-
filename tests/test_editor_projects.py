@@ -2418,6 +2418,108 @@ def test_multi_editor_save_then_cancel_does_not_commit_shutdown(dialogs, tmp_pat
     assert not gif._project._closing_approved and gif._project.timer.isActive()
 
 
+@pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("dirty", [False, True])
+def test_later_shutdown_prompt_edit_invalidates_earlier_approval(dialogs, tmp_path, kind, dirty):
+    from src.ui.editor_project import approve_parent_projects
+    _, still = sources(tmp_path)
+    first = dialogs(kind)
+    later = dialogs("video" if kind == "gif" else "gif")
+    control = first._delay_slider if kind == "gif" else first._brightness_slider
+    if kind == "gif":
+        first._add_paths([str(still)])
+    else:
+        first._load_image_paths([str(still)])
+    save(first, tmp_path / "saved.json")
+    assert first._project.autosave()
+    wait(first)
+    lock = first._project._lock
+    entries = tuple(first._project.entries)
+    if dirty:
+        control.setValue(control.value() + 1)
+    later_control = later._brightness_slider if kind == "gif" else later._delay_slider
+    later_control.setValue(later_control.value() + 1)
+
+    def question(widget, *_args):
+        if widget is later:
+            assert first._project._closing_approved
+            control.setValue(control.value() + 1)
+        return QMessageBox.StandardButton.Discard
+
+    with patch("src.ui.editor_project.QMessageBox.question", side_effect=question):
+        assert not approve_parent_projects([first, later], lambda: None)
+    assert first._project.dirty
+    for widget in (first, later):
+        assert not widget._project._closing_approved
+        assert widget._project.timer.isActive()
+    assert tuple(first._project.entries) == entries
+    assert first._project._lock is lock and lock.isLocked()
+    assert first._project.autosave()
+    wait(first)
+    assert read_project(first._project.recovery_path)["controls"] == first._project.controls()
+    with patch("src.ui.editor_project.QMessageBox.question",
+               return_value=QMessageBox.StandardButton.Discard):
+        assert approve_parent_projects([first, later], lambda: None)
+    assert not first._project.entries
+    assert first._project._lock is None and not lock.isLocked()
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+def test_later_shutdown_prompt_worker_retains_earlier_session(dialogs, tmp_path, kind):
+    from threading import Event
+    from src.ui import editor_project
+    _, still = sources(tmp_path)
+    first = dialogs(kind)
+    later = dialogs("video" if kind == "gif" else "gif")
+    if kind == "gif":
+        first._add_paths([str(still)])
+    else:
+        first._load_image_paths([str(still)])
+    save(first, tmp_path / "saved.json")
+    assert first._project.autosave()
+    wait(first)
+    project = first._project
+    lock = project._lock
+    entries = tuple(project.entries)
+    for entry in entries:
+        entry.close = Mock(wraps=entry.close)
+    later_control = later._brightness_slider if kind == "gif" else later._delay_slider
+    later_control.setValue(later_control.value() + 1)
+    entered, release = Event(), Event()
+    writer = editor_project.write_project
+
+    def blocked_writer(*args):
+        entered.set()
+        assert release.wait(5)
+        writer(*args)
+
+    def question(widget, *_args):
+        assert widget is later and project._closing_approved
+        assert project.autosave()
+        assert entered.wait(5)
+        return QMessageBox.StandardButton.Discard
+
+    with patch.object(editor_project, "write_project", side_effect=blocked_writer), \
+            patch.object(editor_project.QMessageBox, "question", side_effect=question):
+        try:
+            assert not editor_project.approve_parent_projects([first, later], lambda: None)
+            assert project._job is not None and project._job.isRunning()
+            assert project._lock is lock and lock.isLocked()
+            assert project.timer.isActive() and not project._closing_approved
+            assert tuple(project.entries) == entries
+            for entry in entries:
+                entry.close.assert_not_called()
+        finally:
+            release.set()
+            wait(first)
+    with patch.object(editor_project.QMessageBox, "question",
+                      return_value=QMessageBox.StandardButton.Discard):
+        assert editor_project.approve_parent_projects([first, later], lambda: None)
+    for entry in entries:
+        entry.close.assert_called_once()
+    assert project._job is None and project._lock is None and not lock.isLocked()
+
+
 @pytest.mark.parametrize("reopen", [False, True])
 def test_supplied_gif_media_autosaves_without_edit(dialogs, tmp_path, reopen):
     from src.ui.main_window import MainWindow
