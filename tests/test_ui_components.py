@@ -7937,6 +7937,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("right-click the preview", self._widget._import_shared_status.text())
         self.assertIn("Alpha & RGBA Adjuster", self._widget._btn_import_shared.toolTip())
         self.assertIn("Import Shared Zones to Canvas", self._widget._btn_import_shared.text())
+        self.assertIn("Import shared zones", self._widget._btn_import_shared.accessibleName())
 
         self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=bool))])
         text = self._widget._import_shared_status.text()
@@ -7945,6 +7946,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Copy One Zone → Clipboard", text)
         self.assertIn("Import Shared Zones to Canvas", self._widget._btn_import_shared.text())
         self.assertIn("Copy One Zone", self._widget._btn_import_zone_to_clipboard.text())
+        self.assertIn("Copy one shared zone", self._widget._btn_import_zone_to_clipboard.accessibleName())
         self.assertTrue(self._widget._btn_import_shared.isEnabled())
         self.assertTrue(self._widget._btn_import_to_az_slot.isEnabled())
         self.assertTrue(self._widget._btn_import_zone_to_clipboard.isEnabled())
