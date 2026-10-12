@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 from PIL import Image
 from PyQt6 import sip
-from PyQt6.QtCore import Qt, QItemSelectionModel
+from PyQt6.QtCore import Qt, QItemSelectionModel, QTimer
 from PyQt6.QtGui import QKeySequence
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QMessageBox, QBoxLayout
@@ -768,6 +768,55 @@ def test_recovery_multi_instance_and_failed_autosave(dialogs, tmp_path):
     assert second._project.dirty
     assert one.is_file()
     assert len(second._frames) == 1
+
+
+@pytest.mark.parametrize("action", ["poll", "autosave", "save", "load"])
+def test_gif_import_event_loop_blocks_partial_project_io(dialogs, tmp_path, action):
+    from src.ui import gif_builder
+
+    source, still = sources(tmp_path)
+    widget = dialogs("gif")
+    widget._add_paths([str(still)])
+    project = widget._project
+    project.timer.stop()
+    path = tmp_path / "complete.json"
+    save(widget, path)
+    assert project.autosave()
+    wait(widget)
+    before = path.read_bytes(), project.recovery_path.read_bytes()
+    widget._delay_slider.setValue(777)
+    project._last_autosave -= 31
+    loader = gif_builder._load_pillow_rgba
+    observed = []
+
+    def attempt_project_io():
+        result = (project.poll() if action == "poll" else
+                  project.autosave() if action == "autosave" else
+                  project._save(path) if action == "save" else project.load(path))
+        observed.append((widget._importing, len(widget._frames), result, project._job is None))
+
+    def load_with_nested_events(media_path):
+        if media_path == str(source):
+            # Import progress dialogs pump timers after earlier files were appended.
+            QTimer.singleShot(0, attempt_project_io)
+            QApplication.processEvents()
+        return loader(media_path)
+
+    with patch.object(gif_builder, "_load_pillow_rgba", side_effect=load_with_nested_events), \
+            patch("src.ui.editor_project.QMessageBox.question", return_value=QMessageBox.StandardButton.Discard), \
+            patch("src.ui.editor_project.QMessageBox.critical"):
+        widget._add_paths([str(still), str(source)])
+        wait(widget)
+    assert observed == [(True, 2, None if action == "poll" else False, True)]
+    assert (path.read_bytes(), project.recovery_path.read_bytes()) == before
+    assert len(widget._frames) == 5 and widget._delay_slider.value() == 777
+    assert project.dirty and not widget._importing
+    assert project.autosave()
+    wait(widget)
+    document = read_project(project.recovery_path)
+    assert len(document["entries"]) == 5
+    assert document["controls"]["_delay_slider"] == 777
+    assert [entry["delay"] for entry in document["entries"][-3:]] == [80, 140, 230]
 
 
 def test_debounce_no_slider_tick_writes(dialogs):
@@ -2008,6 +2057,17 @@ def test_failed_open_pauses_retained_playback_until_error_dismissed(
     else:
         with entries[0].get_frame(0) as frame:
             assert frame.getpixel((0, 0)) == (255, 0, 0, 255)
+
+    project._retry_after -= 31
+    project._last_autosave -= 31
+    project.poll()
+    wait(widget)
+    retained = read_project(project.recovery_path)
+    assert retained["controls"] == project.controls()
+    assert retained["selected"] == project.entry_list.currentRow()
+    assert retained["playhead"] == 0 and len(retained["entries"]) == len(entries)
+    assert project.dirty and tuple(project.entries) == entries
+    assert path.read_bytes() == before
 
 
 def test_first_autosave_retains_hash_and_pending_parent_close_keeps_media(dialogs, tmp_path):

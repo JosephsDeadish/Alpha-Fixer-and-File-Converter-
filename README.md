@@ -451,6 +451,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Project save/open/autosave operations defer while a builder is importing media.
+Generated-media regressions reproduce nested import event processing and verify
+that partial timelines cannot replace complete project or recovery files.
+After a failed project open, recovery snapshots retain the original editor state
+without altering the project file. These bounded Qt checks do not establish
+physical storage recovery or complete native project acceptance.
+
 Editor projects validate split cadence/audio spans against their original source
 range before loading media. Malformed mappings cannot replace current unsaved
 edits; project playhead validation uses the same rounded duration as the editor.

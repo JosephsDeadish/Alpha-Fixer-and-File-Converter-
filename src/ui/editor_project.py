@@ -235,7 +235,8 @@ class EditorProjectController(QObject):
             raise
 
     def _busy(self):
-        return self._job is not None or self._loading or self.dialog.is_exporting()
+        return (self._job is not None or self._loading or self.dialog.is_exporting()
+                or self.dialog._editing_busy())
 
     def _start(self, operation, finished, *, loading=False):
         self._loading = loading
