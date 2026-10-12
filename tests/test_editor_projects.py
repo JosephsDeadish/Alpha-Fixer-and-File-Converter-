@@ -1286,6 +1286,169 @@ def test_storage_failure_preserves_project_recovery_and_retries(dialogs, tmp_pat
 
 @pytest.mark.parametrize("kind", ["gif", "video"])
 @pytest.mark.parametrize("automatic", [False, True])
+@pytest.mark.parametrize("boundary", ["write", "flush", "close"])
+def test_project_staged_handle_failure_retains_last_good_and_retries(
+        dialogs, tmp_path, kind, automatic, boundary):
+    import builtins
+    import errno
+    from pathlib import Path
+    from src.ui import editor_project
+
+    _, still = sources(tmp_path)
+    widget = dialogs(kind)
+    project = widget._project
+    project.timer.stop()
+    if kind == "gif":
+        widget._add_paths([str(still)])
+        control = widget._delay_slider
+    else:
+        widget._load_image_paths([str(still)])
+        control = widget._brightness_slider
+    path = tmp_path / "saved.json"
+    save(widget, path)
+    assert project.autosave()
+    wait(widget)
+    before = path.read_bytes(), project.recovery_path.read_bytes()
+    state = project.path, project._saved, project._autosaved, project._lock
+    entries = tuple(project.entries)
+    control.setValue(control.value() + 10)
+    captured = project.fingerprint()
+    destination = project.recovery_path if automatic else path
+    handles = []
+    code = {"write": errno.ENOSPC, "flush": errno.EIO, "close": errno.EACCES}[boundary]
+    error = OSError(code, f"injected {boundary} failure")
+
+    class FailingHandle:
+        def __init__(self, handle):
+            self.handle = handle
+            handles.append(handle)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            self.handle.close()
+            if boundary == "close" and exc_type is None:
+                raise error
+
+        def write(self, raw):
+            if boundary == "write":
+                self.handle.write(raw[:len(raw) // 2])
+                raise error
+            return self.handle.write(raw)
+
+        def flush(self):
+            self.handle.flush()
+            if boundary == "flush":
+                raise error
+
+        def fileno(self):
+            return self.handle.fileno()
+
+    def failing_open(filename, mode="r", *args, **kwargs):
+        handle = builtins.open(filename, mode, *args, **kwargs)
+        if mode == "wb" and Path(filename).name.startswith(".alpha_fixer_save_"):
+            return FailingHandle(handle)
+        return handle
+
+    with patch("src.core.editor_projects.open", side_effect=failing_open, create=True), \
+            patch.object(editor_project.QMessageBox, "critical") as modal:
+        assert project._save(destination, automatic=automatic)
+        wait(widget)
+    assert len(handles) == 1 and handles[0].closed
+    assert modal.call_count == (0 if automatic else 1)
+    assert f"injected {boundary} failure" in project.status.text()
+    assert project._retry_after > time.monotonic()
+    assert project.dirty and project.fingerprint() == captured
+    assert tuple(project.entries) == entries
+    assert (project.path, project._saved, project._autosaved, project._lock) == state
+    assert project._lock.isLocked()
+    assert (path.read_bytes(), project.recovery_path.read_bytes()) == before
+    assert not list(tmp_path.rglob(".alpha_fixer_save_*"))
+    assert project._job is None and not project._loading
+    assert project.save_button.isEnabled() and project.open_button.isEnabled()
+    assert project._save(destination, automatic=automatic)
+    wait(widget)
+    assert (project._autosaved if automatic else project._saved) == captured
+    assert project.dirty is automatic
+    assert read_project(destination)["controls"] == project.controls()
+    assert destination.read_bytes() != before[1 if automatic else 0]
+    assert (path if automatic else project.recovery_path).read_bytes() == before[0 if automatic else 1]
+    assert project._lock is state[3] and project._lock.isLocked()
+    assert not list(tmp_path.rglob(".alpha_fixer_save_*"))
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+def test_parent_close_save_failure_keeps_all_recovery_sessions(dialogs, tmp_path, kind):
+    import errno
+    from src.ui import editor_project
+
+    _, still = sources(tmp_path)
+    first = dialogs(kind)
+    later = dialogs("video" if kind == "gif" else "gif")
+    states = []
+    for widget in (first, later):
+        project = widget._project
+        if project.kind == "gif":
+            widget._add_paths([str(still)])
+        else:
+            widget._load_image_paths([str(still)])
+        assert project.autosave()
+        wait(widget)
+        entries = tuple(project.entries)
+        for entry in entries:
+            entry.close = Mock(wraps=entry.close)
+        states.append((project.fingerprint(), entries, project._lock,
+                       project._saved, project._autosaved, project.recovery_path.read_bytes()))
+
+    destination = tmp_path / "close-save.json"
+    resumed = Mock()
+    with patch.object(editor_project.QMessageBox, "question", side_effect=[
+            QMessageBox.StandardButton.Discard, QMessageBox.StandardButton.Save]), \
+            patch.object(editor_project.QFileDialog, "getSaveFileName",
+                         return_value=(str(destination), "")), \
+            patch("src.core.editor_projects.os.fsync", side_effect=OSError(errno.EIO, "close-save I/O loss")), \
+            patch.object(editor_project.QMessageBox, "critical") as error:
+        assert not editor_project.approve_parent_projects([first, later], resumed)
+        wait(later)
+    error.assert_called_once()
+    resumed.assert_not_called()
+    assert not destination.exists()
+    assert not list(tmp_path.rglob(".alpha_fixer_save_*"))
+    assert later._project._pending_close is None
+    assert "close-save I/O loss" in later._project.status.text()
+
+    with patch.object(editor_project.QMessageBox, "question",
+                      return_value=QMessageBox.StandardButton.Cancel) as question:
+        assert not editor_project.approve_parent_projects([later, first], resumed)
+    question.assert_called_once()
+    for widget, state in zip((first, later), states):
+        project = widget._project
+        fingerprint, entries, lock, saved, autosaved, recovery = state
+        assert project.fingerprint() == fingerprint and project.dirty
+        assert tuple(project.entries) == entries
+        assert project._saved == saved and project._autosaved == autosaved
+        assert project._lock is lock and lock.isLocked()
+        assert project.timer.isActive() and not project._closing_approved
+        assert project._job is None and not project._loading
+        assert project.recovery_path.read_bytes() == recovery
+        for entry in entries:
+            entry.close.assert_not_called()
+
+    with patch.object(editor_project.QMessageBox, "question",
+                      return_value=QMessageBox.StandardButton.Discard):
+        assert editor_project.approve_parent_projects([first, later], resumed)
+    for widget, state in zip((first, later), states):
+        assert not widget._project.entries and widget._project._lock is None
+        assert not widget._project.timer.isActive() and not state[2].isLocked()
+        assert widget._project.recovery_path.read_bytes() == state[5]
+        for entry in state[1]:
+            entry.close.assert_called_once()
+    assert not list(tmp_path.rglob("*.lock"))
+
+
+@pytest.mark.parametrize("kind", ["gif", "video"])
+@pytest.mark.parametrize("automatic", [False, True])
 def test_destination_directory_disappears_before_commit_and_retries(dialogs, tmp_path, kind, automatic):
     import os
     from src.ui import editor_project

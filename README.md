@@ -451,6 +451,15 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+Fourteen additional bounded project/recovery regressions cover partial-write
+ENOSPC, flush EIO and close EACCES for both builders' explicit saves and recovery
+writes. They verify last-good bytes, edits and session locks survive, staging
+files are cleaned and retries succeed. Mixed-editor shutdown checks retain all
+sessions/media after a save fails or another editor cancels; resources release
+only after unanimous approval. No production defect was reproduced in this pass.
+These injected/offscreen results do not establish physical storage, power-loss
+durability or native shutdown acceptance.
+
 Video Builder GIF imports use Pillow's already-composited frames rather than
 applying disposal a second time, preserving background pixels outside partial
 frame rectangles. Generated palette/transparency/disposal cases cover both
