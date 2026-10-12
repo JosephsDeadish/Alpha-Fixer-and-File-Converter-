@@ -4,7 +4,7 @@ import shutil
 from unittest.mock import patch
 
 import pytest
-from PIL import Image
+from PIL import Image, TiffImagePlugin
 from PyQt6 import sip
 from PyQt6.QtWidgets import QApplication
 
@@ -64,6 +64,43 @@ def corrupt_last_page(path):
         offset = image.tag_v2[273][0]
     with path.open("r+b") as stream:
         stream.truncate(offset + 1)
+
+
+def make_palette_tiff(folder, compression):
+    path = folder / "palette-pages.tiff"
+    specs = [
+        ("P", (7, 5), 1),
+        ("L", (3, 9), 117),
+        ("1", (11, 4), 255),
+        ("P", (4, 6), 2),
+        ("LA", (5, 3), (80, 91)),
+    ]
+    with TiffImagePlugin.AppendingTiffWriter(str(path), True) as writer:
+        for mode, size, color in specs:
+            with Image.new(mode, size, color) as image:
+                if mode == "P":
+                    image.putpalette([component for value in range(256)
+                                      for component in (value, 255 - value, (value * 3) % 256)])
+                image.save(writer, format="TIFF", compression=compression)
+            writer.newFrame()
+    return path
+
+
+@pytest.mark.parametrize("compression", ["raw", "tiff_lzw"])
+def test_palette_does_not_colorize_following_grayscale_pages(folder, compression):
+    path = make_palette_tiff(folder, compression)
+    frames = _load_pillow_rgba(str(path))
+    try:
+        assert [frame.size for frame in frames] == [(7, 5), (3, 9), (11, 4), (4, 6), (5, 3)]
+        colors = [(1, 254, 3, 255), (117, 117, 117, 255), (255, 255, 255, 255),
+                  (2, 253, 6, 255), (80, 80, 80, 91)]
+        path.unlink()
+        for frame, color in zip(frames, colors):
+            assert frame.mode == "RGBA"
+            assert frame.tobytes() == bytes(color) * (frame.width * frame.height)
+    finally:
+        for frame in frames:
+            frame.close()
 
 
 @pytest.mark.parametrize("compression", ["raw", "tiff_lzw"])

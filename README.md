@@ -451,6 +451,13 @@ network mounts or physical removable devices.
 
 ### Remaining acceptance and distribution work
 
+GIF Builder imports independent TIFF pages without carrying a preceding page's
+palette or metadata into grayscale/RGBA decoding. Generated raw/LZW mixed-page
+regressions verify pixels, alpha, dimensions, ordering and embedded project/recovery
+roundtrips after source deletion. Video still imports only the first TIFF page.
+An initial combined test group exposed an order-dependent worker assertion;
+separate focused groups passed, so combined-process acceptance remains unproven.
+
 Fourteen additional bounded project/recovery regressions cover partial-write
 ENOSPC, flush EIO and close EACCES for both builders' explicit saves and recovery
 writes. They verify last-good bytes, edits and session locks survive, staging

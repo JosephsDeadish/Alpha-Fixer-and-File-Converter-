@@ -5,7 +5,7 @@ import time
 from unittest.mock import Mock, patch
 
 import pytest
-from PIL import Image
+from PIL import Image, TiffImagePlugin
 from PyQt6 import sip
 from PyQt6.QtCore import Qt, QItemSelectionModel, QTimer
 from PyQt6.QtGui import QKeySequence
@@ -169,6 +169,53 @@ def test_gif_owned_roundtrip_and_real_export_holds(dialogs, tmp_path):
             image.seek(index)
             delays.append(image.info["duration"])
     assert delays == [80, 140, 230, 350]
+
+
+@pytest.mark.parametrize("compression", ["raw", "tiff_lzw"])
+@pytest.mark.parametrize("recovery", [False, True])
+def test_mixed_palette_tiff_pixels_survive_project_and_recovery(
+        dialogs, tmp_path, compression, recovery):
+    source = tmp_path / "palette-pages.tiff"
+    specs = [("P", (7, 5), 1), ("L", (3, 9), 117), ("LA", (5, 3), (80, 91))]
+    with TiffImagePlugin.AppendingTiffWriter(str(source), True) as writer:
+        for mode, size, color in specs:
+            with Image.new(mode, size, color) as image:
+                if mode == "P":
+                    image.putpalette([component for value in range(256)
+                                      for component in (value, 255 - value, (value * 3) % 256)])
+                image.save(writer, format="TIFF", compression=compression)
+            writer.newFrame()
+    widget = dialogs("gif")
+    widget._add_paths([str(source)])
+    widget._delay_slider.setValue(350)
+    widget._frame_list.setCurrentRow(2)
+    widget._scrubber.setValue(1)
+    if recovery:
+        widget._project.autosave()
+        wait(widget)
+        path = widget._project.recovery_path
+        widget._project._release_session()
+    else:
+        path = tmp_path / "palette.gifproject.json"
+        save(widget, path)
+    previous = path.read_bytes()
+    source.unlink()
+    restored = dialogs("gif")
+    assert restored._project.load(path, recovery=recovery)
+    wait(restored)
+    assert len(restored._frames) == 3
+    colors = [(1, 254, 3, 255), (117, 117, 117, 255), (80, 80, 80, 91)]
+    for entry, (_, size, _), color in zip(restored._frames, specs, colors):
+        assert entry._pil.mode == "RGBA"
+        assert entry._pil.size == size
+        assert entry._pil.tobytes() == bytes(color) * (size[0] * size[1])
+    assert [entry.frame_index for entry in restored._frames] == [0, 1, 2]
+    assert [entry.source_delay_ms for entry in restored._frames] == [None] * 3
+    assert restored._frame_list.currentRow() == 2
+    assert restored._preview_idx == 1
+    assert restored._delay_slider.value() == 350
+    assert restored._project.dirty is recovery
+    assert path.read_bytes() == previous
 
 
 @pytest.mark.parametrize("kind", ["gif", "video"])

@@ -107,6 +107,11 @@ def _load_pillow_rgba(path: str) -> list["PIL.Image.Image"]:
     try:
         with Image.open(path) as img:
             for page_index in range(getattr(img, "n_frames", 1)):
+                if page_index and img.format == "TIFF":
+                    # TIFF pages are independent; Pillow can retain the preceding
+                    # palette and info keys when the next page does not define them.
+                    img.info.clear()
+                    img.palette = None
                 img.seek(page_index)
                 frames.append(img.convert("RGBA"))
     except Exception as exc:
