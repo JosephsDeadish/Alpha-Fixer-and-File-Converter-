@@ -404,7 +404,6 @@ class AlphaFixerTab(QWidget):
         self._next_step_lbl.setAccessibleDescription(
             "Short guided next step that explains what to do in the Alpha Painter."
         )
-        self._next_step_lbl.hide()
         main_layout.addWidget(self._next_step_lbl)
 
         outer_splitter = QSplitter(Qt.Orientation.Horizontal)
