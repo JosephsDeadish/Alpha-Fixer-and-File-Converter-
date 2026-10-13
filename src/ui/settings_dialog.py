@@ -41,6 +41,17 @@ _TRAIL_INTENSITY_MIN = 10
 _TRAIL_INTENSITY_MAX = 100
 _TRAIL_INTENSITY_DEFAULT = 100
 
+_APPLICATION_GUARD: QApplication | None = None
+
+
+def _ensure_qapplication() -> QApplication:
+    global _APPLICATION_GUARD
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+        _APPLICATION_GUARD = app
+    return app
+
 
 def _label_width(text_sample: str) -> int:
     """Return a minimum pixel width wide enough for *text_sample* at the
@@ -151,6 +162,7 @@ class _BackgroundPathEdit(QLineEdit):
     """Line edit that accepts dropped local files for background selection."""
 
     def __init__(self, parent=None):
+        _ensure_qapplication()
         super().__init__(parent)
         self.setAcceptDrops(True)
 
