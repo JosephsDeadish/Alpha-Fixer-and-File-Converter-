@@ -1380,7 +1380,7 @@ class _FloatingHistoryOverlay(QFrame):
         self._btn_all_vis.setChecked(False)
         self._btn_all_vis.setToolTip(
             "Hide or show all zone colour overlays on the canvas at once.\n"
-            "Hidden zones keep their painted masks — only the display is toggled."
+            "Hidden zones keep their painted zones — only the display is toggled."
         )
         self._btn_all_vis.clicked.connect(self._on_all_vis_clicked)
         vlay.addWidget(self._btn_all_vis)
@@ -1548,7 +1548,7 @@ class _FloatingHistoryOverlay(QFrame):
 
 class _ZoneRow(QWidget):
     """A two-row widget showing zone colour swatch, name, alpha spinbox,
-    visibility toggle, Clear button, and Copy/Paste mask buttons."""
+    visibility toggle, Clear button, and Copy/Paste zone buttons."""
 
     selected          = pyqtSignal(int)        # zone_idx  (or -(idx+1) for clear)
     color_changed     = pyqtSignal(int, object) # zone_idx, (r,g,b) tuple
@@ -1579,7 +1579,7 @@ class _ZoneRow(QWidget):
         self._vis_btn.setFixedSize(28, 24)
         self._vis_btn.setToolTip(
             f"Toggle visibility of the {color_name} overlay in the canvas.\n"
-            "Hidden zones keep their painted masks — they are just not shown."
+            "Hidden zones keep their painted zones — they are just not shown."
         )
         self._vis_btn.clicked.connect(self._on_vis_toggled)
         top.addWidget(self._vis_btn)
@@ -1632,7 +1632,7 @@ class _ZoneRow(QWidget):
 
         outer.addLayout(bot)
 
-        # ── Row 3: Copy + Paste mask buttons ─────────────────────────────
+        # ── Row 3: Copy + Paste zone buttons ─────────────────────────────
         cp_row = QHBoxLayout()
         cp_row.setContentsMargins(0, 0, 0, 0)
         cp_row.setSpacing(4)
@@ -1739,7 +1739,7 @@ class SelectiveAlphaTool(QWidget):
     """Tab widget for the Alpha Painter editor."""
     queue_status_changed = pyqtSignal(str)
 
-    _MASK_SLOT_COUNT: int = 150  # Maximum number of saved-mask slots
+    _MASK_SLOT_COUNT: int = 150  # Maximum number of saved-zone slots
     _MASK_SLOT_INIT:  int = 3    # Number of slots created on first launch
     _AZ_SLOT_COUNT:   int = 150  # Maximum number of full-layout slots
     _AZ_SLOT_INIT:    int = 3    # Number of full-layout slots created on first launch
@@ -3016,7 +3016,7 @@ class SelectiveAlphaTool(QWidget):
             self._sound.play_mask_copy()
 
     def _on_paste_from_slot(self, slot_idx: int) -> None:
-        """Paste the mask stored in slot *slot_idx* into the currently active zone."""
+        """Paste the zone stored in slot *slot_idx* into the currently active zone."""
         if slot_idx < 0 or slot_idx >= len(self._mask_slots):
             return
         if self._mask_slots[slot_idx] is None:
