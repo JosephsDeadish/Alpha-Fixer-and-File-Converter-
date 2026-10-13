@@ -518,6 +518,7 @@ _NORMAL: dict[str, list[str]] = {
         "F1 opens the shortcuts dialog directly.",
         "Export Settings saves a full INI backup so you can restore if something goes wrong.",
         "Import Settings restores from a previously exported INI — useful when moving to a new machine.",
+        "Reset buttons live in Settings if you need to roll everything back.",
         "The About dialog shows the app version and feature summary.",
         "The Help menu. Wild concept: press F1 instead and skip this button entirely.",
         "Keyboard shortcuts are listed in here. You'll use them eventually.",
@@ -3067,6 +3068,7 @@ _DUMBED: dict[str, list[str]] = {
         "It's a dropdown menu. Click it. Read the options. Pick one. Complicated stuff.",
         "The Help menu. Wild concept: press F1 instead and skip this button entirely.",
         "Keyboard shortcuts are listed in here. You'll use them eventually.",
+        "Reset buttons live in Settings if you need to roll everything back.",
         "Congratulations on finding the Help menu. The irony of getting a tooltip for Help is not lost.",
     ],
     "use_theme_sound": [
@@ -6226,6 +6228,7 @@ _VULGAR: dict[str, list[str]] = {
         "Click → menu appears → read options → click one. Somehow we needed a tooltip for this.",
         "Export/Import settings = backup and restore everything. Custom themes, presets, all of it. One JSON file. Do it before you nuke your settings.",
         "About dialog tells you the app version, credits, and what this whole clusterfuck actually does. Worth reading once. Probably.",
+        "Reset buttons live in Settings if you need to roll everything back.",
         "Shortcuts, About, backups. This button is basically the app's instruction manual with better swearing.",
     ],
     "use_theme_sound": [

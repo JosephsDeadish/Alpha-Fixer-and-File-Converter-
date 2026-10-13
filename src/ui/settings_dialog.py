@@ -517,7 +517,7 @@ class SettingsDialog(QDialog):
         self._theme_preset_combo.setMinimumWidth(200)
         self._theme_preset_combo.setToolTip(
             "Choose a visual theme for the application.\n"
-            "Hover over each theme to see a description of its style."
+            "Hover over each theme to see its style, and watch for unlock markers on hidden themes."
         )
         self._theme_preset_combo.setAccessibleDescription(self._theme_preset_combo.toolTip())
         self._rebuild_theme_combo()
@@ -531,12 +531,12 @@ class SettingsDialog(QDialog):
         self._btn_export_theme.setMinimumWidth(110)
         self._btn_import_theme.setMinimumWidth(110)
         self._btn_export_theme.setToolTip(
-            "Export the current custom theme settings to a JSON file.\n"
-            "The file can be shared or imported on another installation."
+            "Export the current theme settings to a JSON file for backup or sharing.\n"
+            "Use this before experimenting so you can restore the same look later."
         )
         self._btn_import_theme.setToolTip(
             "Import a theme from a previously exported JSON file.\n"
-            "This will overwrite the current custom theme colors and settings."
+            "This replaces the current custom theme colors and settings."
         )
         psl.addWidget(self._btn_save_theme, 1, 0)
         psl.addWidget(self._btn_delete_theme, 1, 1)
@@ -2750,7 +2750,7 @@ class SettingsDialog(QDialog):
         self._btn_reset = QPushButton("⚠  Reset All Settings…")
         self._btn_reset.setObjectName("resetBtn")
         self._btn_reset.setToolTip(
-            "⚠ DESTRUCTIVE: Reset ALL settings, unlock flags, and history to factory defaults.\n"
+            "⚠ Reset all settings, unlock flags, and history to factory defaults.\n"
             "This cannot be undone. Restart afterward to fully apply factory defaults."
         )
         self._btn_reset.setAccessibleName("Reset all settings")
@@ -2760,7 +2760,7 @@ class SettingsDialog(QDialog):
         self._btn_reset_unlocks.setToolTip(
             "Reset only the unlock flags and click counter to zero.\n"
             "All other settings (theme, sound, trail, etc.) are preserved.\n"
-            "Useful for re-testing hidden theme easter eggs without losing your setup."
+            "Useful for re-testing hidden theme unlocks without losing your setup."
         )
         self._btn_reset_unlocks.setAccessibleName("Reset unlocks and clicks")
         self._btn_reset_unlocks.setAccessibleDescription(self._btn_reset_unlocks.toolTip())
