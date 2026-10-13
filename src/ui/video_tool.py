@@ -3090,6 +3090,9 @@ class VideoToolDialog(QDialog):
                 control.sliderPressed.connect(self._begin_history_gesture)
                 control.sliderReleased.connect(self._finish_history_gesture)
         self._update_history_controls()
+        self._project._observed = self._project.fingerprint()
+        self._project._saved = self._project._observed
+        self._project._autosaved = self._project._observed
 
     # ------------------------------------------------------------------
     # UI construction
@@ -6091,6 +6094,8 @@ class VideoToolDialog(QDialog):
             self.request_export_cancel()
             event.ignore()
             return
+        if hasattr(self, "_project") and not getattr(self._project, "path", ""):
+            self._project._closing_approved = True
         if hasattr(self, "_project") and not self._project.allow_close(self.close):
             event.ignore()
             return
