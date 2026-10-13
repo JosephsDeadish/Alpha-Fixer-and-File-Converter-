@@ -2380,12 +2380,12 @@ class SelectiveAlphaTool(QWidget):
         azv.addLayout(az_rename_row)
 
         for control, name in (
-            (self._btn_slot_add, "Add single-zone mask slot"),
-            (self._btn_slot_del, "Delete single-zone mask slot"),
+            (self._btn_slot_add, "Add single-zone saved zone slot"),
+            (self._btn_slot_del, "Delete single-zone saved zone slot"),
             (self._btn_slot_save, "Save active zone to slot"),
             (self._btn_slot_paste, "Paste zone from slot into active zone"),
-            (self._btn_slot_rename, "Rename single-zone mask slot"),
-            (self._btn_slot_clear, "Clear single-zone slot mask"),
+            (self._btn_slot_rename, "Rename single-zone saved zone slot"),
+            (self._btn_slot_clear, "Clear single-zone saved zone slot"),
             (self._btn_az_slot_add, "Add full zone layout slot"),
             (self._btn_az_slot_del, "Delete full zone layout slot"),
             (self._btn_copy_all_zones, "Save all zones to layout slot"),
@@ -3070,11 +3070,11 @@ class SelectiveAlphaTool(QWidget):
         self._on_save_to_slot(self._slot_combo.currentIndex())
 
     def _on_paste_from_slot_current(self) -> None:
-        """Paste the currently selected slot's mask into the active zone."""
+        """Paste the currently selected slot's zone into the active zone."""
         self._on_paste_from_slot(self._slot_combo.currentIndex())
 
     def _on_clear_slot_current(self) -> None:
-        """Erase the stored mask from the currently selected slot."""
+        """Erase the stored zone from the currently selected slot."""
         idx = self._slot_combo.currentIndex()
         if idx < 0 or idx >= len(self._mask_slots):
             return
@@ -3121,7 +3121,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_slot_add.setEnabled(len(self._mask_slots) < self._MASK_SLOT_COUNT)
 
     def _on_slot_rename(self) -> None:
-        """Rename the currently selected saved-mask slot."""
+        """Rename the currently selected saved-zone slot."""
         idx = self._slot_combo.currentIndex()
         if idx < 0 or idx >= len(self._mask_slots):
             return
