@@ -1164,7 +1164,7 @@ class SelectiveAlphaCanvas(QWidget):
         menu = QMenu(self)
         act_copy      = menu.addAction("Copy Zone")
         act_copy.setEnabled(self.has_image())
-        act_paste     = menu.addAction("Paste Zone")
+        act_paste     = menu.addAction("Paste Zone Mask")
         act_paste.setEnabled(self.has_image() and self._paste_available)
         menu.addSeparator()
         act_copy_all  = menu.addAction("Copy All Zones")
@@ -1648,7 +1648,7 @@ class _ZoneRow(QWidget):
         self._copy_btn.clicked.connect(lambda: self.copy_requested.emit(self._idx))
         cp_row.addWidget(self._copy_btn)
 
-        self._paste_btn = QPushButton("📌  Paste Zone")
+        self._paste_btn = QPushButton("📌  Paste Zone Mask")
         self._paste_btn.setMinimumHeight(24)
         self._paste_btn.setEnabled(False)
         self._paste_btn.setToolTip(
@@ -2239,7 +2239,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_slot_save.clicked.connect(self._on_save_to_slot_current)
         act_row.addWidget(self._btn_slot_save)
 
-        self._btn_slot_paste = QPushButton("📌  Paste Zone")
+        self._btn_slot_paste = QPushButton("📌  Paste Zone Mask")
         self._btn_slot_paste.setMinimumHeight(26)
         self._btn_slot_paste.setEnabled(False)
         self._btn_slot_paste.setToolTip(

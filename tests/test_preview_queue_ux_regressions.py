@@ -289,7 +289,7 @@ def test_painter_short_history_scrolls_and_restores(app, width, pixels, with_zoo
         undo.assert_called_once()
         redo.assert_called_once()
         highlight.assert_called_once_with(True)
-        labels.assert_called_once_with(False)
+        labels.assert_called_once_with(True)
         zones.assert_called_once_with(False)
         if scrollbar.maximum():
             focus_visible_history_control(app, history, controls[0])
