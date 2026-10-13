@@ -2380,12 +2380,12 @@ class SelectiveAlphaTool(QWidget):
         azv.addLayout(az_rename_row)
 
         for control, name in (
-            (self._btn_slot_add, "Add single-zone saved zone slot"),
-            (self._btn_slot_del, "Delete single-zone saved zone slot"),
+            (self._btn_slot_add, "Add single-zone slot"),
+            (self._btn_slot_del, "Delete single-zone slot"),
             (self._btn_slot_save, "Save active zone to slot"),
             (self._btn_slot_paste, "Paste zone from slot into active zone"),
-            (self._btn_slot_rename, "Rename single-zone saved zone slot"),
-            (self._btn_slot_clear, "Clear single-zone saved zone slot"),
+            (self._btn_slot_rename, "Rename single-zone slot"),
+            (self._btn_slot_clear, "Clear single-zone slot"),
             (self._btn_az_slot_add, "Add full zone layout slot"),
             (self._btn_az_slot_del, "Delete full zone layout slot"),
             (self._btn_copy_all_zones, "Save all zones to layout slot"),
