@@ -2024,6 +2024,9 @@ class GifBuilderDialog(QDialog):
         super().hideEvent(event)
         self.queue_status_changed.emit("")
 
+    def _has_closeable_project_content(self) -> bool:
+        return bool(self._frames)
+
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
@@ -2038,7 +2041,8 @@ class GifBuilderDialog(QDialog):
             self._cancel_export()
             event.ignore()
             return
-        if hasattr(self, "_project") and not self._project.allow_close(self.close):
+        if (hasattr(self, "_project") and self._has_closeable_project_content()
+                and not self._project.allow_close(self.close)):
             event.ignore()
             return
         self._preview_timer.stop()
@@ -2054,7 +2058,8 @@ class GifBuilderDialog(QDialog):
             self._close_after_export = True
             self._cancel_export()
             return
-        if hasattr(self, "_project") and not self._project.allow_close(lambda: self.done(result)):
+        if (hasattr(self, "_project") and self._has_closeable_project_content()
+                and not self._project.allow_close(lambda: self.done(result))):
             return
         self._preview_timer.stop()
         self._release_frames()
