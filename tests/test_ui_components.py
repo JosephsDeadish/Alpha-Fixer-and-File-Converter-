@@ -3543,6 +3543,33 @@ class TestTooltipManager(unittest.TestCase):
         self.assertIn("fucking", vulgar_mode)
         self.assertIn("fucking", vulgar_style)
 
+    def test_high_traffic_tooltip_keys_keep_mode_alignment(self):
+        from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
+        aligned_keys = [
+            "sa_open_btn",
+            "sa_save_btn",
+            "sa_show_highlights",
+            "sa_clear_all",
+            "sa_slot_combo",
+            "convert_btn",
+            "format_combo",
+            "history_tab",
+            "history_refresh_btn",
+            "history_export_btn",
+            "history_search",
+            "settings_btn",
+            "settings_theme_tab",
+            "settings_general_tab",
+        ]
+        for key in aligned_keys:
+            with self.subTest(key=key):
+                self.assertIn(key, _NORMAL)
+                self.assertIn(key, _DUMBED)
+                self.assertIn(key, _VULGAR)
+                self.assertGreaterEqual(len(_NORMAL[key]), 8)
+                self.assertGreaterEqual(len(_DUMBED[key]), 8)
+                self.assertGreaterEqual(len(_VULGAR[key]), 8)
+
     def test_normal_tips_cycle(self):
         from src.ui.tooltip_manager import _NORMAL
         self.assertIn("add_files", _NORMAL)
@@ -7972,7 +7999,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         text = self._widget._import_shared_status.text()
         self.assertIn("1 zone(s) ready", text)
         self.assertIn("Import Shared Zones to Canvas", text)
-        self.assertIn("Copy One Zone → Clipboard", text)
+        self.assertIn("Paste Zone", text)
         self.assertIn("Import Shared Zones to Canvas", self._widget._btn_import_shared.text())
         self.assertIn("Copy One Zone", self._widget._btn_import_zone_to_clipboard.text())
         self.assertIn("Copy one shared zone", self._widget._btn_import_zone_to_clipboard.accessibleName())

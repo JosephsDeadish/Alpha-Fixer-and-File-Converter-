@@ -183,7 +183,7 @@ class ConverterTab(QWidget):
 
     def _setup_ui(self):
         outer_layout = QVBoxLayout(self)
-        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setContentsMargins(10, 10, 10, 10)
         self._content_scroll = QScrollArea()
         self._content_scroll.setWidgetResizable(True)
         self._content_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)

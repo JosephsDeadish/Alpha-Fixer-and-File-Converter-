@@ -273,6 +273,7 @@ _NORMAL: dict[str, list[str]] = {
         "Input format. Output format. Click Convert. Files change. Wild, right?",
         "Congratulations, you found the Convert button. It converts. Click it.",
         "Make sure you've picked an output format first. Then this button does its job.",
+        "This is the part where the queue becomes actual fucking files instead of possibilities.",
     ],
     "format_combo": [
         "Choose the target image format for conversion.",
@@ -286,6 +287,7 @@ _NORMAL: dict[str, list[str]] = {
         "DDS needs DirectX libraries installed. If it fails, that's probably why.",
         "BMP = huge uncompressed file. Please think twice before picking BMP.",
         "Congratulations on picking a format. Now click Convert. You're almost there.",
+        "Pick a format that matches the job: alpha, size, speed, or game-engine bullshit.",
     ],
     "quality_spin": [
         "Quality percentage for lossy formats (JPEG, WEBP).",
@@ -312,6 +314,7 @@ _NORMAL: dict[str, list[str]] = {
         "Open this when you want to adjust visuals, interaction feedback, or app behavior.",
         "Most settings apply immediately, so this is the main place to fine-tune the app.",
         "Everything you can change is in here. Except file settings. Those are in the main tabs.",
+        "This is where you tell the app what kind of chaos, polish, or profanity you want from it.",
     ],
     "theme_combo": [
         "Choose a visual theme for the application.",
@@ -590,6 +593,7 @@ _NORMAL: dict[str, list[str]] = {
         "Ctrl+3 gets you here. In case clicking is still a challenge.",
         "Congratulations on finding History. Your past batches are all recorded here.",
         "Three sub-tabs: Converter, Alpha, and Alpha Painter. Very organized.",
+        "Everything that got processed shows up here, because memory is for humans and logs are for machines.",
     ],
     "history_refresh_btn": [
         "Refresh the history list to show the latest processing sessions.",
@@ -603,6 +607,7 @@ _NORMAL: dict[str, list[str]] = {
         "Click it and the list updates. Very standard button behavior.",
         "Congratulations, you found Refresh. New sessions appear after clicking it.",
         "It reloads from the log file. If new entries are missing, this fixes it.",
+        "Smack this if the history view is being lazy and hasn't caught up yet.",
     ],
     "history_export_btn": [
         "Export the currently visible history sub-tab to a CSV file.",
@@ -616,6 +621,7 @@ _NORMAL: dict[str, list[str]] = {
         "Congratulations, you can now export your processing history. Spreadsheet awaits.",
         "The resulting CSV can go into Excel, Google Sheets, or literally any text editor.",
         "Switch between sub-tabs first if you want to export a different type of history.",
+        "Export the receipts before some future you claims the batch never happened.",
     ],
     "history_clear_btn": [
         "Clear all history entries for both the Converter and Alpha & RGBA Adjuster tabs.",
@@ -759,6 +765,7 @@ _NORMAL: dict[str, list[str]] = {
         "Type here to find specific sessions. Format, date, file name — it searches all of it.",
         "Works in real time. The list shrinks as you type. Very satisfying.",
         "Congratulations, you found the search box. It works exactly like you'd expect.",
+        "Search the logs when you need to find that one weird session you half-remember and half-resent.",
     ],
     "settings_theme_tab": [
         "The Theme tab: choose a preset theme or build your own custom color scheme.",
@@ -772,6 +779,7 @@ _NORMAL: dict[str, list[str]] = {
         "15 customizable color slots. Click any swatch to change it. Instant preview.",
         "This tab groups theme presets, custom background options, and palette editing in one place.",
         "Locked themes show a lock icon. Keep using the app and they unlock. Patience rewarded.",
+        "Pick a palette here when you want the UI to stop looking like stock software and start looking like yours.",
     ],
     "settings_general_tab": [
         "The General tab: configure click effects, trails, cursor, font, and tooltip style.",
@@ -785,6 +793,7 @@ _NORMAL: dict[str, list[str]] = {
         "This tab is mainly for interaction, appearance, and tooltip behavior rather than file-processing options.",
         "Use this area when you want to simplify the interface feel without changing theme colors.",
         "Every cosmetic tweak lives in here. None of it affects file processing. Just vibes.",
+        "This is the personality board: cursor, trail, click noise, font, and tooltip chaos all live here.",
     ],
     "settings_sound_tab": [
         "The Sound tab: enable sounds, pick a sound theme or profile, and set volume.",
@@ -1854,6 +1863,7 @@ _NORMAL: dict[str, list[str]] = {
         "Click, find your image, open it. That's the three-step process explained in full.",
         "Congratulations on finding Open. Now click it and choose an image to work on.",
         "The image loads to the canvas. Zone painting can then begin. One step at a time.",
+        "No image? No painting. Pick a file first, then start carving up the canvas.",
     ],
     "sa_save_btn": [
         "Save the current Alpha Painter result.",
@@ -1867,6 +1877,7 @@ _NORMAL: dict[str, list[str]] = {
         "If this button is greyed out, create or refresh a result preview first.",
         "Once a result is ready, you can save it immediately.",
         "Saves as PNG with '_alpha_painter' appended. Good naming convention built right in.",
+        "This is the actual save button, not decorative cockpit bullshit — click it when the preview looks right.",
     ],
     "sa_show_highlights": [
         "Toggle the coloured alpha-zone highlight overlays on the canvas.",
@@ -1880,6 +1891,7 @@ _NORMAL: dict[str, list[str]] = {
         "Shows or hides the coloured zones. Off = plain image. On = rainbow zone overlay.",
         "Congratulations on toggling highlights. Now you can see (or not see) your zones.",
         "One button, full overview control. Highlights on for zone editing, off for image inspection.",
+        "If the overlays are cluttering things up, flip this and stop pretending the chaos is invisible.",
     ],
     "sa_tool_freehand": [
         "Freehand: hold and drag to paint zone colour freely over the image.",
@@ -2069,6 +2081,7 @@ _NORMAL: dict[str, list[str]] = {
         "Pick the mask slot to work with. Each slot holds one zone's painted mask.",
         "Congratulations on using the mask slot system. Very methodical.",
         "Select a slot, click Save to store. Later, select the slot and click Paste to restore.",
+        "Choose the slot before you save or paste, unless you enjoy making a glorious mess.",
     ],
     "sa_slot_save": [
         "Save the active zone's painted mask into the selected slot.",
@@ -2528,6 +2541,7 @@ _NORMAL: dict[str, list[str]] = {
         "Clears paint from every single zone simultaneously. Clean canvas.",
         "Congratulations on clearing all zones. Blank canvas achieved.",
         "All seven zones reset. Image is untouched. Only the painted zones are cleared.",
+        "Nukes every painted zone at once so you can start over without opening a new file.",
     ],
     "sa_canvas": [
         "Paint zone masks directly on the image using the selected drawing tool.",
