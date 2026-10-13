@@ -1494,42 +1494,42 @@ _NORMAL: dict[str, list[str]] = {
     ],
     "sound_zone_paint_check": [
         "Play a soft brush-stroke sound each time you paint a new zone pixel.",
-        "Off by default — gives tactile audio feedback while drawing zone masks.",
+        "Off by default — gives tactile audio feedback while drawing zone overlays.",
         "Throttled to avoid rapid-fire clicks during continuous brush strokes.",
         "Fires when the Alpha Painter canvas detects new painted pixels.",
-        "Pairs well with mask-copy and mask-paste sounds for full SA audio feedback.",
+        "Pairs well with zone-copy and zone-paste sounds for full Alpha Painter audio feedback.",
         "Fires when new zone pixels are detected — throttled to one sound per ~100 ms to avoid rapid-fire.",
         "The brush-stroke sound is soft and brief — won't interrupt focus during long painting sessions.",
-        "Pairs well with sa_mask_copy and sa_mask_paste sounds for complete SA audio feedback.",
+        "Pairs well with the zone copy and zone paste controls for complete Alpha Painter audio feedback.",
         "Check for brush sounds while painting on the Alpha Painter canvas. Art noises.",
         "Congratulations on finding the zone paint sound. Enable for satisfying canvas audio.",
         "Throttled so it doesn't rapid-fire. Just occasional confirmation clicks.",
     ],
     "sound_mask_copy_check": [
-        "Play a clipboard click when you copy a zone mask to the clipboard.",
-        "Off by default — confirms the mask has been copied successfully.",
+        "Play a clipboard click when you copy a zone to the clipboard.",
+        "Off by default — confirms the zone has been copied successfully.",
         "Short, crisp sound that distinguishes copy from paste.",
-        "Fires when you press the 'Copy Mask' button on any zone row.",
-        "Use with Mask Paste sound for full copy-paste audio feedback.",
-        "Fires when the Copy Mask button is pressed on any zone row in the Alpha Painter panel.",
-        "The clipboard click is short and crisp — clearly different from the mask-paste sound.",
-        "Only one mask can be in the clipboard at a time; copying again replaces the previous.",
-        "Check for a click when you copy a zone mask. Audio confirmation it worked.",
-        "Congratulations on finding the mask-copy sound toggle. Very specific, very useful.",
+        "Fires when you press the 'Copy Zone' button on any zone row.",
+        "Use with Zone Paste sound for full copy-paste audio feedback.",
+        "Fires when the Copy Zone button is pressed on any zone row in the Alpha Painter panel.",
+        "The clipboard click is short and crisp — clearly different from the zone-paste sound.",
+        "Only one zone can be in the clipboard at a time; copying again replaces the previous.",
+        "Check for a click when you copy a zone. Audio confirmation it worked.",
+        "Congratulations on finding the zone-copy sound toggle. Very specific, very useful.",
         "Short distinct click. Different from Paste sound so you know which happened.",
     ],
     "sound_mask_paste_check": [
-        "Play a pop sound when you paste a copied mask onto a zone.",
-        "Off by default — confirms the mask paste has been applied.",
+        "Play a pop sound when you paste a copied zone into the active zone.",
+        "Off by default — confirms the zone paste has been applied.",
         "Distinct from the copy sound so you can distinguish the two actions.",
-        "Fires when you press the 'Paste Mask' button on any zone row.",
-        "Only plays when there is actually a mask in the clipboard to paste.",
-        "Fires only when a valid mask is in the clipboard — no sound if the clipboard is empty.",
+        "Fires when you press the 'Paste Zone' button on any zone row.",
+        "Only plays when there is actually a zone in the clipboard to paste.",
+        "Fires only when a valid zone is in the clipboard — no sound if the clipboard is empty.",
         "The pop sound is distinct from the copy sound so you can distinguish the two actions.",
-        "Paste replaces the entire zone mask — the sound confirms the operation completed.",
-        "Check for a pop when you paste a mask. Confirmation the paste actually worked.",
-        "Congratulations on finding the mask-paste sound option. Enable for paste confirmation.",
-        "Only plays if there's a mask to paste. Silent if clipboard is empty.",
+        "Paste replaces the entire zone — the sound confirms the operation completed.",
+        "Check for a pop when you paste a zone. Confirmation the paste actually worked.",
+        "Congratulations on finding the zone-paste sound option. Enable for paste confirmation.",
+        "Only plays if there's a zone to paste. Silent if clipboard is empty.",
     ],
     "sound_bat_screech_check": [
         "Play a bat screech when the Bat Cave theme is selected.",
@@ -7055,6 +7055,17 @@ _MODE_TIPS = {
 
 TOOLTIP_MODES = ["Normal", "Off", "Dumbed Down", "No Filter 🤬"]
 
+_TOOLTIP_MODE_ALIASES = {
+    "No Filter": "No Filter 🤬",
+}
+
+
+def normalize_tooltip_mode(mode: str | None) -> str:
+    if mode is None:
+        return _SettingsManager._DEFAULTS.get("tooltip_mode", "No Filter 🤬")
+    mode = str(mode).strip()
+    return _TOOLTIP_MODE_ALIASES.get(mode, mode)
+
 # ---------------------------------------------------------------------------
 # TooltipManager
 # ---------------------------------------------------------------------------
@@ -7270,7 +7281,7 @@ class TooltipManager(QObject):
 
     def mode(self) -> str:
         default = _SettingsManager._DEFAULTS.get("tooltip_mode", "No Filter 🤬")
-        return self._settings.get("tooltip_mode", default)
+        return normalize_tooltip_mode(self._settings.get("tooltip_mode", default))
 
     def _cleanup_tab_bar(self, bar_id: int) -> None:
         """Remove all refs for a destroyed QTabBar to prevent stale-ref scans."""

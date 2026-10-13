@@ -3511,6 +3511,10 @@ class TestTooltipManager(unittest.TestCase):
         mgr = self._make_manager("Dumbed Down")
         self.assertEqual(mgr.mode(), "Dumbed Down")
 
+    def test_mode_normalizes_legacy_no_filter_alias(self):
+        mgr = self._make_manager("No Filter")
+        self.assertEqual(mgr.mode(), "No Filter 🤬")
+
     def test_register_stores_key(self):
         from PyQt6.QtWidgets import QPushButton
         btn = QPushButton()
@@ -3542,6 +3546,15 @@ class TestTooltipManager(unittest.TestCase):
         vulgar_style = " ".join(_VULGAR["tooltip_style_combo"]).lower()
         self.assertIn("fucking", vulgar_mode)
         self.assertIn("fucking", vulgar_style)
+
+    def test_alpha_painter_sound_tips_use_zone_language(self):
+        from src.ui.tooltip_manager import _NORMAL
+
+        for key in ("sound_zone_paint_check", "sound_mask_copy_check", "sound_mask_paste_check"):
+            with self.subTest(key=key):
+                text = " ".join(_NORMAL[key]).lower()
+                self.assertIn("zone", text)
+                self.assertNotIn("mask copy", text)
 
     def test_high_traffic_tooltip_keys_keep_mode_alignment(self):
         from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR

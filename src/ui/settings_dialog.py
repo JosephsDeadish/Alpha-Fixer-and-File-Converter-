@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .theme_engine import DEFAULT_THEME, PRESET_THEMES, HIDDEN_THEMES, THEME_DESCRIPTIONS, THEME_EFFECTS
-from .tooltip_manager import TOOLTIP_MODES
+from .tooltip_manager import TOOLTIP_MODES, normalize_tooltip_mode
 from ..core.settings_manager import (
     DEFAULT_CUSTOM_EMOJI,
     get_ui_scale_factor,
@@ -2307,6 +2307,10 @@ class SettingsDialog(QDialog):
             tip = _TOOLTIP_MODE_TIPS.get(mode, "")
             if tip:
                 self._tooltip_mode_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
+        self._tooltip_mode_combo.setAccessibleName("Tooltip wording mode")
+        self._tooltip_mode_combo.setAccessibleDescription(
+            "Choose how tooltip text is written. Use Tooltip Style to change the box appearance."
+        )
         self._tooltip_mode_combo.setToolTip(
             "Controls how tooltips appear throughout the app.\n"
             "Tooltip Mode changes the wording; Tooltip Style changes the popup appearance."
@@ -2329,6 +2333,10 @@ class SettingsDialog(QDialog):
             self._tooltip_style_combo.addItem(style_name)
             idx = self._tooltip_style_combo.count() - 1
             self._tooltip_style_combo.setItemData(idx, style_tip, Qt.ItemDataRole.ToolTipRole)
+        self._tooltip_style_combo.setAccessibleName("Tooltip box style")
+        self._tooltip_style_combo.setAccessibleDescription(
+            "Choose the tooltip popup shape and appearance. Use Tooltip Mode to change the wording."
+        )
         self._tooltip_style_combo.setToolTip(
             "Controls the visual shape and appearance of tooltip boxes.\n"
             "Auto follows the active theme. Other options force a fixed style."
@@ -3211,7 +3219,7 @@ class SettingsDialog(QDialog):
         hold_key_val = self._settings.get("hold_effects_key", "bubble")
         hold_key_idx = self._hold_key_combo.findData(hold_key_val)
         self._hold_key_combo.setCurrentIndex(max(hold_key_idx, 0))
-        mode_val = self._settings.get("tooltip_mode") or "No Filter 🤬"
+        mode_val = normalize_tooltip_mode(self._settings.get("tooltip_mode"))
         idx_m = self._tooltip_mode_combo.findText(mode_val)
         self._tooltip_mode_combo.setCurrentIndex(max(idx_m, 0))
         style_val = self._settings.get("tooltip_style", "Auto (follow theme)")
