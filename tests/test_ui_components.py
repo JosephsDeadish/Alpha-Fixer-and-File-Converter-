@@ -7783,6 +7783,28 @@ class TestBuilderHistoryPolish(unittest.TestCase):
                 widget.deleteLater()
             self._app.processEvents()
 
+    def test_redock_buttons_include_accessible_descriptions(self):
+        try:
+            from src.ui.alpha_tool import AlphaFixerTab
+            from src.ui.converter_tool import ConverterTab
+        except ImportError as exc:
+            self.skipTest(f"tool import unavailable in test env: {exc}")
+
+        settings = _ConverterTabSettingsStub()
+        converter = ConverterTab(settings)
+        alpha = AlphaFixerTab(MagicMock(), settings)
+        widgets = [converter, alpha]
+        try:
+            for widget in widgets:
+                self.assertEqual(widget._btn_dock_back.accessibleName(), "Redock preview")
+                self.assertIn("floating window", widget._btn_dock_back.accessibleDescription())
+                self.assertIn("redock", widget._btn_dock_back.accessibleDescription().lower())
+        finally:
+            for widget in widgets:
+                widget.close()
+                widget.deleteLater()
+            self._app.processEvents()
+
 
 # ---------------------------------------------------------------------------
 # Fairy Garden theme + fairy click effect

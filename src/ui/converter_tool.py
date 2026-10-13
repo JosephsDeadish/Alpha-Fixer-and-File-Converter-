@@ -401,6 +401,8 @@ class ConverterTab(QWidget):
             "The preview is currently in a floating window.\n"
             "Click to close the floating window and redock the preview here."
         )
+        self._btn_dock_back.setAccessibleName("Redock preview")
+        self._btn_dock_back.setAccessibleDescription(self._btn_dock_back.toolTip())
         self._btn_dock_back.setVisible(False)
         self._btn_dock_back.clicked.connect(self._on_dock_back_clicked)
         pa_layout.addWidget(self._btn_dock_back)
