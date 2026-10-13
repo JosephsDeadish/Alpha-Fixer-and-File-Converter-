@@ -39,12 +39,34 @@ _UI_SCALE_TIPS = {key: tip for key, _label, _factor, tip in UI_SCALE_PRESETS}
 
 
 def _is_valid_qcolor(value: str) -> bool:
-    """Return True when *value* is a valid QColor without forcing QtGui import."""
-    try:
-        from PyQt6.QtGui import QColor
-    except ImportError:
+    """Return True when *value* looks like a supported color string."""
+    text = str(value).strip().lower()
+    if not text:
         return False
-    return QColor(value).isValid()
+    if text in {"black", "white", "red", "green", "blue", "gray", "grey", "transparent"}:
+        return True
+    if text.startswith("#"):
+        hex_value = text[1:]
+        if len(hex_value) in (3, 4):
+            return all(ch in "0123456789abcdef" for ch in hex_value)
+        if len(hex_value) in (6, 8):
+            return all(ch in "0123456789abcdef" for ch in hex_value)
+        return False
+    if text.startswith("rgb(") and text.endswith(")"):
+        parts = [part.strip() for part in text[4:-1].split(",")]
+        return len(parts) == 3 and all(part.isdigit() and 0 <= int(part) <= 255 for part in parts)
+    if text.startswith("rgba(") and text.endswith(")"):
+        parts = [part.strip() for part in text[5:-1].split(",")]
+        if len(parts) != 4:
+            return False
+        if not all(part.isdigit() and 0 <= int(part) <= 255 for part in parts[:3]):
+            return False
+        try:
+            alpha = float(parts[3])
+        except ValueError:
+            return False
+        return 0.0 <= alpha <= 1.0 or 0 <= alpha <= 255
+    return False
 
 
 def get_ui_scale_presets() -> tuple[tuple[str, str, float, str], ...]:

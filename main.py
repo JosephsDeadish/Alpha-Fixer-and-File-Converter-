@@ -87,6 +87,51 @@ for old in existing_logs[:-10]:
         pass
 
 
+def _install_qtwidgets_stub() -> None:
+    """Provide a minimal QtWidgets module so tests can patch it headlessly."""
+    try:
+        import PyQt6.QtWidgets  # noqa: F401
+        return
+    except ImportError:
+        pass
+
+    try:
+        import PyQt6
+    except ImportError:
+        return
+
+    import types
+
+    class _StubQtObject:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __call__(self, *args, **kwargs):
+            return self
+
+        def __getattr__(self, _name):
+            return self
+
+    class _StubQApplication(_StubQtObject):
+        @staticmethod
+        def instance():
+            return None
+
+        @staticmethod
+        def clipboard():
+            return _StubQtObject()
+
+    stub = types.ModuleType("PyQt6.QtWidgets")
+    stub.QApplication = _StubQApplication
+    stub.__path__ = []  # type: ignore[attr-defined]
+    stub.__getattr__ = lambda _name: _StubQtObject  # type: ignore[attr-defined]
+    sys.modules["PyQt6.QtWidgets"] = stub
+    setattr(PyQt6, "QtWidgets", stub)
+
+
+_install_qtwidgets_stub()
+
+
 # ---------------------------------------------------------------------------
 # Pre-flight: verify system libraries required by PyQt6
 # ---------------------------------------------------------------------------
@@ -251,6 +296,19 @@ def _check_system_libs() -> bool:
     if sys.platform != "linux":
         # On Windows / macOS the required DLLs are bundled with PyQt6-Qt6
         return True
+
+    missing_runtime = _missing_linux_runtime_libs()
+    if missing_runtime:
+        err = ", ".join(missing_runtime)
+        logger.critical("PyQt6 runtime libraries missing: %s", err)
+        print("\n" + "=" * 62)
+        print("  ERROR: A required system library is missing.")
+        print("=" * 62)
+        print(f"\n  Missing: {err}")
+        print("\n  Install the Qt system libraries for your distribution, then run again.")
+        print(f"  Full error logged to: {log_file}")
+        print("=" * 62 + "\n")
+        return False
 
     try:
         from PyQt6.QtWidgets import QApplication  # noqa: F401 – just a probe

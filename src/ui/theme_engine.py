@@ -19,6 +19,71 @@ def _brand_banner(text: str) -> str:
     return text.replace(_LEGACY_APP_BANNER, APP_NAME)
 
 
+_NAMED_COLORS = {
+    "black": (0, 0, 0, 255),
+    "white": (255, 255, 255, 255),
+    "red": (255, 0, 0, 255),
+    "green": (0, 128, 0, 255),
+    "blue": (0, 0, 255, 255),
+    "gray": (128, 128, 128, 255),
+    "grey": (128, 128, 128, 255),
+    "transparent": (0, 0, 0, 0),
+}
+
+
+def _parse_color(value) -> tuple[int, int, int, int]:
+    """Parse a Qt-style color string into RGBA components."""
+    if isinstance(value, (tuple, list)) and len(value) in (3, 4):
+        channels = [max(0, min(255, int(channel))) for channel in value]
+        if len(channels) == 3:
+            channels.append(255)
+        return tuple(channels)  # type: ignore[return-value]
+
+    text = str(value).strip().lower()
+    if text in _NAMED_COLORS:
+        return _NAMED_COLORS[text]
+    if text.startswith("rgba(") and text.endswith(")"):
+        parts = [part.strip() for part in text[5:-1].split(",")]
+        if len(parts) == 4:
+            r, g, b = (max(0, min(255, int(part))) for part in parts[:3])
+            alpha_text = parts[3]
+            alpha = float(alpha_text)
+            if alpha <= 1:
+                a = int(round(max(0.0, min(1.0, alpha)) * 255))
+            else:
+                a = max(0, min(255, int(alpha)))
+            return r, g, b, a
+    if text.startswith("rgb(") and text.endswith(")"):
+        parts = [part.strip() for part in text[4:-1].split(",")]
+        if len(parts) == 3:
+            r, g, b = (max(0, min(255, int(part))) for part in parts)
+            return r, g, b, 255
+    if text.startswith("#"):
+        hex_value = text[1:]
+        if len(hex_value) in (3, 4):
+            expanded = "".join(ch * 2 for ch in hex_value)
+            hex_value = expanded
+        if len(hex_value) == 6:
+            hex_value += "ff"
+        if len(hex_value) == 8:
+            return tuple(int(hex_value[index:index + 2], 16) for index in range(0, 8, 2))  # type: ignore[return-value]
+    raise ValueError(f"Unsupported color value: {value!r}")
+
+
+def _to_hex(rgb: tuple[int, int, int]) -> str:
+    return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
+def _luminance(value) -> float:
+    r, g, b, _ = _parse_color(value)
+    channels = (r / 255.0, g / 255.0, b / 255.0)
+    linear = [
+        c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+        for c in channels
+    ]
+    return sum(c * weight for c, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+
+
 def get_theme_hold_effect(theme: dict) -> str:
     """Resolve the hold-click style shared by settings and the runtime."""
     effect = theme.get("_effect", "default")
@@ -3585,15 +3650,12 @@ def _get_theme_gradient_css(t: dict) -> str:
 
 def _painted_color(foreground, background):
     """Composite QColor's ARGB colors in Qt's painted sRGB space."""
-    from PyQt6.QtGui import QColor
-
-    foreground, background = QColor(foreground), QColor(background)
-    alpha = foreground.alphaF()
-    return QColor.fromRgbF(*(
-        front * alpha + back * (1 - alpha)
-        for front, back in zip(
-            (foreground.redF(), foreground.greenF(), foreground.blueF()),
-            (background.redF(), background.greenF(), background.blueF()))
+    fr, fg, fb, fa = _parse_color(foreground)
+    br, bg, bb, _ = _parse_color(background)
+    alpha = fa / 255.0
+    return _to_hex(tuple(
+        int(round(front * alpha + back * (1 - alpha)))
+        for front, back in ((fr, br), (fg, bg), (fb, bb))
     ))
 
 
@@ -3602,19 +3664,10 @@ def _readable_color(backgrounds, *candidates) -> str:
 
     Custom images/gradients and unknown parent surfaces cannot be guaranteed.
     """
-    from PyQt6.QtGui import QColor
-
-    def luminance(value) -> float:
-        color = QColor(value)
-        channels = (color.redF(), color.greenF(), color.blueF())
-        linear = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
-                  for c in channels]
-        return sum(c * weight for c, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
-
     backgrounds = list(backgrounds)
-    background_luminances = [luminance(value) for value in backgrounds]
+    background_luminances = [_luminance(value) for value in backgrounds]
     for candidate in (*candidates, "#000000", "#ffffff"):
-        foregrounds = [luminance(_painted_color(candidate, bg)) for bg in backgrounds]
+        foregrounds = [_luminance(_painted_color(candidate, bg)) for bg in backgrounds]
         if all((max(fg, bg) + 0.05) / (min(fg, bg) + 0.05) >= 4.5
                for fg, bg in zip(foregrounds, background_luminances)):
             return candidate
