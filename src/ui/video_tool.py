@@ -5940,6 +5940,8 @@ class VideoToolDialog(QDialog):
         self._export_poll.stop()
         progress, self._export_progress = self._export_progress, None
         progress.canceled.disconnect(self._cancel_export)
+        progress.setWindowModality(Qt.WindowModality.NonModal)
+        progress.hide()
         progress.close()
         progress.deleteLater()
         self._export_content.setEnabled(self._export_content_enabled)
@@ -6082,6 +6084,9 @@ class VideoToolDialog(QDialog):
         self._reset_video_history()
 
     def closeEvent(self, event) -> None:
+        self._preview_timer.stop()
+        self._layout_timer.stop()
+        self._focus_timer.stop()
         if self.is_exporting():
             self.request_export_cancel()
             event.ignore()
@@ -6093,6 +6098,9 @@ class VideoToolDialog(QDialog):
         super().closeEvent(event)
 
     def done(self, result: int) -> None:
+        self._preview_timer.stop()
+        self._layout_timer.stop()
+        self._focus_timer.stop()
         if self.is_exporting():
             self._export_deferred_result = result
             self.request_export_cancel()

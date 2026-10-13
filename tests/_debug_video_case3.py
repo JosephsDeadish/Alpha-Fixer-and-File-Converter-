@@ -138,6 +138,8 @@ def test_case(dialog, tmp_path, stage, existing):
             print('release set', flush=True)
             wait_for_video_export(dialog)
             print('after wait_for_video_export', dialog.is_exporting(), flush=True)
+            from PyQt6.QtWidgets import QApplication, QProgressDialog
+            print('progress dialogs', len([w for w in QApplication.topLevelWidgets() if isinstance(w, QProgressDialog)]), flush=True)
             assert dialog._export_content.isEnabled()
             assert not dialog._btn_remove.isEnabled()
             assert not shortcuts[0].isEnabled()
