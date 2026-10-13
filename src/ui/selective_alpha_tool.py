@@ -1774,7 +1774,7 @@ class SelectiveAlphaTool(QWidget):
         if result_ready:
             return "Next step: save the current result, or keep refining the zones and save again when it looks right."
         if has_shared_zones:
-            return "Next step: import the shared zones, refine any zone masks you need, then save when the preview looks right."
+            return "Next step: import the shared zones, refine any zones you need, then save when the preview looks right."
         return "Next step: paint or refine your zones, then save when the preview looks right."
 
     @staticmethod
@@ -1936,7 +1936,7 @@ class SelectiveAlphaTool(QWidget):
         # Row 3: Clear All Zones
         self._btn_clear_all = QPushButton("\U0001f5d1  Clear All Zones")
         self._btn_clear_all.setMinimumHeight(26)
-        self._btn_clear_all.setToolTip("Erase all painted zone masks and start over.")
+        self._btn_clear_all.setToolTip("Erase all painted zones and start over.")
         self._btn_clear_all.clicked.connect(self._on_clear_all)
         wf_lay.addWidget(self._btn_clear_all)
 
@@ -2954,7 +2954,7 @@ class SelectiveAlphaTool(QWidget):
         self._save_settings()
 
     def _on_copy_mask(self, zone_idx: int) -> None:
-        """Copy the painted mask of *zone_idx* into the single-slot clipboard."""
+        """Copy the painted zone of *zone_idx* into the single-slot clipboard."""
         arr = self._canvas.get_mask_as_array(zone_idx)
         if arr is None:
             QMessageBox.information(
@@ -2970,7 +2970,7 @@ class SelectiveAlphaTool(QWidget):
         self._refresh_session_status()
 
     def _on_paste_mask(self, zone_idx: int) -> None:
-        """Paste the clipboard mask into *zone_idx*, replacing its current mask."""
+        """Paste the clipboard zone into *zone_idx*, replacing its current zone."""
         if self._mask_clipboard is None:
             QMessageBox.information(
                 self, "Nothing to paste",
@@ -2987,12 +2987,12 @@ class SelectiveAlphaTool(QWidget):
             self._sound.play_mask_paste()
 
     def _on_save_to_slot(self, slot_idx: int) -> None:
-        """Save the active zone's mask into slot *slot_idx* (internal helper)."""
+        """Save the active zone into slot *slot_idx* (internal helper)."""
         active_zone = self._canvas.get_active_zone() if self._canvas.has_image() else -1
         if not self._canvas.has_image() or active_zone < 0:
             QMessageBox.information(
                 self, "No image loaded",
-                "Please open an image and paint a zone mask before saving to a slot."
+                "Please open an image and paint a zone before saving to a slot."
             )
             return
         arr = self._canvas.get_mask_as_array(active_zone)
@@ -3019,7 +3019,7 @@ class SelectiveAlphaTool(QWidget):
         if self._mask_slots[slot_idx] is None:
             QMessageBox.information(
                 self, "Slot empty",
-                f"Slot {slot_idx + 1} is empty. Save a mask there first."
+                f"Slot {slot_idx + 1} is empty. Save a zone there first."
             )
             return
         if not self._canvas.has_image():
@@ -3063,7 +3063,7 @@ class SelectiveAlphaTool(QWidget):
         self._sync_paste_actions()
 
     def _on_save_to_slot_current(self) -> None:
-        """Save active zone's mask into the currently selected slot."""
+        """Save active zone into the currently selected slot."""
         self._on_save_to_slot(self._slot_combo.currentIndex())
 
     def _on_paste_from_slot_current(self) -> None:
@@ -3134,7 +3134,7 @@ class SelectiveAlphaTool(QWidget):
         self._on_slot_selected(idx)
 
     def _on_copy_all_zones(self) -> None:
-        """Copy all painted zone masks into the currently selected full-layout slot."""
+        """Copy all painted zones into the currently selected full-layout slot."""
         if not self._canvas.has_image():
             return
         snapshot = self._canvas.get_all_masks()
@@ -3147,7 +3147,7 @@ class SelectiveAlphaTool(QWidget):
             self._sound.play_mask_copy()
 
     def _on_paste_all_zones(self) -> None:
-        """Paste all zone masks from the currently selected full-layout slot."""
+        """Paste all zones from the currently selected full-layout slot."""
         idx = self._az_slot_combo.currentIndex()
         if idx < 0 or idx >= len(self._az_slots):
             return
@@ -3327,7 +3327,7 @@ class SelectiveAlphaTool(QWidget):
                     raise ValueError("Invalid zone alpha.")
                 shared.append((int(alpha), mask.astype(bool)))
         except (ValueError, TypeError):
-            QMessageBox.warning(self, "Invalid Shared Zones", "The shared zones contain invalid alpha or mask data.")
+            QMessageBox.warning(self, "Invalid Shared Zones", "The shared zones contain invalid alpha or zone data.")
             return
         self._shared_zones = zones = shared
         # Mark the canvas alpha-paste menu items as available (item 67).
@@ -3406,7 +3406,7 @@ class SelectiveAlphaTool(QWidget):
         count = len(self._shared_zones)
         self._import_shared_status.setText(
             f"✅ {count} zone(s) imported to the canvas.\n"
-            "Next: refine the masks, adjust zone alpha values, or save the current result."
+            "Next: refine the zones, adjust alpha values, or save the current result."
         )
         self._refresh_session_status()
 
@@ -4056,7 +4056,7 @@ class SelectiveAlphaTool(QWidget):
         reply = QMessageBox.question(
             self,
             "Clear All Zones?",
-            "This will erase all painted zone masks.\n\n"
+            "This will erase all painted zones.\n\n"
             "Are you sure you want to start over?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
