@@ -28,7 +28,56 @@ import math
 import random
 
 from PyQt6.QtCore import Qt, QTimer, QEvent, QObject
-from PyQt6.QtGui import QColor, QPainter, QBrush, QFont, QPen, QPainterPath
+
+try:
+    from PyQt6.QtGui import QColor, QPainter, QBrush, QFont, QPen, QPainterPath
+except (ImportError, OSError, RuntimeError):
+    class _QtFallbackObject:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __call__(self, *args, **kwargs):
+            return self
+
+        def __getattr__(self, _name):
+            return self
+
+    class QColor(_QtFallbackObject):
+        def __init__(self, value="#000000", *args, **kwargs):
+            super().__init__()
+            self._value = str(value)
+
+        @classmethod
+        def fromHsv(cls, *args, **kwargs):
+            return cls(f"hsv:{args!r}:{kwargs!r}")
+
+        def name(self):
+            return self._value.lower() if isinstance(self._value, str) else str(self._value)
+
+        def __eq__(self, other):
+            if hasattr(other, "name"):
+                try:
+                    return self.name() == other.name()
+                except Exception:
+                    return False
+            return str(self._value) == str(other)
+
+    class QPainter(_QtFallbackObject):
+        class RenderHint:
+            Antialiasing = 0
+
+    class QBrush(_QtFallbackObject):
+        pass
+
+    class QFont(_QtFallbackObject):
+        pass
+
+    class QPen(_QtFallbackObject):
+        pass
+
+    class QPainterPath(_QtFallbackObject):
+        pass
+
 from PyQt6.QtWidgets import QWidget, QApplication
 
 

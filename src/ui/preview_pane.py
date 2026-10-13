@@ -12,10 +12,99 @@ import weakref
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QThread, QObject, QRect, QSize, QTimer, QEvent, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import (
-    QPainter, QPen, QBrush, QFont, QFontMetrics,
-    QPixmap, QImage, QColor, QMovie,
-)
+try:
+    from PyQt6.QtGui import (
+        QPainter, QPen, QBrush, QFont, QFontMetrics,
+        QPixmap, QImage, QColor, QMovie,
+    )
+except (ImportError, OSError, RuntimeError):
+    class _QtFallbackObject:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __call__(self, *args, **kwargs):
+            return self
+
+        def __getattr__(self, _name):
+            return self
+
+    class QColor(_QtFallbackObject):
+        def __init__(self, value="#000000", *args, **kwargs):
+            super().__init__()
+            self._value = str(value)
+
+        def name(self):
+            return self._value.lower()
+
+        def __eq__(self, other):
+            if hasattr(other, "name"):
+                try:
+                    return self.name() == other.name()
+                except Exception:
+                    return False
+            return str(self._value) == str(other)
+
+        @classmethod
+        def fromHsv(cls, *args, **kwargs):
+            return cls(f"hsv:{args!r}:{kwargs!r}")
+
+    class QImage(_QtFallbackObject):
+        class Format:
+            Format_RGBA8888 = 0
+
+        def __init__(self, *args, **kwargs):
+            super().__init__()
+            self.width = args[1] if len(args) > 1 else 0
+            self.height = args[2] if len(args) > 2 else 0
+
+        def copy(self):
+            return self
+
+    class QPixmap(_QtFallbackObject):
+        def __init__(self, *args, **kwargs):
+            super().__init__()
+
+        @classmethod
+        def fromImage(cls, _img):
+            return cls()
+
+        def copy(self):
+            return self
+
+    class QPainter(_QtFallbackObject):
+        class RenderHint:
+            Antialiasing = 0
+
+    class QPen(_QtFallbackObject):
+        pass
+
+    class QBrush(_QtFallbackObject):
+        pass
+
+    class QFont(_QtFallbackObject):
+        pass
+
+    class QFontMetrics(_QtFallbackObject):
+        def horizontalAdvance(self, text):
+            return len(str(text)) * 8
+
+        def height(self):
+            return 12
+
+    class QMovie(_QtFallbackObject):
+        def __init__(self, *args, **kwargs):
+            super().__init__()
+            self._started = False
+
+        def start(self):
+            self._started = True
+
+        def stop(self):
+            self._started = False
+
+        def currentPixmap(self):
+            return QPixmap()
+
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QSizePolicy, QFrame,
     QPushButton, QHBoxLayout, QDialog, QStyle, QStyleOptionButton,

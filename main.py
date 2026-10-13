@@ -87,51 +87,6 @@ for old in existing_logs[:-10]:
         pass
 
 
-def _install_qtwidgets_stub() -> None:
-    """Provide a minimal QtWidgets module so tests can patch it headlessly."""
-    try:
-        import PyQt6.QtWidgets  # noqa: F401
-        return
-    except ImportError:
-        pass
-
-    try:
-        import PyQt6
-    except ImportError:
-        return
-
-    import types
-
-    class _StubQtObject:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def __call__(self, *args, **kwargs):
-            return self
-
-        def __getattr__(self, _name):
-            return self
-
-    class _StubQApplication(_StubQtObject):
-        @staticmethod
-        def instance():
-            return None
-
-        @staticmethod
-        def clipboard():
-            return _StubQtObject()
-
-    stub = types.ModuleType("PyQt6.QtWidgets")
-    stub.QApplication = _StubQApplication
-    stub.__path__ = []  # type: ignore[attr-defined]
-    stub.__getattr__ = lambda _name: _StubQtObject  # type: ignore[attr-defined]
-    sys.modules["PyQt6.QtWidgets"] = stub
-    setattr(PyQt6, "QtWidgets", stub)
-
-
-_install_qtwidgets_stub()
-
-
 # ---------------------------------------------------------------------------
 # Pre-flight: verify system libraries required by PyQt6
 # ---------------------------------------------------------------------------
