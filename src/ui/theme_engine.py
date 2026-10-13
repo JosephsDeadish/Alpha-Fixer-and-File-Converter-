@@ -64,9 +64,13 @@ def _parse_color(value) -> tuple[int, int, int, int]:
             expanded = "".join(ch * 2 for ch in hex_value)
             hex_value = expanded
         if len(hex_value) == 6:
-            hex_value += "ff"
+            hex_value = "ff" + hex_value
         if len(hex_value) == 8:
-            return tuple(int(hex_value[index:index + 2], 16) for index in range(0, 8, 2))  # type: ignore[return-value]
+            alpha = int(hex_value[0:2], 16)
+            red = int(hex_value[2:4], 16)
+            green = int(hex_value[4:6], 16)
+            blue = int(hex_value[6:8], 16)
+            return red, green, blue, alpha
     raise ValueError(f"Unsupported color value: {value!r}")
 
 
