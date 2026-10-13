@@ -522,7 +522,7 @@ class GifBuilderDialog(QDialog):
         tb = QHBoxLayout()
         self._btn_add = QPushButton("➕  Add Media")
         self._btn_add.setToolTip(
-            "Add one or more images or video files to the GIF.\n"
+            "Add one or more images or video files to the GIF timeline.\n"
             "Supports PNG, JPEG, WEBP, BMP, TIFF, GIF (all frames), MP4, WEBM, AVI, MOV, and more.\n"
             "You can also drag supported media files directly onto the grid below."
         )
@@ -566,7 +566,7 @@ class GifBuilderDialog(QDialog):
         left_layout.addWidget(hint)
 
         self._import_status_lbl = QLabel(
-            "Ready: add images, GIFs, videos, or probe-detected odd containers. Import notes, grouped failures, and skipped-file details will appear here."
+            "Ready: add images, GIFs, videos, or probe-detected odd containers. Detailed notes, grouped failures, and skipped-file reasons will appear here."
         )
         self._import_status_lbl.setWordWrap(True)
         self._import_status_lbl.setProperty("statusTone", "neutral")
@@ -582,17 +582,17 @@ class GifBuilderDialog(QDialog):
         import_detail_actions = QHBoxLayout()
         import_detail_actions.addStretch()
         self._import_detail_toggle_btn = QPushButton("Show details")
-        self._import_detail_toggle_btn.setToolTip("Show or hide the full grouped import diagnostics without opening a popup.")
+        self._import_detail_toggle_btn.setToolTip("Show or hide the grouped import diagnostics without opening a popup.")
         self._import_detail_toggle_btn.clicked.connect(self._toggle_import_details)
         self._import_detail_toggle_btn.setVisible(False)
         import_detail_actions.addWidget(self._import_detail_toggle_btn)
         self._import_copy_btn = QPushButton("Copy details")
-        self._import_copy_btn.setToolTip("Copy the current import summary and diagnostics to the clipboard.")
+        self._import_copy_btn.setToolTip("Copy the current import summary and diagnostics to the clipboard for sharing or bug reports.")
         self._import_copy_btn.clicked.connect(self._copy_import_details)
         self._import_copy_btn.setVisible(False)
         import_detail_actions.addWidget(self._import_copy_btn)
         left_layout.addLayout(import_detail_actions)
-        self._next_step_lbl = QLabel("Next step: add media to build a frame timeline, then preview or export.")
+        self._next_step_lbl = QLabel("Next step: add media to build a frame timeline, then arrange frames, preview, or export.")
         self._next_step_lbl.setWordWrap(True)
         self._next_step_lbl.setProperty("statusTone", "neutral")
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -785,7 +785,7 @@ class GifBuilderDialog(QDialog):
         pv_ctrl.addStretch()
         pv_layout.addLayout(pv_ctrl)
 
-        self._frame_diag_lbl = QLabel("Frame diagnostics: add or select media to inspect frame size, source, and timing.")
+        self._frame_diag_lbl = QLabel("Frame diagnostics: select media or a frame to review source, size, and timing.")
         self._frame_diag_lbl.setWordWrap(True)
         self._frame_diag_lbl.setProperty("toolGuidance", True)
         pv_layout.addWidget(self._frame_diag_lbl)
@@ -795,7 +795,7 @@ class GifBuilderDialog(QDialog):
         # Export row
         export_row = QHBoxLayout()
         self._btn_export = QPushButton("💾  Export GIF…")
-        self._btn_export.setToolTip("Build and save the animated GIF.  Shortcut: Ctrl+S")
+        self._btn_export.setToolTip("Export the current frame timeline as a GIF.  Shortcut: Ctrl+S")
         self._btn_export.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._btn_export.clicked.connect(self._export)
         export_row.addStretch()

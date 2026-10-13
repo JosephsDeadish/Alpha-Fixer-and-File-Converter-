@@ -25,7 +25,7 @@ _THUMB_SIZE = 32  # thumbnail icon size (pixels, square)
 
 def _history_capability_summary() -> str:
     return (
-        "Ready: browse, filter, preview, and export converter, alpha, GIF Builder, Video Builder, and Alpha Painter history."
+        "Ready: browse, filter, preview, and export Converter, Alpha & RGBA Adjuster, Alpha Painter, GIF Builder, and Video Builder history."
     )
 
 
@@ -419,10 +419,10 @@ def _history_next_step_text(total: int, visible: int, filter_text: str) -> str:
     if total <= 0:
         return "Next step: run a tool or export from a builder to populate history here."
     if filter_text and visible <= 0:
-        return "Next step: clear or relax the current filter to bring matching history entries back into view."
+        return "Next step: clear or loosen the current filter to bring matching history entries back into view."
     if filter_text and visible < total:
-        return "Next step: review the filtered status/notes results, then clear the filter or export the current view."
-    return "Next step: review status and notes details, export the current view, or switch history sub-tabs."
+        return "Next step: review the filtered status and notes, then clear the filter or export the current view."
+    return "Next step: review status and notes, export the current view, or switch history sub-tabs."
 
 
 def _video_history_status(errors: object, notes: str) -> str:
@@ -591,7 +591,7 @@ class HistoryTab(QWidget):
         self._alpha_search = self._make_search_field("alpha")
         alpha_layout.addWidget(self._alpha_search)
         self._alpha_tree = _make_tree(
-            ["Time", "Mode", "Files", "✔ OK", "✘ Err", "File names"],
+            ["Time", "Preset / Mode", "Files", "✔ OK", "✘ Err", "File names"],
             col_tips=[
                 "When the alpha-fix batch was started.",
                 "Preset / mode used for this batch.",
@@ -617,7 +617,7 @@ class HistoryTab(QWidget):
         self._sel_search = self._make_search_field("selective")
         sel_layout.addWidget(self._sel_search)
         self._sel_tree = _make_tree(
-            ["Time", "Mode", "Files", "✔ OK", "✘ Err", "File names"],
+            ["Time", "Zone / Mode", "Files", "✔ OK", "✘ Err", "File names"],
             col_tips=[
                 "When the selective-alpha batch was started.",
                 "Zone / mode used for this batch.",
@@ -815,7 +815,7 @@ class HistoryTab(QWidget):
                   "selective": "Painter", "gif": "GIF Builder", "video": "Video Builder"}
         field.setAccessibleName(f"Filter {titles.get(name, name)} history")
         field.setAccessibleDescription(
-            "Filter history by text or field expressions such as status:, file: and format:. "
+            "Filter history by text or field expressions such as status:, file:, notes:, or format:. "
             "Clear the search to show all entries."
         )
         field.setPlaceholderText("🔍  Filter by time/output/status/notes/file/source/format/recovery/streams/clip/audio/filter/largest/alpha/canvas/delay or use status:, output:, notes:, file:, source:, format:, recovery:, streams:, clip:, audio:, filter:, largest:, alpha:, canvas:, size:, delay:, ok:, errors:, frames:, clips:, loop:, optimize:, resize:, fps:, wildcards (*.gif), ranges (>24, <=100), or field ORs (audio:off|kept) …")
