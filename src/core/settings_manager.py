@@ -11,7 +11,6 @@ import os
 import sys
 from pathlib import Path
 from PyQt6.QtCore import QSettings
-from PyQt6.QtGui import QColor
 
 from .app_paths import writable_app_directory
 from .atomic_output import staged_output_path
@@ -37,6 +36,15 @@ UI_SCALE_PRESETS: tuple[tuple[str, str, float, str], ...] = (
 _UI_SCALE_FACTORS = {key: factor for key, _label, factor, _tip in UI_SCALE_PRESETS}
 _UI_SCALE_LABELS = {key: label for key, label, _factor, _tip in UI_SCALE_PRESETS}
 _UI_SCALE_TIPS = {key: tip for key, _label, _factor, tip in UI_SCALE_PRESETS}
+
+
+def _is_valid_qcolor(value: str) -> bool:
+    """Return True when *value* is a valid QColor without forcing QtGui import."""
+    try:
+        from PyQt6.QtGui import QColor
+    except ImportError:
+        return False
+    return QColor(value).isValid()
 
 
 def get_ui_scale_presets() -> tuple[tuple[str, str, float, str], ...]:
@@ -414,7 +422,7 @@ class SettingsManager:
                 if not isinstance(value, str) or not value.strip():
                     theme[key] = name or default
             elif not key.startswith("_"):
-                if not isinstance(value, str) or not QColor(value).isValid():
+                if not isinstance(value, str) or not _is_valid_qcolor(value):
                     theme[key] = default
         for key in list(theme):
             if key.startswith("_") and not isinstance(theme[key], str):
@@ -422,7 +430,7 @@ class SettingsManager:
                     theme[key] = cls._DEFAULT_THEME[key]
                 else:
                     del theme[key]
-        if "_trail_color" in theme and not QColor(theme["_trail_color"]).isValid():
+        if "_trail_color" in theme and not _is_valid_qcolor(theme["_trail_color"]):
             del theme["_trail_color"]
         if name is not None:
             theme["name"] = name
@@ -799,9 +807,9 @@ class SettingsManager:
             elif field.startswith("_"):
                 valid = isinstance(value, str)
                 if field == "_trail_color":
-                    valid = valid and QColor(value).isValid()
+                    valid = valid and _is_valid_qcolor(value)
             elif field in cls._DEFAULT_THEME:
-                valid = isinstance(value, str) and QColor(value).isValid()
+                valid = isinstance(value, str) and _is_valid_qcolor(value)
             else:
                 continue
             if not valid:
