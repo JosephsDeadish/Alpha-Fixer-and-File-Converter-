@@ -3529,6 +3529,20 @@ class TestTooltipManager(unittest.TestCase):
         # No Filter 🤬 should be in the list
         self.assertTrue(any("No Filter" in m for m in TOOLTIP_MODES))
 
+    def test_tooltip_mode_and_style_tips_stay_corresponding(self):
+        from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
+        for key in ("tooltip_mode_combo", "tooltip_style_combo"):
+            self.assertIn(key, _NORMAL)
+            self.assertIn(key, _DUMBED)
+            self.assertIn(key, _VULGAR)
+            self.assertGreaterEqual(len(_NORMAL[key]), 8)
+            self.assertGreaterEqual(len(_DUMBED[key]), 8)
+            self.assertGreaterEqual(len(_VULGAR[key]), 8)
+        vulgar_mode = " ".join(_VULGAR["tooltip_mode_combo"]).lower()
+        vulgar_style = " ".join(_VULGAR["tooltip_style_combo"]).lower()
+        self.assertIn("fucking", vulgar_mode)
+        self.assertIn("fucking", vulgar_style)
+
     def test_normal_tips_cycle(self):
         from src.ui.tooltip_manager import _NORMAL
         self.assertIn("add_files", _NORMAL)
