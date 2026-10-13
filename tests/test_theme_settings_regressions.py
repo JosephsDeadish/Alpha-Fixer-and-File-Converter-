@@ -168,6 +168,16 @@ def test_direct_settings_export_serialization_failure_preserves_backup(dialog, t
     assert not list(tmp_path.glob(".alpha_fixer_save_*"))
 
 
+def test_tooltip_settings_controls_use_clearer_labels(dialog):
+    widget, _manager = dialog
+    assert widget._grp_misc.title() == "Tooltip Wording & Style"
+    assert widget._tooltip_mode_combo.currentText() in {"Normal", "Off", "Dumbed Down", "No Filter 🤬"}
+    assert widget._tooltip_mode_combo.accessibleName() == "Tooltip wording mode"
+    assert widget._tooltip_style_combo.accessibleName() == "Tooltip box style"
+    assert "Tooltip Wording" in widget._tooltip_mode_combo.toolTip()
+    assert "Tooltip Box Style" in widget._tooltip_style_combo.toolTip()
+
+
 @pytest.mark.parametrize("name", list(PRESET_THEMES) + list(HIDDEN_THEMES))
 def test_tutorial_guidance_tracks_live_theme_and_font_without_changing_steps(app, name):
     from src.ui.theme_engine import build_stylesheet

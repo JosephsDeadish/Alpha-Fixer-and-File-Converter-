@@ -2276,8 +2276,8 @@ class SettingsDialog(QDialog):
         gv.addWidget(general_intro)
 
         # ---- Tooltip Appearance GroupBox ----
-        grp_misc = QGroupBox("Tooltip Appearance")
-        misc_gl = QGridLayout(grp_misc)
+        self._grp_misc = QGroupBox("Tooltip Wording & Style")
+        misc_gl = QGridLayout(self._grp_misc)
         misc_gl.setColumnStretch(1, 1)
         misc_gl.setHorizontalSpacing(10)
         misc_gl.setVerticalSpacing(6)
@@ -2293,7 +2293,7 @@ class SettingsDialog(QDialog):
             "tooltips always use this exact size regardless of UI Scale."
         )
         misc_gl.addWidget(self._font_size_spin, 0, 1, Qt.AlignmentFlag.AlignLeft)
-        misc_gl.addWidget(QLabel("Tooltip Mode:"), 1, 0)
+        misc_gl.addWidget(QLabel("Tooltip Wording:"), 1, 0)
         self._tooltip_mode_combo = QComboBox()
         _TOOLTIP_MODE_TIPS = {
             "Normal":       "Clean, detailed tooltips with straightforward guidance.",
@@ -2309,15 +2309,15 @@ class SettingsDialog(QDialog):
                 self._tooltip_mode_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._tooltip_mode_combo.setAccessibleName("Tooltip wording mode")
         self._tooltip_mode_combo.setAccessibleDescription(
-            "Choose how tooltip text is written. Use Tooltip Style to change the box appearance."
+            "Choose how tooltip text is written. Use Tooltip Box Style to change the popup appearance."
         )
         self._tooltip_mode_combo.setToolTip(
             "Controls how tooltips appear throughout the app.\n"
-            "Tooltip Mode changes the wording; Tooltip Style changes the popup appearance."
+            "Tooltip Wording changes the text; Tooltip Box Style changes the popup appearance."
         )
         self._tooltip_mode_combo.setMaximumWidth(220)
         misc_gl.addWidget(self._tooltip_mode_combo, 1, 1, Qt.AlignmentFlag.AlignLeft)
-        misc_gl.addWidget(QLabel("Tooltip Style:"), 2, 0)
+        misc_gl.addWidget(QLabel("Tooltip Box Style:"), 2, 0)
         self._tooltip_style_combo = QComboBox()
         _TOOLTIP_STYLE_ENTRIES = [
             ("Auto (follow theme)",  "Tooltip style follows the active theme automatically."),
@@ -2335,7 +2335,7 @@ class SettingsDialog(QDialog):
             self._tooltip_style_combo.setItemData(idx, style_tip, Qt.ItemDataRole.ToolTipRole)
         self._tooltip_style_combo.setAccessibleName("Tooltip box style")
         self._tooltip_style_combo.setAccessibleDescription(
-            "Choose the tooltip popup shape and appearance. Use Tooltip Mode to change the wording."
+            "Choose the tooltip popup shape and appearance. Use Tooltip Wording to change the text."
         )
         self._tooltip_style_combo.setToolTip(
             "Controls the visual shape and appearance of tooltip boxes.\n"
@@ -2344,13 +2344,13 @@ class SettingsDialog(QDialog):
         self._tooltip_style_combo.setMaximumWidth(220)
         misc_gl.addWidget(self._tooltip_style_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
         tooltip_note = QLabel(
-            "ℹ  Tooltip Mode changes the writing style. Tooltip Style changes the box appearance."
+            "ℹ  Tooltip Wording changes the text. Tooltip Box Style changes the popup appearance."
         )
         tooltip_note.setWordWrap(True)
         tooltip_note.setProperty("settingsHint", True)
         misc_gl.addWidget(tooltip_note, 3, 0, 1, 2)
 
-        gv.addWidget(grp_misc)
+        gv.addWidget(self._grp_misc)
 
         # ---- UI Scaling GroupBox ----
         grp_scale = QGroupBox("UI Scaling")
