@@ -815,9 +815,7 @@ class GifBuilderDialog(QDialog):
         self._layout_timer.timeout.connect(self._reflow_controls)
         self._focus_timer = QTimer(self)
         self._focus_timer.setSingleShot(True)
-        self._focus_timer.timeout.connect(
-            lambda: self._reveal_focused_control(None, QApplication.focusWidget())
-        )
+        self._focus_timer.timeout.connect(self._reveal_current_focus)
         self._content_scroll = self.findChild(QWidget, "dialogContentScroll")
         self._content_scroll.viewport().installEventFilter(self)
         self._export_content.installEventFilter(self)
@@ -868,6 +866,10 @@ class GifBuilderDialog(QDialog):
             ):
                 delta = leading if leading < 0 else max(0, trailing - extent + 1)
                 bar.setValue(bar.value() + delta)
+
+    def _reveal_current_focus(self) -> None:
+        current = QApplication.focusWidget()
+        self._reveal_focused_control(None, current)
 
     def _schedule_focus_reveal(self, _previous, current) -> None:
         if current is not None and self._export_content.isAncestorOf(current):

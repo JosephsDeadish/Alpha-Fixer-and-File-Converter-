@@ -363,6 +363,7 @@ class AlphaFixerTab(QWidget):
     def _setup_ui(self):
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(10, 10, 10, 10)
+        outer_layout.setSpacing(8)
         self._content_scroll = QScrollArea()
         self._content_scroll.setWidgetResizable(True)
         self._content_scroll.setFrameShape(QScrollArea.Shape.NoFrame)

@@ -60,9 +60,43 @@ def confirm_normalized_save_path(parent, chosen_path, final_path):
     return reply == QMessageBox.StandardButton.Yes
 
 
+from PyQt6.QtWidgets import QScrollArea
+
+
+class DialogContentScrollArea(QScrollArea):
+    """Scroll area that keeps ensureWidgetVisible from overcorrecting dialogs."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.ensureWidgetVisible = self._ensure_widget_visible_safe
+
+    def _ensure_widget_visible_safe(self, child=None, xmargin=50, ymargin=50):
+        from PyQt6.QtCore import QPoint
+
+        if child is None:
+            return super().ensureWidgetVisible(child, xmargin, ymargin)
+        content = self.widget()
+        if content is None or not child.isWidgetType():
+            return super().ensureWidgetVisible(child, xmargin, ymargin)
+        if child is content:
+            return super().ensureWidgetVisible(child, xmargin, ymargin)
+        viewport = self.viewport()
+        center = child.mapTo(viewport, child.rect().center())
+        if viewport.rect().contains(center):
+            return
+        hbar = self.horizontalScrollBar()
+        vbar = self.verticalScrollBar()
+        if center.x() < 0 or center.x() > viewport.width():
+            target_x = hbar.value() + center.x() - viewport.width() // 2
+            hbar.setValue(max(hbar.minimum(), min(hbar.maximum(), target_x)))
+        if center.y() < 0 or center.y() > viewport.height():
+            target_y = vbar.value() + center.y() - viewport.height() // 2
+            vbar.setValue(max(vbar.minimum(), min(vbar.maximum(), target_y)))
+
+
 def scrollable_dialog_layout(dialog):
     """Keep large tool layouts reachable without forcing the window off-screen."""
-    from PyQt6.QtWidgets import QLayout, QScrollArea, QVBoxLayout, QWidget
+    from PyQt6.QtWidgets import QLayout, QVBoxLayout, QWidget
 
     outer = QVBoxLayout(dialog)
     outer.setContentsMargins(8, 8, 8, 8)
@@ -72,7 +106,7 @@ def scrollable_dialog_layout(dialog):
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(6)
     layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
-    scroll = QScrollArea(dialog)
+    scroll = DialogContentScrollArea(dialog)
     scroll.setObjectName("dialogContentScroll")
     scroll.setWidgetResizable(True)
     scroll.setFrameShape(QScrollArea.Shape.NoFrame)

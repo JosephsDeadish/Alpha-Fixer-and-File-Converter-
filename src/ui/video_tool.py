@@ -45,7 +45,12 @@ import time
 from threading import Lock
 from typing import Callable, Optional
 
-from ._ui_utils import fit_dialog_to_screen, scrollable_dialog_layout, reserve_space_for_focused_control
+from ._ui_utils import (
+    DialogContentScrollArea,
+    fit_dialog_to_screen,
+    scrollable_dialog_layout,
+    reserve_space_for_focused_control,
+)
 from src.core.video_export import (
     VideoExportSettings, VideoExportWorker, mux_mp4_audio,
     source_frame_index, source_frame_indices,

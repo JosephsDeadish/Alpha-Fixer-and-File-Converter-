@@ -479,6 +479,7 @@ class HistoryTab(QWidget):
     def _setup_ui(self):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(10, 10, 10, 10)
+        outer.setSpacing(8)
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QScrollArea.Shape.NoFrame)
