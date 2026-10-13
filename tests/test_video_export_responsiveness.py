@@ -37,7 +37,8 @@ def dialog(video_app):
     widget._mp4_export_available = True
     widget._record_export_history = Mock()
     with patch.object(vt.QMessageBox, "information") as info, \
-            patch.object(vt.QMessageBox, "critical") as error:
+            patch.object(vt.QMessageBox, "critical") as error, \
+            patch.object(vt.QMessageBox, "question", return_value=vt.QMessageBox.StandardButton.Discard):
         widget._test_info = info
         widget._test_error = error
         yield widget
