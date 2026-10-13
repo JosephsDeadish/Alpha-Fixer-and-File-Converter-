@@ -1640,7 +1640,7 @@ class _ZoneRow(QWidget):
         self._copy_btn = QPushButton("📋  Copy Zone")
         self._copy_btn.setMinimumHeight(24)
         self._copy_btn.setToolTip(
-            f"Copy the painted mask for {color_name} to the zone clipboard.\n"
+            f"Copy the painted zone for {color_name} to the zone clipboard.\n"
             "Use 'Paste Zone' on any zone to apply this copy."
         )
         self._copy_btn.setAccessibleName(f"Copy {color_name} zone")
@@ -2172,7 +2172,7 @@ class SelectiveAlphaTool(QWidget):
 
         # Short description so users know what this section is for
         _sz_hint = QLabel(
-            "Save/paste the painted mask for one zone at a time.\n"
+            "Save/paste the painted zone for one zone at a time.\n"
             "Save and reuse masks for the active zone."
         )
         _sz_hint.setProperty("toolGuidance", True)
@@ -2186,7 +2186,7 @@ class SelectiveAlphaTool(QWidget):
         sel_row.addWidget(slot_label)
         self._slot_combo = QComboBox()
         slot_label.setBuddy(self._slot_combo)
-        self._slot_combo.setAccessibleName("Single-zone mask slot")
+        self._slot_combo.setAccessibleName("Single-zone saved zone slot")
         self._slot_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -2215,7 +2215,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_slot_del.setMinimumHeight(26)
         self._btn_slot_del.setToolTip(
             "Delete the currently selected slot from the list.\n"
-            "Any mask stored in it will be lost."
+            "Any painted zone stored in it will be lost."
         )
         self._btn_slot_del.clicked.connect(self._on_slot_del)
         slot_btn_row.addWidget(self._btn_slot_del)
@@ -2233,8 +2233,8 @@ class SelectiveAlphaTool(QWidget):
         self._btn_slot_save = QPushButton("💾  Save Zone")
         self._btn_slot_save.setMinimumHeight(26)
         self._btn_slot_save.setToolTip(
-            "Save the active zone's mask into the selected slot.\n"
-            "Overwrites any previously saved mask in this slot."
+            "Save the active zone into the selected slot.\n"
+            "Overwrites any previously saved zone in this slot."
         )
         self._btn_slot_save.clicked.connect(self._on_save_to_slot_current)
         act_row.addWidget(self._btn_slot_save)
@@ -2243,8 +2243,8 @@ class SelectiveAlphaTool(QWidget):
         self._btn_slot_paste.setMinimumHeight(26)
         self._btn_slot_paste.setEnabled(False)
         self._btn_slot_paste.setToolTip(
-            "Paste the mask stored in the selected slot into the\n"
-            "currently active zone, replacing its painted mask."
+            "Paste the zone stored in the selected slot into the\n"
+            "currently active zone, replacing its painted zone."
         )
         self._btn_slot_paste.clicked.connect(self._on_paste_from_slot_current)
         act_row.addWidget(self._btn_slot_paste)
@@ -2264,7 +2264,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_slot_clear = QPushButton("✕  Clear")
         self._btn_slot_clear.setMinimumHeight(26)
         self._btn_slot_clear.setToolTip(
-            "Erase the mask stored in the selected slot.\n"
+            "Erase the zone stored in the selected slot.\n"
             "The slot itself is kept; only its stored data is removed."
         )
         self._btn_slot_clear.clicked.connect(self._on_clear_slot_current)
@@ -2486,7 +2486,7 @@ class SelectiveAlphaTool(QWidget):
         left_scroll.setObjectName("painterControlsScroll")
         left_scroll.setAccessibleName("Alpha Painter controls")
         left_scroll.setAccessibleDescription(
-            "Scroll to reach painting, zone, mask slot and import controls."
+            "Scroll to reach painting, zone, slot and import controls."
         )
         left_scroll.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
         left_scroll.setMaximumWidth(360)
