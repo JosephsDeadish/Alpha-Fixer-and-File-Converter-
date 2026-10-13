@@ -593,7 +593,6 @@ class SettingsDialog(QDialog):
         self._custom_bg_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._custom_bg_preview.setFrameShape(QFrame.Shape.StyledPanel)
         self._custom_bg_preview.setMinimumSize(220, 124)
-        self._custom_bg_preview.setProperty("settingsHint", True)
         self._custom_bg_preview.setWordWrap(True)
         self._custom_bg_preview.setVisible(False)
         _cbg_vl.addWidget(self._custom_bg_preview)
@@ -2343,12 +2342,10 @@ class SettingsDialog(QDialog):
 
         self._scale_preview_frame = QFrame()
         self._scale_preview_frame.setObjectName("scalePreviewFrame")
-        self._scale_preview_frame.setProperty("settingsHint", True)
         scale_preview_layout = QVBoxLayout(self._scale_preview_frame)
         scale_preview_layout.setContentsMargins(8, 8, 8, 8)
         scale_preview_layout.setSpacing(6)
         self._scale_preview_title = QLabel("Live preview")
-        self._scale_preview_title.setProperty("settingsHint", True)
         self._scale_preview_title.setWordWrap(True)
         scale_preview_layout.addWidget(self._scale_preview_title)
         self._scale_preview_sample_label = QLabel("Sample label follows the current UI scale.")
@@ -2368,7 +2365,6 @@ class SettingsDialog(QDialog):
             "Button height, spacing, border radius, and padding all update live."
         )
         self._scale_preview_detail.setWordWrap(True)
-        self._scale_preview_detail.setProperty("settingsHint", True)
         scale_preview_layout.addWidget(self._scale_preview_detail)
         scale_gl.addWidget(self._scale_preview_frame, 6, 0, 1, 2)
 
