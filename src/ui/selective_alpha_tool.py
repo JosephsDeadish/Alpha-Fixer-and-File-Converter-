@@ -2323,7 +2323,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_az_slot_del.setMinimumHeight(26)
         self._btn_az_slot_del.setToolTip(
             "Delete the currently selected full-layout slot from the list.\n"
-            "Any snapshot stored in it will be lost."
+            "Any saved zone layout stored in it will be lost."
         )
         self._btn_az_slot_del.clicked.connect(self._on_az_slot_del)
         az_slot_btn_row.addWidget(self._btn_az_slot_del)
@@ -2340,9 +2340,9 @@ class SelectiveAlphaTool(QWidget):
         self._btn_copy_all_zones = QPushButton("Copy All Zones")
         self._btn_copy_all_zones.setMinimumHeight(26)
         self._btn_copy_all_zones.setToolTip(
-            "Copy ALL painted zone masks into the selected slot.\n"
-            "Snapshots every zone at once so you can restore the\n"
-            "full painting later (even on a different image)."
+            "Copy ALL painted zones into the selected slot.\n"
+            "Saves the whole zone layout at once so you can restore it later,\n"
+            "even on a different image."
         )
         self._btn_copy_all_zones.clicked.connect(self._on_copy_all_zones)
         az_act_row.addWidget(self._btn_copy_all_zones)
@@ -2351,8 +2351,8 @@ class SelectiveAlphaTool(QWidget):
         self._btn_paste_all_zones.setMinimumHeight(26)
         self._btn_paste_all_zones.setEnabled(False)
         self._btn_paste_all_zones.setToolTip(
-            "Paste all zone masks from the selected slot back onto\n"
-            "the current image. Masks are scaled automatically if\n"
+            "Paste all zones from the selected slot back onto\n"
+            "the current image. They are scaled automatically if\n"
             "the image dimensions differ from when they were saved."
         )
         self._btn_paste_all_zones.clicked.connect(self._on_paste_all_zones)
@@ -2365,7 +2365,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_az_slot_rename = QPushButton("✏  Rename")
         self._btn_az_slot_rename.setMinimumHeight(26)
         self._btn_az_slot_rename.setToolTip(
-            "Give the selected full-layout slot a custom name."
+            "Give the selected full zone layout slot a custom name."
         )
         self._btn_az_slot_rename.clicked.connect(self._on_az_slot_rename)
         az_rename_row.addWidget(self._btn_az_slot_rename)
@@ -2373,7 +2373,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_az_slot_clear = QPushButton("✕  Clear")
         self._btn_az_slot_clear.setMinimumHeight(26)
         self._btn_az_slot_clear.setToolTip(
-            "Erase the zone snapshot stored in the selected slot."
+            "Erase the zone layout stored in the selected slot."
         )
         self._btn_az_slot_clear.clicked.connect(self._on_az_slot_clear)
         az_rename_row.addWidget(self._btn_az_slot_clear)
@@ -2388,8 +2388,8 @@ class SelectiveAlphaTool(QWidget):
             (self._btn_slot_clear, "Clear single-zone slot mask"),
             (self._btn_az_slot_add, "Add full zone layout slot"),
             (self._btn_az_slot_del, "Delete full zone layout slot"),
-            (self._btn_copy_all_zones, "Save all zone masks to layout slot"),
-            (self._btn_paste_all_zones, "Restore all zone masks from layout slot"),
+            (self._btn_copy_all_zones, "Save all zones to layout slot"),
+            (self._btn_paste_all_zones, "Restore all zones from layout slot"),
             (self._btn_az_slot_rename, "Rename full zone layout slot"),
             (self._btn_az_slot_clear, "Clear full zone layout slot"),
         ):

@@ -7923,6 +7923,11 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("painted zone stored in it will be lost", self._widget._btn_slot_del.toolTip())
         self.assertIn("Save the active zone into the selected slot", self._widget._btn_slot_save.toolTip())
         self.assertIn("Paste the zone stored in the selected slot", self._widget._btn_slot_paste.toolTip())
+        self.assertIn("Save all zones to layout slot", self._widget._btn_copy_all_zones.accessibleName())
+        self.assertIn("Restore all zones from layout slot", self._widget._btn_paste_all_zones.accessibleName())
+        self.assertIn("saved zone layout stored in it will be lost", self._widget._btn_az_slot_del.toolTip())
+        self.assertIn("Copy ALL painted zones into the selected slot", self._widget._btn_copy_all_zones.toolTip())
+        self.assertIn("Paste all zones from the selected slot back onto", self._widget._btn_paste_all_zones.toolTip())
         self.assertIn("Save Zone", self._widget._btn_slot_save.text())
         self.assertIn("Paste Zone", self._widget._btn_slot_paste.text())
 
