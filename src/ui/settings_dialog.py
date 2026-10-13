@@ -2296,10 +2296,10 @@ class SettingsDialog(QDialog):
         misc_gl.addWidget(QLabel("Tooltip Mode:"), 1, 0)
         self._tooltip_mode_combo = QComboBox()
         _TOOLTIP_MODE_TIPS = {
-            "Normal":       "Standard helpful tooltips. Clear, informative, and professional.",
-            "Off":          "Disables tooltip popups throughout the application.",
-            "Dumbed Down":  "Simplified, more sarcastic tips for users who prefer the joke-heavy variant.",
-            "No Filter 🤬": "Highly profane, joke-heavy tips that still explain the controls accurately.",
+            "Normal":       "Clean, detailed tooltips with straightforward guidance.",
+            "Off":          "Turns tooltip popups off everywhere in the app.",
+            "Dumbed Down":  "Shorter, snarkier tooltips that still explain the control.",
+            "No Filter 🤬": "Profane, joke-heavy tooltips that still describe the control accurately.",
         }
         for mode in TOOLTIP_MODES:
             self._tooltip_mode_combo.addItem(mode)
@@ -2309,7 +2309,7 @@ class SettingsDialog(QDialog):
                 self._tooltip_mode_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._tooltip_mode_combo.setToolTip(
             "Controls how tooltips appear throughout the app.\n"
-            "Mode changes the wording; Tooltip Style below changes the popup appearance."
+            "Tooltip Mode changes the wording; Tooltip Style changes the popup appearance."
         )
         self._tooltip_mode_combo.setMaximumWidth(220)
         misc_gl.addWidget(self._tooltip_mode_combo, 1, 1, Qt.AlignmentFlag.AlignLeft)
@@ -2331,7 +2331,7 @@ class SettingsDialog(QDialog):
             self._tooltip_style_combo.setItemData(idx, style_tip, Qt.ItemDataRole.ToolTipRole)
         self._tooltip_style_combo.setToolTip(
             "Controls the visual shape and appearance of tooltip boxes.\n"
-            "Auto follows the active theme.  Other options force a fixed style."
+            "Auto follows the active theme. Other options force a fixed style."
         )
         self._tooltip_style_combo.setMaximumWidth(220)
         misc_gl.addWidget(self._tooltip_style_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)

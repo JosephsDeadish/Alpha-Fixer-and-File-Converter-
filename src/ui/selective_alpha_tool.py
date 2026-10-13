@@ -105,7 +105,7 @@ def _selective_alpha_capability_details() -> str:
             "",
             "Alpha Painter tools available here:",
             f"• Paint, flood-fill, move, and transform {SELECTIVE_ALPHA_UI_ZONE_COUNT} independent alpha zones.",
-        "• Copy zones from the Alpha & RGBA Adjuster, the single-zone clipboard, or saved full-layout slots.",
+            "• Copy zones from the Alpha & RGBA Adjuster, the zone clipboard, or saved full-layout slots.",
             "• Preview overlays, alpha labels, and the saved result before exporting the edited image.",
         ]
     )
@@ -1164,7 +1164,7 @@ class SelectiveAlphaCanvas(QWidget):
         menu = QMenu(self)
         act_copy      = menu.addAction("Copy Zone")
         act_copy.setEnabled(self.has_image())
-        act_paste     = menu.addAction("Paste Zone Mask")
+        act_paste     = menu.addAction("Paste Zone")
         act_paste.setEnabled(self.has_image() and self._paste_available)
         menu.addSeparator()
         act_copy_all  = menu.addAction("Copy All Zones")
@@ -1648,7 +1648,7 @@ class _ZoneRow(QWidget):
         self._copy_btn.clicked.connect(lambda: self.copy_requested.emit(self._idx))
         cp_row.addWidget(self._copy_btn)
 
-        self._paste_btn = QPushButton("📌  Paste Zone Mask")
+        self._paste_btn = QPushButton("📌  Paste Zone")
         self._paste_btn.setMinimumHeight(24)
         self._paste_btn.setEnabled(False)
         self._paste_btn.setToolTip(
@@ -1769,12 +1769,12 @@ class SelectiveAlphaTool(QWidget):
     def _next_step_text(src_path: str, has_shared_zones: bool, result_ready: bool) -> str:
         if not src_path:
             if has_shared_zones:
-                return "Next step: open an image, then import the shared zones or save them into a Full Layout Slot."
+                return "Next step: open an image, then import the shared zones, save them to a Full Layout Slot, or copy one zone to the clipboard."
             return "Next step: open an image or copy zones from Alpha & RGBA Adjuster to begin painting."
         if result_ready:
-            return "Next step: save the current result, or keep refining the zones and save again when ready."
+            return "Next step: save the current result, or keep refining the zones and save again when it looks right."
         if has_shared_zones:
-            return "Next step: import the shared zones, refine any masks you need, then save when the preview looks right."
+            return "Next step: import the shared zones, refine any zone masks you need, then save when the preview looks right."
         return "Next step: paint or refine your zones, then save when the preview looks right."
 
     @staticmethod
@@ -1992,15 +1992,15 @@ class SelectiveAlphaTool(QWidget):
         size_box = QGroupBox("Tool Size")
         sg = QGridLayout(size_box)
         sg.setSpacing(4)
-        brush_label = QLabel("Highlighter (px):")
+        brush_label = QLabel("Brush (px):")
         sg.addWidget(brush_label, 0, 0)
         self._brush_spin = QSpinBox()
         brush_label.setBuddy(self._brush_spin)
-        self._brush_spin.setAccessibleName("Paint brush radius (image pixels)")
+        self._brush_spin.setAccessibleName("Paint brush size (image pixels)")
         self._brush_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._brush_spin.setRange(1, 200)
         self._brush_spin.setValue(10)
-        self._brush_spin.setToolTip("Radius of the freehand / line / shape brush in image pixels.")
+        self._brush_spin.setToolTip("Brush size in image pixels for freehand, line, and shape tools.")
         self._brush_spin.valueChanged.connect(
             lambda v: self._canvas.set_brush_size(v)
         )
@@ -2024,9 +2024,8 @@ class SelectiveAlphaTool(QWidget):
         # zone list scrolling out of view.
         self._autocorrect_chk = QCheckBox("Auto-correct (snap to edges)")
         self._autocorrect_chk.setToolTip(
-            "When checked, freehand and line strokes are automatically snapped\n"
-            "to nearby strong image edges after you release the mouse button.\n"
-            "Helps rough strokes align to object boundaries without precise drawing."
+            "When checked, freehand and line strokes snap toward nearby strong edges after you release.\n"
+            "Use it to make rough strokes hug object boundaries without painstaking tracing."
         )
         self._autocorrect_chk.toggled.connect(
             lambda v: self._canvas.set_autocorrect(v)
@@ -2079,8 +2078,7 @@ class SelectiveAlphaTool(QWidget):
                 self._make_zone_color_icon(r, g, b), ZONE_NAMES[i]
             )
         self._active_zone_combo.setToolTip(
-            "Select the zone to paint into.  The chosen zone becomes the\n"
-            "active paint target for all drawing tools."
+            "Select the zone to paint into. The chosen zone becomes the active target for every drawing tool."
         )
         self._active_zone_combo.currentIndexChanged.connect(
             lambda idx: self._on_zone_action(idx)
@@ -2120,7 +2118,7 @@ class SelectiveAlphaTool(QWidget):
         self._ze_name_edit.setPlaceholderText("Zone name…")
         self._ze_name_edit.setToolTip(
             "Custom name for this zone.\n"
-            "Leave blank to use the auto-derived colour name.\n"
+            "Leave blank to keep the auto-derived colour name.\n"
             "Press Enter or Tab to confirm."
         )
         self._ze_name_edit.setSizePolicy(
@@ -2172,8 +2170,8 @@ class SelectiveAlphaTool(QWidget):
 
         # Short description so users know what this section is for
         _sz_hint = QLabel(
-            "Save/paste the painted zone for one zone at a time.\n"
-            "Save and reuse masks for the active zone."
+            "Save and paste one painted zone at a time.\n"
+            "Store reusable zone shapes for the active zone."
         )
         _sz_hint.setProperty("toolGuidance", True)
         _sz_hint.setWordWrap(True)
@@ -2239,12 +2237,12 @@ class SelectiveAlphaTool(QWidget):
         self._btn_slot_save.clicked.connect(self._on_save_to_slot_current)
         act_row.addWidget(self._btn_slot_save)
 
-        self._btn_slot_paste = QPushButton("📌  Paste Zone Mask")
+        self._btn_slot_paste = QPushButton("📌  Paste Zone")
         self._btn_slot_paste.setMinimumHeight(26)
         self._btn_slot_paste.setEnabled(False)
         self._btn_slot_paste.setToolTip(
-            "Paste the zone stored in the selected slot into the\n"
-            "currently active zone, replacing its painted zone."
+            "Paste the zone stored in the selected slot into the currently active zone,\n"
+            "replacing whatever was already painted there."
         )
         self._btn_slot_paste.clicked.connect(self._on_paste_from_slot_current)
         act_row.addWidget(self._btn_slot_paste)
@@ -2265,7 +2263,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_slot_clear.setMinimumHeight(26)
         self._btn_slot_clear.setToolTip(
             "Erase the zone stored in the selected slot.\n"
-            "The slot itself is kept; only its stored data is removed."
+            "The slot stays in the list; only its stored data is removed."
         )
         self._btn_slot_clear.clicked.connect(self._on_clear_slot_current)
         rename_row.addWidget(self._btn_slot_clear)
@@ -2341,7 +2339,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_copy_all_zones.setMinimumHeight(26)
         self._btn_copy_all_zones.setToolTip(
             "Copy ALL painted zones into the selected slot.\n"
-            "Saves the whole zone layout at once so you can restore it later,\n"
+            "Save the whole zone layout at once so you can restore it later,\n"
             "even on a different image."
         )
         self._btn_copy_all_zones.clicked.connect(self._on_copy_all_zones)
@@ -2351,9 +2349,8 @@ class SelectiveAlphaTool(QWidget):
         self._btn_paste_all_zones.setMinimumHeight(26)
         self._btn_paste_all_zones.setEnabled(False)
         self._btn_paste_all_zones.setToolTip(
-            "Paste all zones from the selected slot back onto\n"
-            "the current image. They are scaled automatically if\n"
-            "the image dimensions differ from when they were saved."
+            "Paste all zones from the selected slot back onto the current image.\n"
+            "They are scaled automatically if the image size changed."
         )
         self._btn_paste_all_zones.clicked.connect(self._on_paste_all_zones)
         az_act_row.addWidget(self._btn_paste_all_zones)
@@ -2409,8 +2406,8 @@ class SelectiveAlphaTool(QWidget):
         iv.setContentsMargins(4, 4, 4, 4)
 
         import_note = QLabel(
-            "Bring detected zones here from Alpha & RGBA Adjuster, then either import them onto the canvas,\n"
-            "save the whole set into a Full Layout Slot, or copy one zone into the single-zone clipboard."
+            "Bring detected zones here from Alpha & RGBA Adjuster, then import them onto the canvas,\n"
+            "save the whole set into a Full Layout Slot, or copy one zone into the zone clipboard."
         )
         import_note.setWordWrap(True)
         import_note.setProperty("toolGuidance", True)
@@ -2459,7 +2456,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_import_zone_to_clipboard.setMinimumHeight(26)
         self._btn_import_zone_to_clipboard.setEnabled(False)
         self._btn_import_zone_to_clipboard.setToolTip(
-            "Copy one shared zone into the single-zone clipboard.\n"
+            "Copy one shared zone into the zone clipboard.\n"
             "If several zones are ready, you can pick which one to copy.\n\n"
             "Then use 'Paste Zone' in the active zone controls below."
         )
@@ -2807,18 +2804,18 @@ class SelectiveAlphaTool(QWidget):
     @staticmethod
     def _tool_tooltip(key: str) -> str:
         tips = {
-            "freehand":  "Paint freehand.  Hold & drag to brush over the image.  [B]",
-            "line":      "Draw a straight filled line.  Drag from start to end.  [L]",
-            "rect":      "Fill a rectangle.  Drag from one corner to the opposite.  [R]",
-            "ellipse":   "Fill an ellipse.  Drag bounding box corner-to-corner.  [X]",
-            "fill":      "Click to flood-fill a region.  Stops at image edges.  [F]",
-            "polygon":   "Click to add vertices; double-click to close & fill.\n"
+            "freehand":  "Freehand: drag to paint the active zone. Release for one undo step.  [B]",
+            "line":      "Line: drag a straight zone stroke from start to finish.  [L]",
+            "rect":      "Rectangle: drag corner-to-corner to fill a boxy zone.  [R]",
+            "ellipse":   "Ellipse: drag the bounding box to fill an oval zone.  [X]",
+            "fill":      "Fill: click to flood-fill a region until image edges stop it.  [F]",
+            "polygon":   "Polygon: click vertices; double-click to close and fill.\n"
                          "Press Esc to cancel.  [P]",
-            "eraser":    "Erase painted highlights from all zones.\n"
-                         "Hold & drag to remove previously painted areas.  [E]",
-            "transform": "Drag to move the zone mask under the cursor.\n"
-                         "Shift+drag to rotate.  Ctrl+drag to scale.\n"
-                         "One undo entry is created per drag gesture.  [T]",
+            "eraser":    "Eraser: drag to remove painted zone coverage from every zone.\n"
+                         "Hold & drag to clean up overlaps or mistakes.  [E]",
+            "transform": "Transform: drag the zone under the cursor to move it.\n"
+                         "Shift+drag rotates.  Ctrl+drag scales.  [T]\n"
+                         "One undo entry is created per drag gesture.",
         }
         return tips.get(key, "")
 
@@ -2845,7 +2842,7 @@ class SelectiveAlphaTool(QWidget):
             size_txt = f"Brush: {self._brush_spin.value()} px"
         zoom_pct = int(round(self._canvas._zoom * 100))
         self._status_lbl.setText(
-            f"Tool: {tool_name}  |  {zone_name}  |  {size_txt}  |  Zoom: {zoom_pct}%"
+            f"Tool: {tool_name}  |  Active zone: {zone_name}  |  {size_txt}  |  Zoom: {zoom_pct}%"
         )
         self._refresh_session_status()
 
