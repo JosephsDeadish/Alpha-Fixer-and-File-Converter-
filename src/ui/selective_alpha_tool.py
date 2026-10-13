@@ -2962,7 +2962,7 @@ class SelectiveAlphaTool(QWidget):
         if arr is None:
             QMessageBox.information(
                 self, "Nothing to copy",
-                f"Zone {zone_idx + 1} has no painted mask to copy."
+                f"Zone {zone_idx + 1} has no painted zone to copy."
             )
             return
         self._mask_clipboard = arr
@@ -2984,7 +2984,7 @@ class SelectiveAlphaTool(QWidget):
             return
         # Attempt to paste; set_mask_from_array validates dimensions.
         if not self._canvas.set_mask_from_array(zone_idx, self._mask_clipboard):
-            QMessageBox.warning(self, "Invalid Mask", "The clipboard mask is not a valid two-dimensional mask.")
+            QMessageBox.warning(self, "Invalid Zone", "The clipboard zone is not a valid two-dimensional zone.")
             return
         if self._sound is not None:
             self._sound.play_mask_paste()
@@ -3002,7 +3002,7 @@ class SelectiveAlphaTool(QWidget):
         if arr is None:
             QMessageBox.information(
                 self, "Nothing to save",
-                f"Zone {active_zone + 1} has no painted mask to save."
+                f"Zone {active_zone + 1} has no painted zone to save."
             )
             return
         self._mask_slots[slot_idx] = arr.copy()
@@ -3028,12 +3028,12 @@ class SelectiveAlphaTool(QWidget):
         if not self._canvas.has_image():
             QMessageBox.information(
                 self, "No image loaded",
-                "Please open an image before pasting a saved mask."
+                "Please open an image before pasting a saved zone."
             )
             return
         active_zone = self._canvas.get_active_zone()
         if not self._canvas.set_mask_from_array(active_zone, self._mask_slots[slot_idx]):
-            QMessageBox.warning(self, "Invalid Mask", "The saved mask is not a valid two-dimensional mask.")
+            QMessageBox.warning(self, "Invalid Zone", "The saved zone is not a valid two-dimensional zone.")
             return
         if self._sound is not None:
             self._sound.play_mask_paste()
@@ -3163,7 +3163,7 @@ class SelectiveAlphaTool(QWidget):
             )
             return
         if not self._canvas.set_all_masks(self._az_slots[idx]):
-            QMessageBox.warning(self, "Invalid Mask Layout", "The saved layout contains an invalid mask.")
+            QMessageBox.warning(self, "Invalid Zone Layout", "The saved layout contains invalid zone data.")
             return
         if self._sound is not None:
             self._sound.play_mask_paste()
@@ -3184,7 +3184,7 @@ class SelectiveAlphaTool(QWidget):
             return
         _alpha_val, bool_mask = self._shared_zones[0]
         if not self._canvas.set_mask_from_array(self._canvas._active_zone, bool_mask):
-            QMessageBox.warning(self, "Invalid Mask", "The shared zone contains an invalid mask.")
+            QMessageBox.warning(self, "Invalid Zone", "The shared zone contains invalid zone data.")
             return
         if self._sound is not None:
             self._sound.play_mask_paste()
@@ -3204,7 +3204,7 @@ class SelectiveAlphaTool(QWidget):
                                     "Please open an image before pasting zones.")
             return
         if not self._canvas.populate_zones_from_detection(self._shared_zones):
-            QMessageBox.warning(self, "Invalid Mask Layout", "The shared zones contain an invalid mask.")
+            QMessageBox.warning(self, "Invalid Zone Layout", "The shared zones contain invalid zone data.")
             return
         if self._sound is not None:
             self._sound.play_mask_paste()
@@ -3387,7 +3387,7 @@ class SelectiveAlphaTool(QWidget):
 
         # populate_zones_from_detection handles undo snapshotting.
         if not self._canvas.populate_zones_from_detection(self._shared_zones):
-            QMessageBox.warning(self, "Invalid Mask Layout", "The shared zones contain an invalid mask.")
+            QMessageBox.warning(self, "Invalid Zone Layout", "The shared zones contain invalid zone data.")
             return
 
         # Sync UI for each imported zone.
