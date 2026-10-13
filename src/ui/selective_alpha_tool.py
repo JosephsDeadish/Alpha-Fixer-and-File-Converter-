@@ -1793,7 +1793,7 @@ class SelectiveAlphaTool(QWidget):
 
     @classmethod
     def _filled_single_zone_slot_text(cls, info: str) -> str:
-        detail = str(info or "saved mask").strip()
+        detail = str(info or "saved zone").strip()
         return f"Saved from: {detail} — paste into the active zone, rename for reuse, or clear this slot."
 
     @classmethod
@@ -2867,7 +2867,7 @@ class SelectiveAlphaTool(QWidget):
         if self._shared_zones:
             extras.append(f"{len(self._shared_zones)} shared zone{'s' if len(self._shared_zones) != 1 else ''} ready")
         if self._mask_clipboard is not None:
-            extras.append("mask clipboard ready")
+            extras.append("zone clipboard ready")
         filled_slots = sum(1 for slot in self._az_slots if slot)
         if filled_slots:
             extras.append(f"{filled_slots} full-layout slot{'s' if filled_slots != 1 else ''} saved")

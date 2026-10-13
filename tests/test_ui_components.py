@@ -7907,7 +7907,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         summary = self._widget.get_status_bar_text()
         self.assertIn("sample.png", summary)
         self.assertIn("shared zone", summary)
-        self.assertIn("mask clipboard ready", summary)
+        self.assertIn("zone clipboard ready", summary)
         self.assertIn("full-layout slot", summary)
         self.assertIn("result ready to save", summary)
         self.assertIn("sample.png", self._widget._session_status_lbl.text())
