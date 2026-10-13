@@ -7919,6 +7919,10 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("save the active zone here", self._widget._slot_info_lbl.text())
         self.assertIn("Empty", self._widget._az_slot_info_lbl.text())
         self.assertIn("save all current zones here", self._widget._az_slot_info_lbl.text())
+        self.assertIn("Single-zone saved zone slot", self._widget._slot_combo.accessibleName())
+        self.assertIn("painted zone stored in it will be lost", self._widget._btn_slot_del.toolTip())
+        self.assertIn("Save the active zone into the selected slot", self._widget._btn_slot_save.toolTip())
+        self.assertIn("Paste the zone stored in the selected slot", self._widget._btn_slot_paste.toolTip())
         self.assertIn("Save Zone", self._widget._btn_slot_save.text())
         self.assertIn("Paste Zone", self._widget._btn_slot_paste.text())
 
