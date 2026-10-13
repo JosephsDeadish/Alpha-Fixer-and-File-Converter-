@@ -4,6 +4,7 @@ Settings / Customization dialog.
 import json
 import os
 
+from PyQt6 import sip
 from PyQt6.QtCore import pyqtSignal, Qt, QRect, QTimer, QSignalBlocker, QEvent
 from PyQt6.QtGui import QColor, QImage, QMovie, QPixmap
 from PyQt6.QtWidgets import (
@@ -195,6 +196,16 @@ class _BackgroundPreviewLabel(QLabel):
         self._frame_delays: list[int] = []
         self._frame_index = 0
 
+    def _sync_preview_size(self) -> None:
+        if self._movie is not None:
+            target = self.contentsRect().size()
+            if target.width() > 0 and target.height() > 0:
+                self._movie.setScaledSize(target)
+        elif self._frames:
+            self._refresh_animated_frame()
+        else:
+            self._refresh_pixmap()
+
     def set_preview_pixmap(self, pixmap: QPixmap) -> None:
         if self._movie is not None:
             self._movie.stop()
@@ -253,13 +264,16 @@ class _BackgroundPreviewLabel(QLabel):
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
-        if self._movie is not None:
-            target = self.contentsRect().size()
-            if target.width() > 0 and target.height() > 0:
-                self._movie.setScaledSize(target)
-        elif self._frames:
-            self._refresh_animated_frame()
-        self._refresh_pixmap()
+        self._sync_preview_size()
+
+    def resize(self, *args) -> None:  # noqa: A003
+        super().resize(*args)
+        self._sync_preview_size()
+
+    def event(self, event) -> bool:
+        if event.type() == QEvent.Type.Resize:
+            self._sync_preview_size()
+        return super().event(event)
 
     def _refresh_pixmap(self) -> None:
         if self._source_pixmap.isNull():
@@ -816,13 +830,18 @@ class SettingsDialog(QDialog):
                 ))
 
             def _inside_control(widget: QWidget) -> bool:
-                while widget is not None:
+                while widget is not None and not sip.isdeleted(widget):
                     if _should_skip(widget):
                         return True
-                    widget = widget.parentWidget()
+                    try:
+                        widget = widget.parentWidget()
+                    except Exception:
+                        return False
                 return False
 
             for child in self.findChildren(QWidget):
+                if sip.isdeleted(child):
+                    continue
                 if _inside_control(child):
                     continue
                 _track(child)
@@ -2389,7 +2408,7 @@ class SettingsDialog(QDialog):
             ("Comfortable  (32 px min)", "Comfortable", "Taller buttons — easier to click, especially on touch screens."),
         ]
         for label, _key, tip in _BTN_HEIGHT_OPTIONS:
-            self._btn_height_combo.addItem(label)
+            self._btn_height_combo.addItem(label, userData=_key)
             idx = self._btn_height_combo.count() - 1
             self._btn_height_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._btn_height_combo.setToolTip(
@@ -2408,7 +2427,7 @@ class SettingsDialog(QDialog):
             ("Relaxed  (8 px)", "Relaxed", "More breathing room between controls — easier to read."),
         ]
         for label, _key, tip in _SPACING_OPTIONS:
-            self._widget_spacing_combo.addItem(label)
+            self._widget_spacing_combo.addItem(label, userData=_key)
             idx = self._widget_spacing_combo.count() - 1
             self._widget_spacing_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._widget_spacing_combo.setToolTip(
@@ -2429,7 +2448,7 @@ class SettingsDialog(QDialog):
             ("Pill  (16 px)",       "Pill",     "Maximum rounding — very soft, bubbly feel."),
         ]
         for label, _key, tip in _BR_OPTIONS:
-            self._border_radius_combo.addItem(label)
+            self._border_radius_combo.addItem(label, userData=_key)
             idx = self._border_radius_combo.count() - 1
             self._border_radius_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._border_radius_combo.setToolTip(
@@ -2448,7 +2467,7 @@ class SettingsDialog(QDialog):
             ("Spacious  (12 px)", "Spacious", "Generous padding — easier to scan at a glance."),
         ]
         for label, _key, tip in _PAD_OPTIONS:
-            self._panel_padding_combo.addItem(label)
+            self._panel_padding_combo.addItem(label, userData=_key)
             idx = self._panel_padding_combo.count() - 1
             self._panel_padding_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._panel_padding_combo.setToolTip(

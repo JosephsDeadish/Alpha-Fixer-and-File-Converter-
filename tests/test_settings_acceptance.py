@@ -14,6 +14,24 @@ from src.core.settings_manager import SettingsManager
 from src.ui.settings_dialog import SettingsDialog, _background_file_filter
 
 
+@pytest.fixture(scope="module")
+def app():
+    return QApplication.instance() or QApplication([])
+
+
+@pytest.fixture
+def dialog(tmp_path):
+    with patch("src.core.settings_manager._settings_ini_path",
+               return_value=str(tmp_path / "settings.ini")):
+        manager = SettingsManager()
+        widget = SettingsDialog(manager)
+        yield widget, manager
+        widget.close()
+        sip.delete(widget)
+        manager.sync()
+        sip.delete(manager._qs)
+
+
 @pytest.fixture
 def settings_session(tmp_path):
     app = QApplication.instance() or QApplication([])
