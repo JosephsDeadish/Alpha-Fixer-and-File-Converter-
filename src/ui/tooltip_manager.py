@@ -508,6 +508,7 @@ _NORMAL: dict[str, list[str]] = {
         "No account needed to view the page — but supporters get early theme access and devlog updates.",
         "Yes, clicking it opens Patreon in your browser. That's how links work.",
         "Congratulations on considering supporting the developer. The panda appreciates it.",
+        "If you like ridiculous UI polish, this is the button that buys more of it.",
     ],
     "help_btn": [
         "Open Help for shortcuts, About, and settings export/import.",
@@ -521,6 +522,7 @@ _NORMAL: dict[str, list[str]] = {
         "The Help menu. Wild concept: press F1 instead and skip this button entirely.",
         "Keyboard shortcuts are listed in here. You'll use them eventually.",
         "Congratulations on finding the Help menu. The irony of getting a tooltip for Help is not lost.",
+        "This is the place for shortcuts, app info, and the backup/restore escape hatch.",
     ],
     "use_theme_sound": [
         "Play a click sound that matches the active theme.",
@@ -635,6 +637,7 @@ _NORMAL: dict[str, list[str]] = {
         "Confirms before deleting. So it takes two clicks to accidentally nuke everything.",
         "Congratulations on finding the delete-all-history button. Proceed with care.",
         "Only deletes the history records. Your actual processed files are fine. Breathe.",
+        "If you like a fresh start, this is the big red history reset that actually means it.",
     ],
     "history_conv_sub": [
         "The Converter sub-tab lists every batch conversion session you have run.",
@@ -794,6 +797,7 @@ _NORMAL: dict[str, list[str]] = {
         "Use this area when you want to simplify the interface feel without changing theme colors.",
         "Every cosmetic tweak lives in here. None of it affects file processing. Just vibes.",
         "This is the personality board: cursor, trail, click noise, font, and tooltip chaos all live here.",
+        "It is also the place where the app decides how chatty, snarky, or unhinged the tooltips should be.",
     ],
     "settings_sound_tab": [
         "Sound settings for click audio, profiles, and volume.",
@@ -805,6 +809,7 @@ _NORMAL: dict[str, list[str]] = {
         "All sounds are off by default to keep the app unobtrusive.",
         "Congratulations on finding the Sound tab. Your ears will thank you.",
         "Enable sounds and pick a profile that matches your mood. Rock? Soft? Bark? All valid.",
+        "This is where you make the app chirp, thud, bark, or stay blissfully silent.",
     ],
     "alpha_file_count_lbl": [
         "Shows how many files are in the list and the keyboard shortcuts to run or stop.",
@@ -5887,6 +5892,7 @@ _VULGAR: dict[str, list[str]] = {
         "Gone. All of it. Every entry. Vanished. Your files are fine. The history is gone.",
         "Clearing history is a fresh start vibe. No records. Clean slate. Very liberating.",
         "Once you click this, the entire processing log is gone. No recovery, no undo, no backup. Be absolutely fucking certain before you commit to this scorched-earth move.",
+        "If you want the log deleted, this is the button that commits the fucking act.",
     ],
     "history_conv_sub": [
         "Converter history. Every single batch conversion you ran, logged here like a digital crime scene.",
@@ -6017,6 +6023,7 @@ _VULGAR: dict[str, list[str]] = {
         "All changes apply immediately. Most have no undo. Live recklessly. This is just app cosmetics.",
         "Mouse trail? Enable. Click effects? Enable. Font size 24? Bold choice but enable.",
         "Theme shit stays in Theme, sound shit stays in Sound, and the general tweaky nonsense lives here where it belongs.",
+        "If the app is being too polite, this tab is where you tell it to stop that nonsense.",
     ],
     "settings_sound_tab": [
         "Sound tab. Pick a profile, set volume, and make the app howl.",
@@ -6025,6 +6032,7 @@ _VULGAR: dict[str, list[str]] = {
         "20 sound profiles. Bark, Meow, Roar, Rock, Purr. The whole spectrum of chaos.",
         "Volume slider controls everything. Zero = silent. 100 = full. The exact number is negotiable.",
         "Event sounds for theme changes, tab switches, file drops. All off by default. Enable them. Go feral.",
+        "This tab is the difference between a silent utility and a noisy little gremlin.",
         "Sound tab. Where your ears finally get a vote in the app's personality.",
         "Enable sounds and then argue with yourself about whether Bark or Meow fits your workflow better.",
         "The sound tab. Finally an app that lets you make it bark. This is peak software design.",
@@ -6206,6 +6214,7 @@ _VULGAR: dict[str, list[str]] = {
         "Clicking this button once gives you the Rose Gold theme for free. That's a better deal than your streaming subscription.",
         "The dev is a human person who built this for you. Click. Once. Free theme. No excuses.",
         "One click, free theme, happy developer. That's a three-for-one deal. What are you waiting for.",
+        "Supporting the Patreon is how you keep the tooltip goblin employed.",
     ],
     "help_btn": [
         "Help menu. Shortcuts, About, export/import. Click the damn thing.",
@@ -6216,6 +6225,7 @@ _VULGAR: dict[str, list[str]] = {
         "Click → menu appears → read options → click one. Somehow we needed a tooltip for this.",
         "Export/Import settings = backup and restore everything. Custom themes, presets, all of it. One JSON file. Do it before you nuke your settings.",
         "About dialog tells you the app version, credits, and what this whole clusterfuck actually does. Worth reading once. Probably.",
+        "Shortcuts, About, backups. This button is basically the app's instruction manual with better swearing.",
     ],
     "use_theme_sound": [
         "Enable this and your click sounds will be as themed as the rest of this shit.",
