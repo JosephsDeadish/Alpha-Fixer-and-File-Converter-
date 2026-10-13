@@ -3141,25 +3141,25 @@ class VideoToolDialog(QDialog):
         left_layout.setSpacing(5)
 
         tb = QHBoxLayout()
-        self._btn_add_video = QPushButton("🎞  Add Video")
+        self._btn_add_video = QPushButton("🎞  Add Clip")
         self._btn_add_video.setEnabled(self._video_io_available)
-        self._btn_add_video.setToolTip("Add a video file to the timeline. (Requires ffmpeg, imageio, and imageio-ffmpeg)")
+        self._btn_add_video.setToolTip("Add a video clip to the timeline. Requires ffmpeg, imageio, and imageio-ffmpeg.")
         self._btn_add_video.clicked.connect(self._add_video)
         tb.addWidget(self._btn_add_video)
 
-        self._btn_add_img = QPushButton("🖼  Add Images / GIFs")
-        self._btn_add_img.setToolTip("Add still image(s), animated GIFs, or other supported image files.")
+        self._btn_add_img = QPushButton("🖼  Add Images & GIFs")
+        self._btn_add_img.setToolTip("Add still images, animated GIFs, or other supported image files.")
         self._btn_add_img.clicked.connect(self._add_images)
         tb.addWidget(self._btn_add_img)
 
-        self._btn_remove = QPushButton("🗑  Remove")
-        self._btn_remove.setToolTip("Remove selected clip.  Shortcut: Delete")
+        self._btn_remove = QPushButton("🗑  Remove Clip")
+        self._btn_remove.setToolTip("Remove the selected clip. Shortcut: Delete")
         self._btn_remove.clicked.connect(lambda _checked: self._remove_selected())
         tb.addWidget(self._btn_remove)
 
-        self._btn_split = QPushButton("✂  Split at Playhead")
+        self._btn_split = QPushButton("✂  Split Clip")
         self._btn_split.setToolTip(
-            "Split the clip under the current playhead so you can insert media between the two parts.  Shortcut: Ctrl+E"
+            "Split the clip under the current playhead so you can insert media between the two parts. Shortcut: Ctrl+E"
         )
         self._btn_split.clicked.connect(lambda _checked: self._split_clip_at_playhead())
         tb.addWidget(self._btn_split)
@@ -3175,7 +3175,7 @@ class VideoToolDialog(QDialog):
         left_layout.addLayout(history_row)
 
         insert_row = QHBoxLayout()
-        insert_row.addWidget(QLabel("Insert new clips:"))
+        insert_row.addWidget(QLabel("Insert clips:"))
         self._insert_mode_combo = QComboBox()
         self._insert_mode_combo.addItem("After selected clip", userData="after")
         self._insert_mode_combo.addItem("Before selected clip", userData="before")
@@ -3187,7 +3187,7 @@ class VideoToolDialog(QDialog):
         insert_row.addWidget(self._insert_mode_combo, 1)
         left_layout.addLayout(insert_row)
 
-        hint = QLabel("💡 Drag clips to reorder  •  Drop files to add")
+        hint = QLabel("💡 Drag clips to reorder • Drop files to add")
         hint.setProperty("toolGuidance", True)
         hint.setWordWrap(True)
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -3220,7 +3220,7 @@ class VideoToolDialog(QDialog):
         self._import_copy_btn.setVisible(False)
         import_detail_actions.addWidget(self._import_copy_btn)
         left_layout.addLayout(import_detail_actions)
-        self._next_step_lbl = QLabel("Next step: add clips to start a timeline, then preview or export.")
+        self._next_step_lbl = QLabel("Next step: add clips to start a timeline, then preview, trim, or export.")
         self._next_step_lbl.setWordWrap(True)
         self._next_step_lbl.setProperty("statusTone", "neutral")
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -3754,7 +3754,7 @@ class VideoToolDialog(QDialog):
         ex_vl.addWidget(self._audio_group)
 
         self._btn_export = QPushButton("💾  Export…")
-        self._btn_export.setToolTip("Render and export.  Shortcut: Ctrl+S")
+        self._btn_export.setToolTip("Render and export the current timeline. Shortcut: Ctrl+S")
         self._btn_export.setMinimumHeight(34)
         self._btn_export.clicked.connect(self._export)
         ex_vl.addWidget(self._btn_export)
@@ -4360,7 +4360,7 @@ class VideoToolDialog(QDialog):
     def _set_next_step_text(self, text: str, *, tone: str = "neutral") -> None:
         from ._ui_utils import set_status_tone
 
-        rendered = str(text or "").strip() or "Next step: add clips to start a timeline, then preview or export."
+        rendered = str(text or "").strip() or "Next step: add clips to start a timeline, then preview, trim, or export."
         self._next_step_lbl.setText(rendered)
         self._next_step_lbl.setToolTip(rendered)
         set_status_tone(self._next_step_lbl, tone)
@@ -4483,14 +4483,14 @@ class VideoToolDialog(QDialog):
         row = self._clip_list.currentRow() if row is None else row
         if row < 0 or row >= len(self._clips):
             self._set_stream_controls_state(
-                "Select a loaded video clip to inspect its available video/audio streams.",
-                "Audio track selection becomes selectable here only after ffprobe inspects a loaded multi-stream clip.",
+                "Select a loaded video clip to inspect its available video and audio streams.",
+                "Audio track selection becomes available after ffprobe inspects a loaded multi-stream clip.",
             )
             return
         clip = self._clips[row]
         if clip.clip_type != "video":
             self._set_stream_controls_state(
-                "Still images and GIF clips only expose a single visual source frame sequence.",
+                "Still images and GIF clips only expose a single visual source sequence.",
                 "Manual stream selection applies only to imported video clips.",
             )
             return
