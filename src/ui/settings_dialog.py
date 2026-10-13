@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QTabWidget, QWidget, QGridLayout, QCheckBox,
     QLineEdit, QColorDialog, QGroupBox, QScrollArea,
     QMessageBox, QInputDialog, QSpinBox, QFileDialog, QSlider,
-    QAbstractButton, QAbstractItemView, QAbstractSlider, QAbstractSpinBox,
+    QAbstractButton, QAbstractItemView, QAbstractScrollArea, QAbstractSlider, QAbstractSpinBox,
     QFrame, QPlainTextEdit, QTextEdit,
 )
 
