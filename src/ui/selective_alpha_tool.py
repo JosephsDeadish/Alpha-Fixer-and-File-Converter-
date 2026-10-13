@@ -1652,7 +1652,7 @@ class _ZoneRow(QWidget):
         self._paste_btn.setMinimumHeight(24)
         self._paste_btn.setEnabled(False)
         self._paste_btn.setToolTip(
-            f"Paste the copied mask onto {color_name}, replacing its current paint."
+            f"Paste the copied zone onto {color_name}, replacing its current paint."
         )
         self._paste_btn.setAccessibleName(f"Paste zone into {color_name}")
         self._paste_btn.setAccessibleDescription(self._paste_btn.toolTip())
