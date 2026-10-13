@@ -531,13 +531,17 @@ class SettingsDialog(QDialog):
         self._btn_export_theme.setMinimumWidth(110)
         self._btn_import_theme.setMinimumWidth(110)
         self._btn_export_theme.setToolTip(
-            "Export the current theme settings to a JSON file for backup or sharing.\n"
-            "Use this before experimenting so you can restore the same look later."
+            "Export the current theme settings to a JSON backup file.\n"
+            "Use this to move a theme to another install or keep a copy before experimenting."
         )
         self._btn_import_theme.setToolTip(
-            "Import a theme from a previously exported JSON file.\n"
-            "This replaces the current custom theme colors and settings."
+            "Import a theme from a JSON backup file and apply it immediately.\n"
+            "Use this to restore a saved look or bring a theme over from another install."
         )
+        self._btn_export_theme.setAccessibleName("Export theme backup")
+        self._btn_export_theme.setAccessibleDescription(self._btn_export_theme.toolTip())
+        self._btn_import_theme.setAccessibleName("Import theme backup")
+        self._btn_import_theme.setAccessibleDescription(self._btn_import_theme.toolTip())
         psl.addWidget(self._btn_save_theme, 1, 0)
         psl.addWidget(self._btn_delete_theme, 1, 1)
         psl.addWidget(self._btn_export_theme, 1, 2)
@@ -2759,7 +2763,7 @@ class SettingsDialog(QDialog):
         self._btn_reset.setObjectName("resetBtn")
         self._btn_reset.setToolTip(
             "⚠ Reset all settings, unlock flags, and history to factory defaults.\n"
-            "This cannot be undone. Restart afterward to fully apply factory defaults."
+            "This cannot be undone. Restart afterward to fully apply the reset."
         )
         self._btn_reset.setAccessibleName("Reset all settings")
         self._btn_reset.setAccessibleDescription(self._btn_reset.toolTip())

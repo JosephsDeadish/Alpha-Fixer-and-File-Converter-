@@ -532,9 +532,9 @@ class HistoryTab(QWidget):
         btn_row.setSpacing(6)
         self._btn_export = QPushButton("📤  Export History…")
         self._btn_clear = QPushButton("🗑  Clear All History")
-        self._btn_export.setAccessibleName("Export history to CSV")
+        self._btn_export.setAccessibleName("Export history report")
         self._btn_export.setAccessibleDescription(
-            "Export the currently visible history sub-tab to a CSV file."
+            "Export the currently visible history sub-tab to a report file (CSV, JSON, HTML, or text)."
         )
         self._btn_clear.setAccessibleName("Clear all history")
         self._btn_clear.setAccessibleDescription(
@@ -812,13 +812,13 @@ class HistoryTab(QWidget):
         field = QLineEdit()
         field.setObjectName(f"history_search_{name}")
         titles = {"converter": "Converter", "alpha": "Alpha & RGBA Adjuster",
-                  "selective": "Painter", "gif": "GIF Builder", "video": "Video Builder"}
+                  "selective": "Alpha Painter", "gif": "GIF Builder", "video": "Video Builder"}
         field.setAccessibleName(f"Filter {titles.get(name, name)} history")
         field.setAccessibleDescription(
             "Filter history by text or field expressions such as status:, file:, notes:, or format:. "
             "Clear the search to show all entries."
         )
-        field.setPlaceholderText("🔍  Filter by time/output/status/notes/file/source/format/recovery/streams/clip/audio/filter/largest/alpha/canvas/delay or use status:, output:, notes:, file:, source:, format:, recovery:, streams:, clip:, audio:, filter:, largest:, alpha:, canvas:, size:, delay:, ok:, errors:, frames:, clips:, loop:, optimize:, resize:, fps:, wildcards (*.gif), ranges (>24, <=100), or field ORs (audio:off|kept) …")
+        field.setPlaceholderText("🔍  Filter by text or use status:, file:, source:, format:, notes:, recovery:, clip:, audio:, alpha:, canvas:, delay:, errors:, or wildcards/ranges …")
         field.setClearButtonEnabled(True)
         return field
 

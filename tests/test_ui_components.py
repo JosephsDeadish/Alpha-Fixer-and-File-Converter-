@@ -8727,14 +8727,19 @@ class TestDialogAccessibility(unittest.TestCase):
         with patch.object(SettingsDialog, "_load_values", lambda self: None):
             settings = SettingsDialog(_SettingsStub())
         self._widgets.append(settings)
-        self.assertIn("CSV", history._btn_export.accessibleName())
-        self.assertIn("visible history sub-tab", history._btn_export.accessibleDescription())
+        self.assertIn("history report", history._btn_export.accessibleName())
+        self.assertIn("report file", history._btn_export.accessibleDescription())
         self.assertIn("Clear all history", history._btn_clear.accessibleName())
         self.assertIn("history entries", history._btn_clear.accessibleDescription())
+        self.assertEqual("Filter Alpha Painter history", history._sel_search.accessibleName())
         self.assertIn("Reset all settings", settings._btn_reset.accessibleName())
         self.assertIn("factory defaults", settings._btn_reset.accessibleDescription())
         self.assertIn("Reset unlocks", settings._btn_reset_unlocks.accessibleName())
         self.assertIn("unlock flags", settings._btn_reset_unlocks.accessibleDescription())
+        self.assertIn("Export theme backup", settings._btn_export_theme.accessibleName())
+        self.assertIn("JSON backup", settings._btn_export_theme.accessibleDescription())
+        self.assertIn("Import theme backup", settings._btn_import_theme.accessibleName())
+        self.assertIn("bring a theme over from another install", settings._btn_import_theme.accessibleDescription())
 
     def test_fit_dialog_preserves_geometry_when_already_on_screen(self):
         from PyQt6.QtCore import QRect
