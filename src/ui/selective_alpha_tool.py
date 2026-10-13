@@ -2212,7 +2212,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_slot_del = QPushButton("✕ Delete Slot")
         self._btn_slot_del.setMinimumHeight(26)
         self._btn_slot_del.setToolTip(
-            "Delete the currently selected slot from the list.\n"
+            "Delete the currently selected single-zone slot from the list.\n"
             "Any painted zone stored in it will be lost."
         )
         self._btn_slot_del.clicked.connect(self._on_slot_del)

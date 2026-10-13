@@ -2279,7 +2279,7 @@ class SettingsDialog(QDialog):
         general_intro.setProperty("settingsGuide", True)
         gv.addWidget(general_intro)
 
-        # ---- Tooltip Appearance GroupBox ----
+        # ---- Tooltip Wording & Style GroupBox ----
         self._grp_misc = QGroupBox("Tooltip Wording & Style")
         misc_gl = QGridLayout(self._grp_misc)
         misc_gl.setColumnStretch(1, 1)
@@ -2377,7 +2377,7 @@ class SettingsDialog(QDialog):
         scale_gl.addWidget(self._ui_scale_combo, 0, 1, Qt.AlignmentFlag.AlignLeft)
 
         scale_note = QLabel(
-            "ℹ  Scales all text and controls. Tooltip size is controlled separately in Tooltip Appearance above."
+            "ℹ  Scales all text and controls. Tooltip size is controlled separately in Tooltip Wording & Style above."
         )
         scale_note.setWordWrap(True)
         scale_note.setProperty("settingsHint", True)
