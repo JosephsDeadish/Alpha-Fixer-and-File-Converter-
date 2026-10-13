@@ -2726,6 +2726,8 @@ class SettingsDialog(QDialog):
             "⚠ DESTRUCTIVE: Reset ALL settings, unlock flags, and history to factory defaults.\n"
             "This cannot be undone. Restart afterward to fully apply factory defaults."
         )
+        self._btn_reset.setAccessibleName("Reset all settings")
+        self._btn_reset.setAccessibleDescription(self._btn_reset.toolTip())
         btn_row.addWidget(self._btn_reset)
         self._btn_reset_unlocks = QPushButton("Reset Unlocks & Clicks…")
         self._btn_reset_unlocks.setToolTip(
@@ -2733,6 +2735,8 @@ class SettingsDialog(QDialog):
             "All other settings (theme, sound, trail, etc.) are preserved.\n"
             "Useful for re-testing hidden theme easter eggs without losing your setup."
         )
+        self._btn_reset_unlocks.setAccessibleName("Reset unlocks and clicks")
+        self._btn_reset_unlocks.setAccessibleDescription(self._btn_reset_unlocks.toolTip())
         btn_row.addWidget(self._btn_reset_unlocks)
         btn_row.addStretch(1)
         self._btn_close = QPushButton("Close")

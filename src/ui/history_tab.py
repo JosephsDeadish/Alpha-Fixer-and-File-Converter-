@@ -532,6 +532,14 @@ class HistoryTab(QWidget):
         btn_row.setSpacing(6)
         self._btn_export = QPushButton("📤  Export History…")
         self._btn_clear = QPushButton("🗑  Clear All History")
+        self._btn_export.setAccessibleName("Export history to CSV")
+        self._btn_export.setAccessibleDescription(
+            "Export the currently visible history sub-tab to a CSV file."
+        )
+        self._btn_clear.setAccessibleName("Clear all history")
+        self._btn_clear.setAccessibleDescription(
+            "Remove the stored converter, alpha, Alpha Painter, GIF Builder, and Video Builder history entries."
+        )
         btn_row.addWidget(self._btn_export)
         btn_row.addStretch(1)
         btn_row.addWidget(self._btn_clear)

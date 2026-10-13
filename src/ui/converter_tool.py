@@ -466,8 +466,16 @@ class ConverterTab(QWidget):
         self._btn_run = QPushButton("▶  Convert  [F5]")
         self._btn_run.setObjectName("accent")
         self._btn_run.setMinimumHeight(40)
+        self._btn_run.setAccessibleName("Convert queued files")
+        self._btn_run.setAccessibleDescription(
+            "Start converting the queued files using the selected output format."
+        )
         self._btn_stop = QPushButton("■  Stop  [Esc]")
         self._btn_stop.setEnabled(False)
+        self._btn_stop.setAccessibleName("Stop conversion")
+        self._btn_stop.setAccessibleDescription(
+            "Stop the current conversion batch."
+        )
         run_row.addWidget(self._btn_run, 1)
         run_row.addWidget(self._btn_stop)
         rv.addLayout(run_row)
@@ -663,18 +671,21 @@ class ConverterTab(QWidget):
         self._btn_retry_failed.setToolTip(
             "Replace the current queue with only the files that failed in the last batch and rerun them."
         )
+        self._btn_retry_failed.setAccessibleDescription(self._btn_retry_failed.toolTip())
         log_btn_row.addWidget(self._btn_retry_failed)
         self._btn_keep_failed = QPushButton("Keep Failed Only")
         self._btn_keep_failed.setEnabled(False)
         self._btn_keep_failed.setToolTip(
             "Replace the current queue with only the files that failed in the last batch so you can continue working on them."
         )
+        self._btn_keep_failed.setAccessibleDescription(self._btn_keep_failed.toolTip())
         log_btn_row.addWidget(self._btn_keep_failed)
         self._btn_skip_failed = QPushButton("Remove Failed")
         self._btn_skip_failed.setEnabled(False)
         self._btn_skip_failed.setToolTip(
             "Remove the last batch's failed files from the current queue and keep the rest."
         )
+        self._btn_skip_failed.setAccessibleDescription(self._btn_skip_failed.toolTip())
         log_btn_row.addWidget(self._btn_skip_failed)
         self._btn_export_failures = QPushButton("Export Failure Report…")
         self._btn_export_failures.setAccessibleName("Export Failure Report")
@@ -682,6 +693,7 @@ class ConverterTab(QWidget):
         self._btn_export_failures.setToolTip(
             "Save the most recent batch failure details as a text or JSON report."
         )
+        self._btn_export_failures.setAccessibleDescription(self._btn_export_failures.toolTip())
         log_btn_row.addWidget(self._btn_export_failures)
         rv.addLayout(log_btn_row)
         self._log = QTextEdit()

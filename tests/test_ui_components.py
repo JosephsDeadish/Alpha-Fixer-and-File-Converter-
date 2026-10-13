@@ -3570,6 +3570,25 @@ class TestTooltipManager(unittest.TestCase):
                 self.assertGreaterEqual(len(_DUMBED[key]), 8)
                 self.assertGreaterEqual(len(_VULGAR[key]), 8)
 
+    def test_lower_traffic_tooltip_keys_keep_mode_alignment(self):
+        from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
+        aligned_keys = [
+            "patreon_btn",
+            "help_btn",
+            "history_clear_btn",
+            "settings_theme_tab",
+            "settings_general_tab",
+            "settings_sound_tab",
+        ]
+        for key in aligned_keys:
+            with self.subTest(key=key):
+                self.assertIn(key, _NORMAL)
+                self.assertIn(key, _DUMBED)
+                self.assertIn(key, _VULGAR)
+                self.assertGreaterEqual(len(_NORMAL[key]), 8)
+                self.assertGreaterEqual(len(_DUMBED[key]), 8)
+                self.assertGreaterEqual(len(_VULGAR[key]), 8)
+
     def test_normal_tips_cycle(self):
         from src.ui.tooltip_manager import _NORMAL
         self.assertIn("add_files", _NORMAL)
@@ -8653,6 +8672,34 @@ class TestDialogAccessibility(unittest.TestCase):
                             area.ensureWidgetVisible(dialog._btn_export)
                     self._app.processEvents()
                     self.assertTrue(dialog._btn_export.isVisible())
+
+    def test_history_and_settings_buttons_expose_accessible_descriptions(self):
+        from src.ui.history_tab import HistoryTab
+        from src.ui.settings_dialog import SettingsDialog
+
+        class _SettingsStub:
+            def get_theme(self):
+                return {"name": "Panda Dark"}
+
+            def get_saved_themes(self):
+                return {}
+
+            def get(self, key, fallback=None):
+                return fallback
+
+        history = HistoryTab(_ConverterTabSettingsStub())
+        self._widgets.append(history)
+        with patch.object(SettingsDialog, "_load_values", lambda self: None):
+            settings = SettingsDialog(_SettingsStub())
+        self._widgets.append(settings)
+        self.assertIn("CSV", history._btn_export.accessibleName())
+        self.assertIn("visible history sub-tab", history._btn_export.accessibleDescription())
+        self.assertIn("Clear all history", history._btn_clear.accessibleName())
+        self.assertIn("history entries", history._btn_clear.accessibleDescription())
+        self.assertIn("Reset all settings", settings._btn_reset.accessibleName())
+        self.assertIn("factory defaults", settings._btn_reset.accessibleDescription())
+        self.assertIn("Reset unlocks", settings._btn_reset_unlocks.accessibleName())
+        self.assertIn("unlock flags", settings._btn_reset_unlocks.accessibleDescription())
 
     def test_fit_dialog_preserves_geometry_when_already_on_screen(self):
         from PyQt6.QtCore import QRect

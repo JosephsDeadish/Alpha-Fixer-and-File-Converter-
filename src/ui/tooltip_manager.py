@@ -498,7 +498,7 @@ _NORMAL: dict[str, list[str]] = {
         "Try a fixed style here if you want consistent tooltip visuals while switching themes.",
     ],
     "patreon_btn": [
-        "Support development on Patreon!",
+        "Support development on Patreon if you want more themes, effects, and polish.",
         "Your support funds new features and themes.",
         "Patrons get early access to new hidden themes.",
         "Even $1/month helps keep the panda well-fed 🐼",
@@ -510,7 +510,7 @@ _NORMAL: dict[str, list[str]] = {
         "Congratulations on considering supporting the developer. The panda appreciates it.",
     ],
     "help_btn": [
-        "Open the Help menu: keyboard shortcuts, About, and settings export/import.",
+        "Open Help for shortcuts, About, and settings export/import.",
         "Click to see all keyboard shortcuts (F1 for quick access).",
         "Also has About info and Export/Import Settings options.",
         "Keyboard shortcuts, about the app, and settings backup — all here.",
@@ -624,7 +624,7 @@ _NORMAL: dict[str, list[str]] = {
         "Export the receipts before some future you claims the batch never happened.",
     ],
     "history_clear_btn": [
-        "Clear all history entries for both the Converter and Alpha & RGBA Adjuster tabs.",
+        "Clear all history entries for the Converter and Alpha & RGBA Adjuster tabs.",
         "This permanently removes past session records — there's no undo.",
         "Use this to clean up after testing or to reset your session log.",
         "Only clears the history list, not any processed files on disk.",
@@ -782,7 +782,7 @@ _NORMAL: dict[str, list[str]] = {
         "Pick a palette here when you want the UI to stop looking like stock software and start looking like yours.",
     ],
     "settings_general_tab": [
-        "The General tab: configure click effects, trails, cursor, font, and tooltip style.",
+        "General settings for click effects, trails, cursor, font, and tooltip style.",
         "All settings apply immediately — no need to click Save or Apply.",
         "Trail and cursor options include theme-matched styles that change automatically with the theme.",
         "Tooltip Mode changes how tips are written — Normal, Dumbed Down, or No Filter.",
@@ -796,7 +796,7 @@ _NORMAL: dict[str, list[str]] = {
         "This is the personality board: cursor, trail, click noise, font, and tooltip chaos all live here.",
     ],
     "settings_sound_tab": [
-        "The Sound tab: enable sounds, pick a sound theme or profile, and set volume.",
+        "Sound settings for click audio, profiles, and volume.",
         "All sound settings apply immediately — no restart needed.",
         "Use theme sound: let the active visual theme pick the click-sound profile automatically.",
         "Sound profile: choose a specific tone for all click sounds when Use theme sound is off.",
@@ -3044,7 +3044,7 @@ _DUMBED: dict[str, list[str]] = {
         "Gone is gone. Make a new one if you need it back.",
     ],
     "patreon_btn": [
-        "Click this to give the dev money. Very simple concept.",
+        "Want more stuff? Toss a few bucks at Patreon.",
         "Patreon. Money. Developer. Creates more stuff. You can help.",
         "Think of it as a tip jar. For software. For a panda.",
         "Your dollar could fund the next hidden theme. Worth it.",
@@ -3054,7 +3054,7 @@ _DUMBED: dict[str, list[str]] = {
         "Congratulations on considering supporting the developer. The panda appreciates it.",
     ],
     "help_btn": [
-        "Click here to open the Help menu. Shocking, I know.",
+        "Help menu. Shortcuts, About, export/import. Click it.",
         "Shortcuts, About, Export/Import settings. All in here. It's a whole menu.",
         "Press F1 and skip this button entirely for keyboard shortcuts. You're welcome.",
         "Export and Import settings are in here too, buried under Help like nature intended.",
@@ -3144,7 +3144,7 @@ _DUMBED: dict[str, list[str]] = {
         "Switch between sub-tabs first if you want to export a different type of history.",
     ],
     "history_clear_btn": [
-        "This erases all history. Gone. Forever. No takebacks.",
+        "Clear all history. Starts over from zero.",
         "Clear All History = delete everything in this list. Simple.",
         "Clears your processing history. Doesn't delete actual files, just the records.",
         "Warning: this permanently wipes the log. Or don't, up to you.",
@@ -3264,7 +3264,7 @@ _DUMBED: dict[str, list[str]] = {
         "Locked themes show a lock icon. Keep using the app and they unlock. Patience rewarded.",
     ],
     "settings_general_tab": [
-        "General tab. Effects, trails, cursor, fonts. All the fun stuff.",
+        "General tab. Click effects, trails, cursor, font, tooltip mode.",
         "Everything applies immediately. No save button needed. Just change it and it happens.",
         "Trail, effect, and cursor combos have theme-matched options that auto-update.",
         "Tooltip Mode is here. Dumbed Down is honestly the funniest one.",
@@ -3275,7 +3275,7 @@ _DUMBED: dict[str, list[str]] = {
         "Every cosmetic tweak lives in here. None of it affects file processing. Just vibes.",
     ],
     "settings_sound_tab": [
-        "Sound tab. Enable sounds. Pick a profile. Set the volume. It's not that deep.",
+        "Sound tab. Sounds, profiles, and volume live here.",
         "All sound settings apply immediately. No restart needed. Just toggle and hear.",
         "Use theme sound: active theme picks the click sound. Panda = soft chime. Gore = thud.",
         "Sound profile: manual selection. 20 profiles. Rock, Bark, Meow, Purr. Your call.",
@@ -5879,7 +5879,7 @@ _VULGAR: dict[str, list[str]] = {
         "Exports what you see in the active sub-tab. Switch tabs first if you want the other one.",
     ],
     "history_clear_btn": [
-        "Nuke the entire history. No backup. No recovery. No regrets.",
+        "Clear all history. Nukes the receipts. No regrets.",
         "Clear All History: scorched earth mode for your processing log. You sure?",
         "One click, your entire session history is gone forever. Fun! 🔥",
         "Your past work, erased. Doesn't touch actual files. Just the receipts.",
@@ -5996,7 +5996,7 @@ _VULGAR: dict[str, list[str]] = {
         "Partial matches work. 'we' finds 'webp'. 'ps2' finds anything with PS2 in the preset name.",
     ],
     "settings_theme_tab": [
-        "Theme tab. Colors. Presets. Custom schemes. Where the aesthetic decisions get made.",
+        "Theme tab. Colors, presets, custom schemes, and palette tweaks.",
         "Click any color button to change that aspect of the app. Changes are live and immediate.",
         "Unlocked themes show up here with a little 🔓. Everything else stays hidden until earned.",
         "Export = save your theme color JSON to a file. Import = load someone else's colors. Both valid.",
@@ -6007,7 +6007,7 @@ _VULGAR: dict[str, list[str]] = {
         "15 color roles. All editable. Change all of them. Make it yours. Make it hideous. Make it beautiful.",
     ],
     "settings_general_tab": [
-        "General tab. Effects, trails, cursors, fonts, tooltip mode. The good stuff.",
+        "General tab. Effects, trails, cursors, fonts, tooltip mode. The fun shit.",
         "Everything in here applies instantly. No Apply button. No Save. Just pure real-time chaos.",
         "Use-theme checkboxes auto-pick the right trail/effect/cursor for whatever theme is active.",
         "Tooltip Mode: Normal = helpful. Dumbed Down = snarky. No Filter = this mode. Very meta.",
@@ -6019,7 +6019,7 @@ _VULGAR: dict[str, list[str]] = {
         "Theme shit stays in Theme, sound shit stays in Sound, and the general tweaky nonsense lives here where it belongs.",
     ],
     "settings_sound_tab": [
-        "Sound tab. Enable sounds. Pick a profile. Set the volume. Your audio journey starts here.",
+        "Sound tab. Pick a profile, set volume, and make the app howl.",
         "Everything applies instantly. Toggle sounds on, spin the volume knob, listen to regrets. Or joy.",
         "Use theme sound = active theme decides what you hear. Gore = thud. Panda = gentle chime.",
         "20 sound profiles. Bark, Meow, Roar, Rock, Purr. The whole spectrum of chaos.",
@@ -6194,7 +6194,7 @@ _VULGAR: dict[str, list[str]] = {
         "Hit the × button to clear the filter and bring back all themes in their chaotic glory.",
     ],
     "patreon_btn": [
-        "Give the dev your money! They made this beautiful shit and they deserve it.",
+        "Throw the dev a few bucks on Patreon if you want more themes and chaos.",
         "Patreon: because software doesn't write itself and developers need to eat.",
         "Even a dollar helps! That's less than your daily coffee, you caffeinated maniac.",
         "Your support funds new themes, more effects, and better pandas. Worth it.",
@@ -6208,7 +6208,7 @@ _VULGAR: dict[str, list[str]] = {
         "One click, free theme, happy developer. That's a three-for-one deal. What are you waiting for.",
     ],
     "help_btn": [
-        "Opens the Help menu. Shortcuts, About, Export/Import settings are all in there.",
+        "Help menu. Shortcuts, About, export/import. Click the damn thing.",
         "A dropdown. With options. Groundbreaking UI concept. Click it and find out.",
         "Keyboard shortcuts: F1. About: explains what the fuck this app even is. Export/Import: backup your shit.",
         "Press F1 instead of hunting for this button like an animal. Just F1. It's one key.",

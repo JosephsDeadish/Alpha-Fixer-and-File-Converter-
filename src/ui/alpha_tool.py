@@ -641,8 +641,14 @@ class AlphaFixerTab(QWidget):
         self._btn_run = QPushButton("▶  Process  [F5]")
         self._btn_run.setObjectName("accent")
         self._btn_run.setMinimumHeight(40)
+        self._btn_run.setAccessibleName("Process queued files")
+        self._btn_run.setAccessibleDescription(
+            "Start processing the queued files with the selected alpha settings."
+        )
         self._btn_stop = QPushButton("■  Stop  [Esc]")
         self._btn_stop.setEnabled(False)
+        self._btn_stop.setAccessibleName("Stop processing")
+        self._btn_stop.setAccessibleDescription("Stop the current alpha processing batch.")
         run_row.addWidget(self._btn_run, 1)
         run_row.addWidget(self._btn_stop)
         rv.addLayout(run_row)
@@ -669,6 +675,8 @@ class AlphaFixerTab(QWidget):
             "Restore the original files from the last batch that was processed in-place.\n"
             "The backup is kept until the next batch replaces it."
         )
+        self._btn_undo_batch.setAccessibleName("Undo last batch")
+        self._btn_undo_batch.setAccessibleDescription(self._btn_undo_batch.toolTip())
         self._btn_undo_batch.setVisible(False)
         self._btn_undo_batch.clicked.connect(self._on_undo_batch)
         rv.addWidget(self._btn_undo_batch)
