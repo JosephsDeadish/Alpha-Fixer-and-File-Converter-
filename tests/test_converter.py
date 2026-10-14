@@ -1440,6 +1440,35 @@ class TestAtlasDetection(unittest.TestCase):
 
 
 class TestConversionMetadata(unittest.TestCase):
+    def test_metadata_copy_failure_logs_and_keeps_conversion(self):
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source = Path(directory) / "source.png"
+            output = Path(directory) / "out.png"
+            exif = Image.Exif()
+            exif[305] = "metadata fallback"
+            with Image.new("RGB", (16, 16), "red") as raster:
+                raster.save(source, exif=exif.tobytes(), quality=100)
+            patcher = None
+
+            def wrapped_open(path):
+                nonlocal patcher
+                image = _open_image(path)
+                patcher = mock.patch.object(Image.Exif, "tobytes", side_effect=RuntimeError("copy failed"))
+                patcher.start()
+                return image
+
+            with mock.patch("src.core.file_converter._open_image", side_effect=wrapped_open):
+                with self.assertLogs("src.core.file_converter", level="WARNING") as logs:
+                    try:
+                        convert_file(str(source), str(output), "PNG", keep_metadata=True)
+                    finally:
+                        if patcher is not None:
+                            patcher.stop()
+            self.assertTrue(output.is_file())
+            self.assertTrue(any("Skipping optional metadata copy" in entry for entry in logs.output))
+            with Image.open(output) as saved:
+                self.assertNotIn(305, saved.getexif())
+
     def test_all_exif_orientations_match_display_pixels_and_alpha(self):
         from src.core.alpha_processor import load_image
 

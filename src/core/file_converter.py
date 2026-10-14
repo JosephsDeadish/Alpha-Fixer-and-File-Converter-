@@ -834,6 +834,7 @@ def _image_metadata(src_img: Image.Image, img: Image.Image, fmt_ext: str,
             serialized = exif.tobytes()
             kw["exif"] = exif if fmt_ext in (".tiff", ".tif") else serialized
     except Exception:
+        logger.warning("Skipping optional metadata copy for %s -> %s", src_img.filename, fmt_ext, exc_info=True)
         pass
     return kw
 
