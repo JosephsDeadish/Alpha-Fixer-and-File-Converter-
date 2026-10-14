@@ -3551,13 +3551,14 @@ class TestTooltipManager(unittest.TestCase):
         self.assertIn("No Filter 🤬", " ".join(_VULGAR["settings_general_tab"]))
 
     def test_alpha_painter_sound_tips_use_zone_language(self):
-        from src.ui.tooltip_manager import _NORMAL
+        from src.ui.tooltip_manager import _DUMBED, _NORMAL, _VULGAR
 
         for key in ("sound_zone_paint_check", "sound_mask_copy_check", "sound_mask_paste_check"):
-            with self.subTest(key=key):
-                text = " ".join(_NORMAL[key]).lower()
-                self.assertIn("zone", text)
-                self.assertNotIn("mask copy", text)
+            for mode in (_NORMAL, _DUMBED, _VULGAR):
+                with self.subTest(key=key, mode=mode):
+                    text = " ".join(mode[key]).lower()
+                    self.assertIn("zone", text)
+                    self.assertNotIn("mask copy", text)
 
     def test_alpha_painter_slot_tips_use_zone_language(self):
         from src.ui.tooltip_manager import _DUMBED, _NORMAL, _VULGAR
