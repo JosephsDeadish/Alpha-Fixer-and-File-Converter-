@@ -3550,6 +3550,20 @@ class TestTooltipManager(unittest.TestCase):
             self.assertIn("No Filter 🤬", " ".join(tips))
         self.assertIn("No Filter 🤬", " ".join(_VULGAR["settings_general_tab"]))
 
+    def test_alpha_painter_tool_tips_use_brush_erase_move_language(self):
+        from src.ui.tooltip_manager import _DUMBED, _NORMAL, _VULGAR
+
+        for key in ("sa_tool_freehand", "sa_tool_eraser", "sa_tool_transform"):
+            for mode in (_NORMAL, _DUMBED, _VULGAR):
+                with self.subTest(key=key, mode=mode):
+                    text = " ".join(mode[key]).lower()
+                    self.assertIn("brush", text)
+                    self.assertIn("erase", text)
+                    self.assertIn("move", text)
+                    self.assertNotIn("freehand", text)
+                    self.assertNotIn("eraser", text)
+                    self.assertNotIn("transform", text)
+
     def test_alpha_painter_sound_tips_use_zone_language(self):
         from src.ui.tooltip_manager import _DUMBED, _NORMAL, _VULGAR
 
