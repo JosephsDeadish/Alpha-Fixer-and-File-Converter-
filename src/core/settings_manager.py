@@ -439,9 +439,16 @@ class SettingsManager:
         raw = self.get("custom_shortcuts", "{}")
         try:
             data = json.loads(raw) if raw else {}
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError) as exc:
+            logger.warning("Ignoring malformed custom_shortcuts setting: %s", exc)
             return {}
-        return data if isinstance(data, dict) else {}
+        if not isinstance(data, dict):
+            logger.warning(
+                "Ignoring malformed custom_shortcuts setting: expected dict, got %s",
+                type(data).__name__,
+            )
+            return {}
+        return data
 
     def get_shortcut_binding(self, shortcut_id: str, default: str) -> str:
         """Return the current key sequence string for *shortcut_id*."""

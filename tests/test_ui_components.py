@@ -3329,7 +3329,9 @@ class TestSettingsManagerShortcutBindings(unittest.TestCase):
 
     def test_get_custom_shortcuts_invalid_payload_returns_empty_dict(self):
         self._store["custom_shortcuts"] = "not-json"
-        self.assertEqual(self._mgr.get_custom_shortcuts(), {})
+        with self.assertLogs("src.core.settings_manager", level="WARNING") as logs:
+            self.assertEqual(self._mgr.get_custom_shortcuts(), {})
+        self.assertTrue(any("custom_shortcuts" in entry.lower() for entry in logs.output))
 
     def test_set_shortcut_binding_round_trips_and_clears_default(self):
         self._mgr.set_shortcut_binding("gif_export", "Ctrl+Shift+G", "Ctrl+S")
