@@ -1,4 +1,5 @@
 """Widget-free Video Builder rendering and transactional publication."""
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 import subprocess
@@ -7,6 +8,8 @@ import time
 from threading import Event, Lock
 
 from PyQt6.QtCore import QThread, pyqtSignal
+
+logger = logging.getLogger(__name__)
 
 
 class ExportCanceled(Exception):
@@ -338,12 +341,12 @@ class VideoExportWorker(QThread):
                 try:
                     Path(staged_path).unlink(missing_ok=True)
                 except OSError:
-                    pass
+                    logger.warning("Video export cleanup could not remove staged temp file: %s", staged_path, exc_info=True)
             if silent_path is not None:
                 try:
                     Path(silent_path).unlink(missing_ok=True)
                 except OSError:
-                    pass
+                    logger.warning("Video export cleanup could not remove silent temp file: %s", silent_path, exc_info=True)
             for frame in gif_frames:
                 frame.close()
             for clip in self.clips:
