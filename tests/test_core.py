@@ -6879,6 +6879,25 @@ class TestRound21RomDetectorAndPresetBugFixes(unittest.TestCase):
             )
             self.assertIn("SLUS", result)
 
+    def test_detect_from_paths_logs_permission_denied_scan_failure(self):
+        from src.core.rom_detector import detect_from_paths
+        with self.assertLogs("src.core.rom_detector", level="WARNING") as logs:
+            with mock.patch("src.core.rom_detector.os.listdir", side_effect=PermissionError("denied")):
+                result = detect_from_paths(["/tmp/does-not-matter"])
+        self.assertFalse(result.detected)
+        self.assertTrue(any("denied" in entry.lower() for entry in logs.output))
+
+    def test_extract_ps2_id_logs_cnf_read_failure(self):
+        from src.core.rom_detector import _extract_ps2_id
+        with tempfile.TemporaryDirectory() as tmp:
+            cnf = Path(tmp) / "SYSTEM.CNF"
+            cnf.write_text("BOOT2 = cdrom0:\\SLUS_20626;1", encoding="ascii")
+            with self.assertLogs("src.core.rom_detector", level="WARNING") as logs:
+                with mock.patch("src.core.rom_detector.Path.read_text", side_effect=OSError("boom")):
+                    disc_id, title = _extract_ps2_id(Path(tmp))
+        self.assertEqual((disc_id, title), ("", ""))
+        self.assertTrue(any("failed to parse system.cnf" in entry.lower() for entry in logs.output))
+
     # ------------------------------------------------------------------
     # 3. AlphaPreset.from_dict() null clamp_min / clamp_max
     # ------------------------------------------------------------------
