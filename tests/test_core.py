@@ -103,6 +103,21 @@ class TestOptionalFeatureReadinessNotice(unittest.TestCase):
         self.assertIn("AVIF", notice)
 
 
+class TestAppPaths(unittest.TestCase):
+    def test_writable_app_directory_logs_when_falling_back(self):
+        from src.core import app_paths
+
+        with tempfile.TemporaryDirectory() as directory:
+            preferred = Path(directory)
+            user_data = Path(directory) / "user-data"
+            with mock.patch.object(app_paths.tempfile, "TemporaryFile", side_effect=PermissionError):
+                with mock.patch.object(app_paths, "user_data_directory", return_value=user_data):
+                    with self.assertLogs("src.core.app_paths", level="WARNING") as cm:
+                        result = app_paths.writable_app_directory(preferred)
+        self.assertEqual(result, user_data)
+        self.assertTrue(any("Falling back to per-user application data" in message for message in cm.output))
+
+
 # ---------------------------------------------------------------------------
 # Preset tests
 # ---------------------------------------------------------------------------

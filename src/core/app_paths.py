@@ -1,9 +1,12 @@
 """Writable application storage without requiring a writable installation."""
 
 import os
+import logging
 from pathlib import Path
 import sys
 import tempfile
+
+logger = logging.getLogger(__name__)
 
 
 def user_data_directory() -> Path:
@@ -23,7 +26,11 @@ def writable_app_directory(preferred: Path, subdirectory: str = "") -> Path:
             with tempfile.TemporaryFile(dir=preferred):
                 return preferred
         except OSError:
-            pass
+            logger.warning(
+                "Falling back to per-user application data because %s is not writable",
+                preferred,
+                exc_info=True,
+            )
     fallback = user_data_directory()
     if subdirectory:
         fallback /= subdirectory
