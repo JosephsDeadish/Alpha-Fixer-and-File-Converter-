@@ -6926,6 +6926,15 @@ class TestRound21RomDetectorAndPresetBugFixes(unittest.TestCase):
         self.assertEqual((disc_id, title), ("", ""))
         self.assertTrue(any("failed to parse system.cnf" in entry.lower() for entry in logs.output))
 
+    def test_find_cover_art_logs_permission_failures(self):
+        from src.core.rom_detector import _find_cover_art
+        with self.assertLogs("src.core.rom_detector", level="WARNING") as logs:
+            with mock.patch("src.core.rom_detector.Path.exists", return_value=True), \
+                    mock.patch("src.core.rom_detector.Path.iterdir", side_effect=PermissionError("locked")):
+                result = _find_cover_art("SLUS-20626", "PS2")
+        self.assertEqual(result, "")
+        self.assertTrue(any("unable to inspect cover art" in entry.lower() for entry in logs.output))
+
     # ------------------------------------------------------------------
     # 3. AlphaPreset.from_dict() null clamp_min / clamp_max
     # ------------------------------------------------------------------

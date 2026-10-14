@@ -358,7 +358,7 @@ def _find_cover_art(disc_id: str, console: str) -> str:
                         if candidate.is_file():
                             return str(candidate)
         except (PermissionError, NotADirectoryError) as exc:
-            logger.debug("ROM detection: unable to inspect cover art under '%s' — %s", root, exc)
+            logger.warning("ROM detection: unable to inspect cover art under '%s' — %s", root, exc)
             continue
 
     return ""
