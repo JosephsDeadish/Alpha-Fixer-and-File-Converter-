@@ -2541,6 +2541,31 @@ class TestSoundEngine(unittest.TestCase):
         engine.cleanup()
         self.assertIsNotNone(app)
 
+    def test_play_click_logs_when_theme_sound_selection_falls_back(self):
+        app = _get_app()
+        settings = MagicMock()
+        settings.get.side_effect = lambda k, d=None: {
+            "sound_enabled": True,
+            "use_theme_sound": True,
+            "sound_theme_preset": "theme",
+        }.get(k, d or "")
+        from src.ui.sound_engine import SoundEngine
+
+        class BrokenThemeMap:
+            def get(self, *args, **kwargs):
+                raise RuntimeError("broken theme sound map")
+
+            def values(self):
+                return []
+
+        engine = SoundEngine(settings)
+        engine._theme_click_wavs = BrokenThemeMap()
+        with self.assertLogs("src.ui.sound_engine", level="WARNING") as cm:
+            engine.play_click()
+        self.assertTrue(any("fallback" in message.lower() for message in cm.output))
+        engine.cleanup()
+        self.assertIsNotNone(app)
+
     def test_cleanup_removes_temp_file(self):
         """cleanup() should remove the generated temp WAV."""
         app = _get_app()

@@ -861,7 +861,8 @@ class SoundEngine(QObject):
                 else:
                     profile = _THEME_SOUND_PROFILES.get(theme_name, "soft")
                 wav_path = self._theme_click_wavs.get(profile, self._click_wav)
-            except Exception:
+            except Exception as exc:
+                logger.warning("Themed click sound fallback failed; using default click sound: %s", exc)
                 wav_path = self._click_wav
         else:
             # Custom user-supplied WAV overrides the manual profile choice.
