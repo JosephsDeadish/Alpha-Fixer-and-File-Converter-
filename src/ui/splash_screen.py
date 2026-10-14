@@ -7,6 +7,7 @@ app name, and a smooth loading progress bar, then fades out.
 from __future__ import annotations
 
 import math
+import logging
 import webbrowser
 from typing import Optional
 
@@ -14,6 +15,8 @@ from PyQt6.QtCore import Qt, QTimer, QRect
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QFont, QRadialGradient, QLinearGradient, QPen
 from PyQt6.QtWidgets import QSplashScreen, QApplication
 from ..version import APP_NAME
+
+logger = logging.getLogger(__name__)
 
 try:
     from PyQt6.QtSvgWidgets import QSvgWidget as _QSvgWidget
@@ -116,7 +119,8 @@ class ThemeSplashScreen(QSplashScreen):
             self._svg_widget.setGeometry(self.WIDTH - 200, 10, 190, 190)
             self._svg_widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
             self._svg_widget.show()
-        except Exception:
+        except Exception as exc:
+            logger.warning("Themed splash SVG could not be loaded from %s: %s", path, exc)
             self._svg_widget = None
 
     def _do_initial_draw(self) -> None:

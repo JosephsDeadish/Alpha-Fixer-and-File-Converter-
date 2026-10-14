@@ -1361,6 +1361,21 @@ class TestSettingsManagerDefaults(unittest.TestCase):
         self.assertIn("get_theme_banner_frames", source,
                       "splash_screen.py should call get_theme_banner_frames for animated banner")
 
+    def test_splash_screen_logs_when_svg_loading_fails(self):
+        from src.ui import splash_screen
+
+        splash = splash_screen.ThemeSplashScreen.__new__(splash_screen.ThemeSplashScreen)
+        splash._theme_name = "Panda Dark"
+        splash._svg_widget = None
+        splash.WIDTH = 620
+        splash.HEIGHT = 300
+        with mock.patch("src.ui.theme_engine.get_theme_svg_path", return_value="/tmp/banner.svg"), \
+                mock.patch.object(splash_screen, "_QSvgWidget", side_effect=RuntimeError("broken svg")):
+            with self.assertLogs("src.ui.splash_screen", level="WARNING") as cm:
+                splash._load_svg({})
+        self.assertIsNone(splash._svg_widget)
+        self.assertTrue(any("could not be loaded" in message for message in cm.output))
+
     def test_effect_defaults_are_off(self):
         """All visual/audio effect defaults must be False so new users start with a clean UI."""
         import ast
