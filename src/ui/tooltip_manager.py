@@ -2467,7 +2467,7 @@ _NORMAL: dict[str, list[str]] = {
         "Clipboard holds one zone image at a time; the next Copy replaces it.",
         "Paste Zone becomes enabled on all other zone rows as soon as you copy.",
         "Copies this zone's painted shape for pasting into any other zone.",
-        "Congratulations on copying a zone mask. Paste it into any zone with the Paste button.",
+        "Congratulations on copying a zone. Paste it into any zone with the Paste button.",
         "One clipboard. One copied zone. Use it wisely.",
     ],
     "sa_zone_paste_mask": [
@@ -4618,7 +4618,7 @@ _DUMBED: dict[str, list[str]] = {
         "Pastes the copied zone into this zone. Replaces whatever was here.",
         "Need to copy first. Copy button. Same zone row. You've got this.",
         "It's undoable. Undo drawing button covers it.",
-        "Replaces the whole mask. Doesn't merge. Replaces.",
+        "Replaces the whole zone. Doesn't merge. Replaces.",
         "Source zone is untouched. Pasting doesn't steal the original.",
         "Pastes the copied zone into this zone, replacing whatever was painted here.",
         "Congratulations on finding Paste Zone. Zone-to-zone shape transfer, complete.",
