@@ -839,11 +839,20 @@ def materialize_manifest_entry(
     if os.path.isfile(target_path):
         try:
             _verify_entry_checksum(target_path, normalized)
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "Removing stale cached manifest file after checksum failure for %s: %s",
+                target_path,
+                exc,
+            )
             try:
                 os.remove(target_path)
-            except OSError:
-                pass
+            except OSError as remove_exc:
+                logger.warning(
+                    "Failed to remove stale cached manifest file %s: %s",
+                    target_path,
+                    remove_exc,
+                )
     if not os.path.isfile(target_path):
         request = Request(
             download_url,

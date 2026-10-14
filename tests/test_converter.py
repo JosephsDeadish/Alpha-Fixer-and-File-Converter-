@@ -736,6 +736,38 @@ class TestCorpusHelperInputs(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "sha256 mismatch"):
                     materialize_manifest_entries(entries, cache_dir=tmpdir, allow_download=True)
 
+    def test_materialize_manifest_entries_logs_when_stale_cache_checksum_fails(self):
+        sample_bytes = b"sample"
+        digest = hashlib.sha256(sample_bytes).hexdigest()
+
+        class _FakeResponse(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                self.close()
+                return False
+
+        entries = [
+            {
+                "path": "missing/sample.dds",
+                "url": "https://example.invalid/sample.dds",
+                "sha256": digest,
+            }
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cached_path = os.path.join(tmpdir, "sample.dds")
+            with open(cached_path, "wb") as handle:
+                handle.write(b"stale")
+            with self.assertLogs("src.core.runtime_validation", level="WARNING") as logs:
+                with mock.patch("src.core.runtime_validation.urlopen", return_value=_FakeResponse(sample_bytes)):
+                    materialized = materialize_manifest_entries(entries, cache_dir=tmpdir, allow_download=True)
+            self.assertEqual(len(materialized), 1)
+            self.assertTrue(os.path.isfile(materialized[0]["path"]))
+            with open(materialized[0]["path"], "rb") as handle:
+                self.assertEqual(handle.read(), sample_bytes)
+            self.assertTrue(any("Removing stale cached manifest file after checksum failure" in entry for entry in logs.output))
+
     def test_execute_disc_video_manifest_enforces_required_missing_samples(self):
         entries = [{"path": "/tmp/missing-disc.iso", "required": True, "platform": "PSP"}]
         ok, detail = execute_disc_video_manifest(entries, types.SimpleNamespace())
