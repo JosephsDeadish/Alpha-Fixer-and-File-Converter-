@@ -1781,7 +1781,7 @@ class SelectiveAlphaTool(QWidget):
     def _shared_zone_import_instructions() -> str:
         return (
             "In Alpha & RGBA Adjuster: enable 'Highlight Alpha Values', right-click the preview, "
-            "then choose 'Copy zones → Alpha Painter tool'."
+            "then choose 'Copy zones → Alpha Painter tool' to send the shared zones here."
         )
 
     @classmethod
@@ -2078,7 +2078,7 @@ class SelectiveAlphaTool(QWidget):
                 self._make_zone_color_icon(r, g, b), ZONE_NAMES[i]
             )
         self._active_zone_combo.setToolTip(
-            "Select the zone to paint into. The chosen zone becomes the active target for every drawing tool."
+            "Select the zone to edit. The chosen zone becomes the active target for every drawing tool."
         )
         self._active_zone_combo.currentIndexChanged.connect(
             lambda idx: self._on_zone_action(idx)
@@ -2458,7 +2458,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_import_zone_to_clipboard.setToolTip(
             "Copy one shared zone into the zone clipboard.\n"
             "If several zones are ready, you can pick which one to copy.\n\n"
-            "Then use 'Paste Zone' in the active zone controls below."
+            "Then paste it into the active zone below with 'Paste Zone'."
         )
         self._btn_import_zone_to_clipboard.setAccessibleName("Copy one shared zone to clipboard")
         self._btn_import_zone_to_clipboard.setAccessibleDescription(
