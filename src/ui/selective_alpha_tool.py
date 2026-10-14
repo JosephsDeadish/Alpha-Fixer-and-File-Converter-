@@ -21,6 +21,7 @@ mouse is released.  This lets an approximate stroke hug the actual object
 boundary automatically.
 """
 
+import logging
 import os
 import time
 from typing import Optional
@@ -64,6 +65,8 @@ from ..core.selective_alpha_processor import (
     rotate_mask,
     scale_mask,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Small helpers
@@ -1139,7 +1142,7 @@ class SelectiveAlphaCanvas(QWidget):
             corrected = autocorrect_mask(mask.astype(bool), edges)
             mask[:]   = corrected.astype(np.uint8)
         except Exception:
-            pass  # autocorrect is best-effort; silently skip on failure
+            logger.warning("Selective Alpha autocorrect skipped after failure", exc_info=True)
 
     def _build_drag_preview(self, start: tuple[int, int],
                              end: tuple[int, int]) -> QImage:

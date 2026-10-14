@@ -7943,6 +7943,24 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
             with self.assertRaises(ValueError):
                 resource.getpixel((0, 0))
 
+    def test_autocorrect_failure_logs_and_keeps_mask(self):
+        from src.ui import selective_alpha_tool as sa
+        canvas = self._widget._canvas
+        with tempfile.TemporaryDirectory(dir=".") as folder:
+            path = os.path.join(folder, "image.png")
+            image = Image.new("RGBA", (4, 4), "red")
+            try:
+                image.save(path)
+            finally:
+                image.close()
+            self.assertTrue(canvas.load_image(path))
+        mask = np.zeros((4, 4), dtype=np.uint8)
+        with patch.object(sa, "autocorrect_mask", side_effect=RuntimeError("autocorrect failed")):
+            with self.assertLogs("src.ui.selective_alpha_tool", level="WARNING") as logs:
+                canvas._do_autocorrect(mask)
+        self.assertTrue(any("Selective Alpha autocorrect skipped" in entry for entry in logs.output))
+        self.assertTrue(np.array_equal(mask, np.zeros((4, 4), dtype=np.uint8)))
+
     def test_painter_sidebar_large_font_controls_remain_scrollable(self):
         from PyQt6.QtGui import QFont
         from PyQt6.QtWidgets import QScrollArea
