@@ -3560,6 +3560,17 @@ class TestTooltipManager(unittest.TestCase):
                     self.assertIn("zone", text)
                     self.assertNotIn("mask", text)
 
+    def test_alpha_painter_copy_paste_tips_use_zone_language(self):
+        from src.ui.tooltip_manager import _DUMBED, _NORMAL, _VULGAR
+
+        for key in ("sa_zone_copy_mask", "sa_zone_paste_mask"):
+            for mode in (_NORMAL, _DUMBED, _VULGAR):
+                with self.subTest(key=key, mode=mode):
+                    text = " ".join(mode[key]).lower()
+                    self.assertIn("zone", text)
+                    self.assertNotIn("copy mask", text)
+                    self.assertNotIn("paste mask", text)
+
     def test_alpha_painter_slot_tips_use_zone_language(self):
         from src.ui.tooltip_manager import _DUMBED, _NORMAL, _VULGAR
 
