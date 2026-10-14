@@ -477,6 +477,20 @@ def test_missing_video_media_preserves_live_session(dialogs, tmp_path):
     assert original.get_frame(0).getpixel((0, 0)) == (255, 0, 0, 255)
 
 
+def test_prepare_entries_logs_missing_media_and_falls_back(dialogs, tmp_path, caplog):
+    _, still = sources(tmp_path)
+    widget = dialogs("video")
+    widget._load_image_paths([str(still)])
+    path = tmp_path / "project.json"
+    save(widget, path)
+    still.unlink()
+    document = read_project(path)
+    with caplog.at_level("WARNING", logger="src.core.editor_projects"):
+        with pytest.raises(ValueError, match="Missing project media"):
+            prepare_entries(document, path)
+    assert "Cannot prepare project media" in caplog.text
+
+
 @pytest.mark.parametrize("fps", [float("nan"), float("inf"), -float("inf")])
 def test_prepare_rejects_nonfinite_decoded_fps_and_releases_media(dialogs, tmp_path, fps):
     from src.ui import video_tool

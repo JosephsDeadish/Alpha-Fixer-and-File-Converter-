@@ -7,6 +7,7 @@ file lands next to main.py; when frozen by PyInstaller it lands next to the
 .exe when writable, otherwise in the per-user application data directory.
 """
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -17,6 +18,7 @@ from .atomic_output import staged_output_path
 
 APP_NAME = "AlphaFixerConverter"
 ORG_NAME = "PandaTools"
+logger = logging.getLogger(__name__)
 
 # Default custom emoji used when none have been configured yet
 DEFAULT_CUSTOM_EMOJI = "✨ ⭐ 💫"
@@ -67,6 +69,31 @@ def _is_valid_qcolor(value: str) -> bool:
             return False
         return 0.0 <= alpha <= 1.0 or 0 <= alpha <= 255
     return False
+
+
+def _json_name(expected_type: type | tuple[type, ...]) -> str:
+    if isinstance(expected_type, tuple):
+        return " or ".join(t.__name__ for t in expected_type)
+    return expected_type.__name__
+
+
+def _load_json_setting(raw: object, fallback, *, label: str, expected_type: type | tuple[type, ...]):
+    if raw in ("", None):
+        return fallback
+    try:
+        value = json.loads(raw)
+    except (TypeError, json.JSONDecodeError) as exc:
+        logger.warning("Ignoring malformed %s setting: %s", label, exc)
+        return fallback
+    if not isinstance(value, expected_type):
+        logger.warning(
+            "Ignoring malformed %s setting: expected %s, got %s",
+            label,
+            _json_name(expected_type),
+            type(value).__name__,
+        )
+        return fallback
+    return value
 
 
 def get_ui_scale_presets() -> tuple[tuple[str, str, float, str], ...]:
@@ -460,17 +487,10 @@ class SettingsManager:
 
     def get_theme(self) -> dict:
         raw = self.get("theme_data", json.dumps(self._DEFAULT_THEME))
-        try:
-            data = json.loads(raw)
-            # Guard against non-dict values: json.loads("null") → None,
-            # json.loads("42") → int, json.loads("[]") → list, etc.
-            if not isinstance(data, dict):
-                return dict(self._DEFAULT_THEME)
-            # Merge with defaults so all required keys are always present,
-            # even if the stored theme was saved by an older app version.
-            return self._normalize_theme(data)
-        except (json.JSONDecodeError, TypeError):
-            return dict(self._DEFAULT_THEME)
+        data = _load_json_setting(raw, {}, label="theme_data", expected_type=dict)
+        # Merge with defaults so all required keys are always present, even if
+        # the stored theme was saved by an older app version.
+        return self._normalize_theme(data) if data else dict(self._DEFAULT_THEME)
 
     def set_theme(self, theme_dict: dict):
         self.set("theme_data", json.dumps(theme_dict))
@@ -481,11 +501,7 @@ class SettingsManager:
 
     def _saved_theme_records(self) -> dict:
         raw = self._qs.value("saved_themes", "{}")
-        try:
-            data = json.loads(raw)
-            return data if isinstance(data, dict) else {}
-        except (json.JSONDecodeError, TypeError):
-            return {}
+        return _load_json_setting(raw, {}, label="saved_themes", expected_type=dict)
 
     def get_saved_themes(self) -> dict:
         """Return usable themes without rewriting malformed records on disk."""
@@ -516,12 +532,8 @@ class SettingsManager:
 
     def get_custom_presets(self) -> list:
         raw = self._qs.value("custom_presets", "[]")
-        try:
-            data = json.loads(raw)
-            # Protect callers that call .insert() / .append() on the result
-            return data if isinstance(data, list) else []
-        except (json.JSONDecodeError, TypeError):
-            return []
+        # Protect callers that call .insert() / .append() on the result
+        return _load_json_setting(raw, [], label="custom_presets", expected_type=list)
 
     def save_custom_presets(self, presets: list):
         self._qs.setValue("custom_presets", json.dumps(presets))
@@ -533,11 +545,7 @@ class SettingsManager:
 
     def get_converter_history(self) -> list:
         raw = self._qs.value("converter_history", "[]")
-        try:
-            data = json.loads(raw)
-            return data if isinstance(data, list) else []
-        except (json.JSONDecodeError, TypeError):
-            return []
+        return _load_json_setting(raw, [], label="converter_history", expected_type=list)
 
     def add_converter_history(self, entry: dict, max_entries: int = 50):
         history = self.get_converter_history()
@@ -555,11 +563,7 @@ class SettingsManager:
 
     def get_alpha_history(self) -> list:
         raw = self._qs.value("alpha_history", "[]")
-        try:
-            data = json.loads(raw)
-            return data if isinstance(data, list) else []
-        except (json.JSONDecodeError, TypeError):
-            return []
+        return _load_json_setting(raw, [], label="alpha_history", expected_type=list)
 
     def add_alpha_history(self, entry: dict, max_entries: int = 50):
         history = self.get_alpha_history()
@@ -587,11 +591,7 @@ class SettingsManager:
 
     def get_selective_alpha_history(self) -> list:
         raw = self._qs.value("selective_alpha_history", "[]")
-        try:
-            data = json.loads(raw)
-            return data if isinstance(data, list) else []
-        except (json.JSONDecodeError, TypeError):
-            return []
+        return _load_json_setting(raw, [], label="selective_alpha_history", expected_type=list)
 
     def add_selective_alpha_history(self, entry: dict, max_entries: int = 50):
         history = self.get_selective_alpha_history()
@@ -614,11 +614,7 @@ class SettingsManager:
 
     def get_gif_builder_history(self) -> list:
         raw = self._qs.value("gif_builder_history", "[]")
-        try:
-            data = json.loads(raw)
-            return data if isinstance(data, list) else []
-        except (json.JSONDecodeError, TypeError):
-            return []
+        return _load_json_setting(raw, [], label="gif_builder_history", expected_type=list)
 
     def add_gif_builder_history(self, entry: dict, max_entries: int = 50):
         if not self.get("history_track_gif_builder", True):
@@ -641,11 +637,7 @@ class SettingsManager:
 
     def get_video_builder_history(self) -> list:
         raw = self._qs.value("video_builder_history", "[]")
-        try:
-            data = json.loads(raw)
-            return data if isinstance(data, list) else []
-        except (json.JSONDecodeError, TypeError):
-            return []
+        return _load_json_setting(raw, [], label="video_builder_history", expected_type=list)
 
     def add_video_builder_history(self, entry: dict, max_entries: int = 50):
         if not self.get("history_track_video_builder", True):
@@ -673,14 +665,14 @@ class SettingsManager:
             self._DEFAULTS["sa_zone_alphas"],
         )
         try:
-            data = json.loads(raw)
-            if isinstance(data, list) and data:
+            data = _load_json_setting(raw, [], label="sa_zone_alphas", expected_type=list)
+            if data:
                 result = [max(0, min(255, int(v))) for v in data[:SELECTIVE_ALPHA_UI_ZONE_COUNT]]
                 if len(result) < SELECTIVE_ALPHA_UI_ZONE_COUNT:
                     result += [128] * (SELECTIVE_ALPHA_UI_ZONE_COUNT - len(result))
                 return result
-        except (json.JSONDecodeError, TypeError, ValueError):
-            pass
+        except (TypeError, ValueError) as exc:
+            logger.warning("Ignoring malformed sa_zone_alphas setting: %s", exc)
         return [128] * SELECTIVE_ALPHA_UI_ZONE_COUNT
 
     def set_sa_zone_alphas(self, alphas: list[int]) -> None:
@@ -703,12 +695,11 @@ class SettingsManager:
         if not raw:
             return None
         try:
-            data = json.loads(raw)
-            if (isinstance(data, list) and 1 <= len(data) <= 40
-                    and all(isinstance(c, list) and len(c) == 4 for c in data)):
+            data = _load_json_setting(raw, None, label="sa_zone_colors", expected_type=list)
+            if isinstance(data, list) and 1 <= len(data) <= 40 and all(isinstance(c, list) and len(c) == 4 for c in data):
                 return [[max(0, min(255, int(v))) for v in c] for c in data]
-        except (json.JSONDecodeError, TypeError, ValueError):
-            pass
+        except (TypeError, ValueError) as exc:
+            logger.warning("Ignoring malformed sa_zone_colors setting: %s", exc)
         return None
 
     def set_sa_zone_colors(self, colors: list[list[int]]) -> None:

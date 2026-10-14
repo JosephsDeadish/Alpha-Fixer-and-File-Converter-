@@ -602,6 +602,12 @@ class TestCorpusHelperInputs(unittest.TestCase):
         self.assertIsInstance(companions, list)
         self.assertEqual(companions[0]["path"], os.path.join(tmpdir, "samples", "disc.cue"))
 
+    def test_load_manifest_entries_logs_and_recovers_from_malformed_payload(self):
+        with self.assertLogs("src.core.runtime_validation", level="WARNING") as logs:
+            entries = load_manifest_entries('{"entries": "broken"}')
+        self.assertEqual(entries, [])
+        self.assertTrue(any("Ignoring malformed manifest" in entry for entry in logs.output))
+
     def test_runtime_manifest_loader_resolves_input_paths(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             sample_path = os.path.join(tmpdir, "sample.png")

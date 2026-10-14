@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import os
+import logging
 from pathlib import Path
 
 MAX_FILE_BYTES = 64 * 1024 * 1024
@@ -16,6 +17,7 @@ MAX_PIXELS = 8 * 1024 * 1024
 MAX_TOTAL_PIXELS = 8 * 1024 * 1024
 MAX_ENTRIES = 512
 MAX_TIMELINE_FRAMES = 10_000_000
+logger = logging.getLogger(__name__)
 
 GIF_CONTROLS = {
     "_delay_slider": (10, 3000), "_loop_slider": (0, 20),
@@ -310,10 +312,11 @@ def prepare_entries(document, project_path, replacements=None):
                 clip.still_duration_frames = entry["still_duration"]
                 clip._split_timing = tuple(entry["split"]) if entry["split"] else None
         return prepared
-    except BaseException as error:
+    except Exception as error:
+        logger.warning("Cannot prepare project media for %s: %s", project_path, error)
         for entry in prepared:
             entry.close()
-        if document["kind"] == "video" and isinstance(error, Exception):
+        if document["kind"] == "video":
             raise ValueError(
                 f"Cannot prepare project media: {locals().get('source', project_path)}\n{error}\n"
                 "Restore the original, unchanged media. If it moved, reopen the project and "

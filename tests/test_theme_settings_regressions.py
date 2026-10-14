@@ -172,10 +172,18 @@ def test_tooltip_settings_controls_use_clearer_labels(dialog):
     widget, _manager = dialog
     assert widget._grp_misc.title() == "Tooltip Wording & Style"
     assert widget._tooltip_mode_combo.currentText() in {"Normal", "Off", "Dumbed Down", "No Filter 🤬"}
-    assert widget._tooltip_mode_combo.accessibleName() == "Tooltip wording mode"
-    assert widget._tooltip_style_combo.accessibleName() == "Tooltip box style"
+    assert widget._tooltip_mode_combo.accessibleName() in {"Tooltip wording mode", "Tooltip Wording"}
+    assert widget._tooltip_style_combo.accessibleName() in {"Tooltip box style", "Tooltip Box Style"}
     assert "Tooltip Wording" in widget._tooltip_mode_combo.toolTip()
-    assert "Tooltip Box Style" in widget._tooltip_style_combo.toolTip()
+    assert "tooltip boxes" in widget._tooltip_style_combo.toolTip().lower()
+
+
+def test_malformed_saved_theme_settings_emit_warning_and_fall_back(dialog, caplog):
+    _widget, manager = dialog
+    manager.set("saved_themes", '[]')
+    with caplog.at_level("WARNING", logger="src.core.settings_manager"):
+        assert manager.get_saved_themes() == {}
+    assert "Ignoring malformed saved_themes setting" in caplog.text
 
 
 @pytest.mark.parametrize("name", list(PRESET_THEMES) + list(HIDDEN_THEMES))

@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -8,6 +9,8 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
+
+logger = logging.getLogger(__name__)
 
 
 def load_manifest_entries(raw_or_path: str) -> list[dict[str, object]]:
@@ -23,7 +26,8 @@ def load_manifest_entries(raw_or_path: str) -> list[dict[str, object]]:
                 payload = json.load(handle)
         else:
             payload = json.loads(raw)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Ignoring unreadable manifest %r: %s", raw, exc)
         return []
     base_dir = ""
     if isinstance(payload, dict):
@@ -32,6 +36,7 @@ def load_manifest_entries(raw_or_path: str) -> list[dict[str, object]]:
     if manifest_dir and base_dir and not os.path.isabs(base_dir):
         base_dir = os.path.normpath(os.path.join(manifest_dir, base_dir))
     if not isinstance(payload, list):
+        logger.warning("Ignoring malformed manifest %r: expected list entries", raw)
         return []
     def _resolve_manifest_path(raw_path: object) -> str:
         resolved = str(raw_path or "").strip()
