@@ -3570,6 +3570,16 @@ class TestTooltipManager(unittest.TestCase):
                     self.assertIn("zone", text)
                     self.assertNotIn("mask slot", text)
 
+    def test_alpha_painter_visibility_tips_use_zone_language(self):
+        from src.ui.tooltip_manager import _DUMBED, _NORMAL, _VULGAR
+
+        for key in ("sa_zone_visibility",):
+            for mode in (_NORMAL, _DUMBED, _VULGAR):
+                with self.subTest(key=key, mode=mode):
+                    text = " ".join(mode[key]).lower()
+                    self.assertIn("zone", text)
+                    self.assertNotIn("mask is still there", text)
+
     def test_high_traffic_tooltip_keys_keep_mode_alignment(self):
         from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
         aligned_keys = [

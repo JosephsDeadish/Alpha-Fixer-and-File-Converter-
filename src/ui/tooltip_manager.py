@@ -4595,13 +4595,13 @@ _DUMBED: dict[str, list[str]] = {
         "Undoable! The Undo drawing button covers zone clear actions too.",
     ],
     "sa_zone_visibility": [
-        "The eye button. It hides this zone's colour blob. The mask is still there.",
+        "The eye button. It hides this zone's colour blob. The zone is still there.",
         "Hiding = invisible. Not hiding = visible. That's how eyes work.",
         "Turn it off to see the image under this zone. Turn it on to see the zone.",
         "It does not delete anything. Just hides it.",
         "Toggle it off, look at image, toggle it on. Very useful for checking your work.",
         "Eye icon: on = zone colour shown. Off = zone colour invisible. Classic eye toggle.",
-        "Congratulations on toggling zone visibility. The mask is still there either way.",
+        "Congratulations on toggling zone visibility. The zone is still there either way.",
         "Use to preview the image under a zone without deleting the zone. Very handy.",
     ],
     "sa_zone_copy_mask": [
@@ -6815,11 +6815,11 @@ _VULGAR: dict[str, list[str]] = {
     "sa_zone_visibility": [
         "The eye button. Hides or shows this zone's overlay. Simple.",
         "Hidden = you can't see it. Visible = you can. The mask is always there either way.",
-        "Hiding a zone overlay doesn't delete shit. The mask is preserved.",
+        "Hiding a zone overlay doesn't delete shit. The zone is preserved.",
         "Toggle off to see what's under the blob. Toggle on to see the blob again.",
         "If you want to check the source image under a painted zone, this is what you use.",
         "The eye icon. Click it to make one zone's overlay invisible. The mask still exists. It's just shy.",
-        "Hiding a zone visually doesn't remove the paint. The mask is still there, it's just invisible. Ghost zone.",
+        "Hiding a zone visually doesn't remove the paint. The zone is still there, it's just invisible. Ghost zone.",
         "Toggle visibility per-zone. See exactly how each zone sits against the source image without the blob in the way.",
     ],
     "sa_zone_copy_mask": [
