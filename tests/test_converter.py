@@ -518,6 +518,25 @@ class TestCorpusHelperInputs(unittest.TestCase):
         self.assertIn("surfaces=", report["detail"])
         self.assertIn("decode_policies=", report["detail"])
 
+    def test_execute_dds_manifest_report_logs_malformed_size_constraints(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_path = os.path.join(tmpdir, "sample.dds")
+            Path(sample_path).write_bytes(b"dds")
+
+            class _FakeImage:
+                size = (64, 64)
+
+                def close(self):
+                    pass
+
+            with self.assertLogs("src.core.runtime_validation", level="WARNING") as logs:
+                report = execute_dds_manifest_report(
+                    [{"path": sample_path, "expect": "load", "expect_size": "not-a-size"}],
+                    lambda path: _FakeImage(),
+                )
+        self.assertTrue(report["ok"], msg=report["detail"])
+        self.assertTrue(any("Ignoring malformed manifest size" in entry for entry in logs.output))
+
     def test_private_odd_container_video_manifest_template_loads(self):
         manifest_path = os.path.join(
             os.path.dirname(__file__),

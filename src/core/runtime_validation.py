@@ -276,14 +276,16 @@ def _entry_bool(entry: dict[str, object], key: str, default: bool = False) -> bo
 def _entry_int(entry: dict[str, object], key: str) -> int | None:
     try:
         return int(entry.get(key))
-    except Exception:
+    except Exception as exc:
+        logger.warning("Ignoring malformed manifest integer for %s: %r (%s)", key, entry.get(key), exc)
         return None
 
 
 def _entry_float(entry: dict[str, object], key: str) -> float | None:
     try:
         return float(entry.get(key))
-    except Exception:
+    except Exception as exc:
+        logger.warning("Ignoring malformed manifest float for %s: %r (%s)", key, entry.get(key), exc)
         return None
 
 
@@ -292,15 +294,19 @@ def _entry_size(entry: dict[str, object], key: str) -> tuple[int, int] | None:
     if isinstance(value, (list, tuple)) and len(value) >= 2:
         try:
             return (int(value[0]), int(value[1]))
-        except Exception:
+        except Exception as exc:
+            logger.warning("Ignoring malformed manifest size for %s: %r (%s)", key, value, exc)
             return None
     text = str(value or "").strip().lower()
     if "x" in text:
         left, right = text.split("x", 1)
         try:
             return (int(left.strip()), int(right.strip()))
-        except Exception:
+        except Exception as exc:
+            logger.warning("Ignoring malformed manifest size for %s: %r (%s)", key, value, exc)
             return None
+    if text:
+        logger.warning("Ignoring malformed manifest size for %s: %r", key, value)
     return None
 
 
