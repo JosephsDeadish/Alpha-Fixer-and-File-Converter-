@@ -1233,7 +1233,8 @@ def get_gif_frame_count(path: str) -> int:
             return 1
         with Image.open(path) as img:
             return getattr(img, "n_frames", 1)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Falling back to single-frame GIF count for %s: %s", path, exc)
         return 1
 
 

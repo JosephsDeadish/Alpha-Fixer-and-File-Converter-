@@ -28,6 +28,7 @@ from tests.corpus_helpers import (
 from src.core.file_converter import (
     convert_file,
     build_output_path,
+    get_gif_frame_count,
     SUPPORTED_OUTPUT_FORMATS,
     DDS_VARIANT_OPTIONS,
     _open_image,
@@ -200,6 +201,17 @@ class TestBuildOutputPath(unittest.TestCase):
             input_root="/src",
         )
         self.assertEqual(result, "/out/sub/file.jpg")
+
+
+class TestGifFrameCount(unittest.TestCase):
+    def test_get_gif_frame_count_logs_and_falls_back_on_errors(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            broken = os.path.join(tmpdir, "broken.gif")
+            Path(broken).write_bytes(b"not a gif")
+            with self.assertLogs("src.core.file_converter", level="WARNING") as logs:
+                count = get_gif_frame_count(broken)
+        self.assertEqual(count, 1)
+        self.assertTrue(any("Falling back to single-frame GIF count" in entry for entry in logs.output))
 
 
 class TestCorpusHelperInputs(unittest.TestCase):
