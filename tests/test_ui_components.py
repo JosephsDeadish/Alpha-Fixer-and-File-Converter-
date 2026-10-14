@@ -3546,6 +3546,9 @@ class TestTooltipManager(unittest.TestCase):
         vulgar_style = " ".join(_VULGAR["tooltip_style_combo"]).lower()
         self.assertIn("fucking", vulgar_mode)
         self.assertIn("fucking", vulgar_style)
+        for tips in (_NORMAL["tooltip_mode_combo"], _DUMBED["tooltip_mode_combo"], _VULGAR["tooltip_mode_combo"]):
+            self.assertIn("No Filter 🤬", " ".join(tips))
+        self.assertIn("No Filter 🤬", " ".join(_VULGAR["settings_general_tab"]))
 
     def test_alpha_painter_sound_tips_use_zone_language(self):
         from src.ui.tooltip_manager import _NORMAL
