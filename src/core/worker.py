@@ -366,7 +366,7 @@ class ConverterWorker(QThread):
         except MemoryError:
             raise
         except Exception as exc:
-            logger.debug("Alpha fallback probe failed for %s: %s", src, exc)
+            logger.warning("Alpha fallback probe failed for %s: %s", src, exc)
             return self._target_format, self._target_ext, ""
         if not has_alpha:
             return self._target_format, self._target_ext, ""

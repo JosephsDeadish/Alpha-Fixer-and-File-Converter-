@@ -1408,6 +1408,18 @@ class TestConverterWorkerSizing(unittest.TestCase):
             fmt, ext, note = worker._resolve_effective_target("/tmp/input.png")
         self.assertEqual((fmt, ext, note), ("JPEG", ".jpg", ""))
 
+    def test_worker_logs_alpha_probe_failures_and_keeps_target(self):
+        worker = ConverterWorker(
+            files=["/tmp/input.png"],
+            target_format="JPEG",
+            target_ext=".jpg",
+        )
+        with mock.patch.object(worker, "_source_has_meaningful_alpha", side_effect=RuntimeError("probe failed")):
+            with self.assertLogs("src.core.worker", level="WARNING") as logs:
+                fmt, ext, note = worker._resolve_effective_target("/tmp/input.png")
+        self.assertEqual((fmt, ext, note), ("JPEG", ".jpg", ""))
+        self.assertTrue(any("probe failed" in entry.lower() for entry in logs.output))
+
 
 class TestAtlasDetection(unittest.TestCase):
 
