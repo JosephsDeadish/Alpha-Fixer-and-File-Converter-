@@ -253,10 +253,19 @@ def test_export_cleanup_failure_logs_but_keeps_final_file(dialog, tmp_path, capl
 
 def test_export_frame_reader_cleanup_failure_logs(dialog, tmp_path, caplog):
     output = tmp_path / "out.gif"
-    frame_getter = dialog._clips[0]["frame_getter"]
+    image = Image.new("RGBA", (18, 20), (120, 40, 20, 255))
+
+    class ClosingGetter:
+        def __call__(self, idx):
+            return image.copy()
+
+        def _close_reader(self):
+            pass
+
+    dialog._clips = [vt._ClipEntry("source.mp4", 1, ClosingGetter(), clip_type="video", frame_size=image.size)]
     with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(str(output), "")), \
-            patch.object(frame_getter, "_close_reader", side_effect=RuntimeError("reader locked")):
-        caplog.set_level("WARNING", logger="src.core.video_export")
+            patch.object(vt._SnapshotFrameGetter, "_close_reader", side_effect=RuntimeError("reader locked")), \
+            caplog.at_level("WARNING", logger="src.core.video_export"):
         dialog._export()
         wait_for_video_export(dialog)
     assert output.exists()
