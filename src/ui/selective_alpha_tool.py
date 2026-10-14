@@ -1946,19 +1946,19 @@ class SelectiveAlphaTool(QWidget):
         # (_FloatingHistoryOverlay, top-left of canvas) — not in the sidebar.
 
         # ── Drawing tools ─────────────────────────────────────────────────
-        tools_box = QGroupBox("Drawing Tool")
+        tools_box = QGroupBox("Drawing Tools")
         tg = QGridLayout(tools_box)
         tg.setSpacing(4)
 
         self._tool_btns: dict[str, QPushButton] = {}
         tool_defs = [
-            ("freehand",   "✏  Freehand",  0, 0),
+            ("freehand",   "✏  Brush",     0, 0),
             ("line",       "╱  Line",      0, 1),
-            ("rect",       "▭  Rect",      1, 0),
+            ("rect",       "▭  Rectangle", 1, 0),
             ("ellipse",    "◯  Ellipse",   1, 1),
             ("fill",       "🪣  Fill",      2, 0),
             ("polygon",    "⬠  Polygon",   2, 1),
-            ("eraser",     "⌫  Eraser",    3, 0),
+            ("eraser",     "⌫  Erase",     3, 0),
             ("transform",  "✥  Move",      3, 1),
         ]
         self._tool_group = QButtonGroup(self)
@@ -1970,6 +1970,8 @@ class SelectiveAlphaTool(QWidget):
             btn.setMinimumHeight(24)
             btn.setMinimumWidth(100)
             btn.setToolTip(self._tool_tooltip(key))
+            btn.setAccessibleName(f"{label.split('  ', 1)[-1]} tool")
+            btn.setAccessibleDescription(btn.toolTip())
             self._tool_btns[key] = btn
             tg.addWidget(btn, row, col)
             self._tool_group.addButton(btn)
@@ -2541,7 +2543,7 @@ class SelectiveAlphaTool(QWidget):
         rv.setContentsMargins(0, 0, 0, 0)
         rv.setSpacing(2)
         rv.addWidget(self._canvas, 1)
-        self._status_lbl = QLabel("Tool: Freehand  |  Zone 1 – Red  |  Brush: 10 px  |  Zoom: 100%")
+        self._status_lbl = QLabel("Tool: Brush  |  Zone 1 – Red  |  Brush: 10 px  |  Zoom: 100%")
         self._status_lbl.setProperty("toolGuidance", True)
         self._status_lbl.setWordWrap(True)
         self._status_lbl.setContentsMargins(4, 2, 4, 2)
@@ -2804,16 +2806,16 @@ class SelectiveAlphaTool(QWidget):
     @staticmethod
     def _tool_tooltip(key: str) -> str:
         tips = {
-            "freehand":  "Freehand: drag to paint the active zone. Release for one undo step.  [B]",
+            "freehand":  "Brush: drag to paint the active zone. Release for one undo step.  [B]",
             "line":      "Line: drag a straight zone stroke from start to finish.  [L]",
             "rect":      "Rectangle: drag corner-to-corner to fill a boxy zone.  [R]",
             "ellipse":   "Ellipse: drag the bounding box to fill an oval zone.  [X]",
             "fill":      "Fill: click to flood-fill a region until image edges stop it.  [F]",
             "polygon":   "Polygon: click vertices; double-click to close and fill.\n"
                          "Press Esc to cancel.  [P]",
-            "eraser":    "Eraser: drag to remove painted zone coverage from every zone.\n"
+            "eraser":    "Erase: drag to remove painted zone coverage from every zone.\n"
                          "Hold & drag to clean up overlaps or mistakes.  [E]",
-            "transform": "Transform: drag the zone under the cursor to move it.\n"
+            "transform": "Move: drag the zone under the cursor to move it.\n"
                          "Shift+drag rotates.  Ctrl+drag scales.  [T]\n"
                          "One undo entry is created per drag gesture.",
         }
@@ -2822,13 +2824,13 @@ class SelectiveAlphaTool(QWidget):
     def _update_status(self) -> None:
         """Refresh the status label with current tool / zone / size / zoom info."""
         tool_names = {
-            "freehand":  "Freehand",
+            "freehand":  "Brush",
             "line":      "Line",
             "rect":      "Rectangle",
             "ellipse":   "Ellipse",
             "fill":      "Fill",
             "polygon":   "Polygon",
-            "eraser":    "Eraser",
+            "eraser":    "Erase",
             "transform": "Move",
         }
         tool_key  = self._canvas._tool

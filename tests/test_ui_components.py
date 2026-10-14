@@ -8048,6 +8048,15 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("save the current result", self._widget._next_step_lbl.text())
         self.assertIn("begin editing", self._widget._next_step_lbl.text())
 
+    def test_selective_alpha_tool_names_are_more_descriptive(self):
+        self.assertIn("Brush", self._widget._tool_btns["freehand"].text())
+        self.assertIn("Erase", self._widget._tool_btns["eraser"].text())
+        self.assertIn("Move", self._widget._tool_btns["transform"].text())
+        self.assertIn("Brush tool", self._widget._tool_btns["freehand"].accessibleName())
+        self.assertIn("Erase tool", self._widget._tool_btns["eraser"].accessibleName())
+        self.assertIn("Move tool", self._widget._tool_btns["transform"].accessibleName())
+        self.assertIn("Tool: Brush", self._widget._status_lbl.text())
+
     def test_selective_alpha_slot_labels_explain_next_actions(self):
         self.assertIn("Empty", self._widget._slot_info_lbl.text())
         self.assertIn("save the active zone here", self._widget._slot_info_lbl.text())
