@@ -108,18 +108,20 @@ def test_stage_close_failure_is_cleaned_before_retry(tmp_path):
     assert target.read_bytes() == b"retry"
 
 
-def test_cleanup_failure_does_not_hide_encoding_errno(tmp_path):
+def test_cleanup_failure_does_not_hide_encoding_errno(tmp_path, caplog):
     target = tmp_path / "output.png"
     target.write_bytes(b"original")
     failure = OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
     try:
         with patch.object(Path, "unlink", side_effect=OSError(errno.EIO, os.strerror(errno.EIO))):
-            with pytest.raises(OSError) as caught:
-                with staged_output_path(target) as staged:
-                    Path(staged).write_bytes(b"partial")
-                    raise failure
+            with caplog.at_level("WARNING", logger="src.core.atomic_output"):
+                with pytest.raises(OSError) as caught:
+                    with staged_output_path(target) as staged:
+                        Path(staged).write_bytes(b"partial")
+                        raise failure
         assert caught.value is failure
         assert target.read_bytes() == b"original"
+        assert "Failed to clean up staged save" in caplog.text
     finally:
         # A disconnected filesystem cannot guarantee cleanup; remove our injected orphan.
         for path in tmp_path.glob(".alpha_fixer_save_*"):

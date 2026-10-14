@@ -1,9 +1,12 @@
 """Atomic sibling staging shared by core exporters and UI save actions."""
 from contextlib import contextmanager
+import logging
 import os
 from pathlib import Path
 import stat
 import tempfile
+
+logger = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -31,6 +34,6 @@ def staged_output_path(destination, *, preserve_existing_mode=False):
         # save error (or cancellation), not the secondary cleanup error.
         try:
             staged.unlink(missing_ok=True)
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.warning("Failed to clean up staged save %s: %s", staged, exc)
         raise
