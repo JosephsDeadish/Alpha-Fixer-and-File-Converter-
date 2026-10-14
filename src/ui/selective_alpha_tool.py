@@ -2184,7 +2184,7 @@ class SelectiveAlphaTool(QWidget):
         sel_row.addWidget(slot_label)
         self._slot_combo = QComboBox()
         slot_label.setBuddy(self._slot_combo)
-        self._slot_combo.setAccessibleName("Single-zone saved zone slot")
+        self._slot_combo.setAccessibleName("Single-zone slot selector")
         self._slot_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -3348,11 +3348,11 @@ class SelectiveAlphaTool(QWidget):
         else:
             clipboard_note = ""
 
-        next_actions = "Next: Import Shared Zones to Canvas, Save Shared Zones → Full Layout Slot, or Copy One Zone → Clipboard."
+        next_actions = "Next: import the shared zones, save them to the full-layout slot, or copy one zone to the clipboard."
         if count == 1:
-            next_actions = "Next: open an image, use Import Shared Zones to Canvas, or press Paste Zone to apply the pre-loaded clipboard zone."
+            next_actions = "Next: open an image, import the shared zones, or press Paste Zone to apply the pre-loaded clipboard zone."
         self._import_shared_status.setText(
-            f"✅ {count} zone(s) ready"
+            f"✅ {count} shared zone(s) ready"
             f" (α: {', '.join(str(v) for v, _ in displayed)}{suffix})"
             f"{clipboard_note}\n{next_actions}"
         )

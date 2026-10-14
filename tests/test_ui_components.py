@@ -8014,7 +8014,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("save the active zone here", self._widget._slot_info_lbl.text())
         self.assertIn("Empty", self._widget._az_slot_info_lbl.text())
         self.assertIn("save all current zones here", self._widget._az_slot_info_lbl.text())
-        self.assertIn("Single-zone saved zone slot", self._widget._slot_combo.accessibleName())
+        self.assertIn("Single-zone slot selector", self._widget._slot_combo.accessibleName())
         self.assertIn("Add single-zone slot", self._widget._btn_slot_add.accessibleName())
         self.assertIn("Delete single-zone slot", self._widget._btn_slot_del.accessibleName())
         self.assertIn("Rename single-zone slot", self._widget._btn_slot_rename.accessibleName())
@@ -8046,6 +8046,9 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("No shared zones ready yet", self._widget._import_shared_status.text())
         self.assertIn("right-click the preview", self._widget._import_shared_status.text())
         self.assertIn("Alpha & RGBA Adjuster", self._widget._btn_import_shared.toolTip())
+        self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=np.uint8))])
+        self.assertIn("shared zone(s) ready", self._widget._import_shared_status.text())
+        self.assertIn("Next: open an image, import the shared zones", self._widget._import_shared_status.text())
         self.assertIn("Import Shared Zones to Canvas", self._widget._btn_import_shared.text())
         self.assertIn("Import shared zones", self._widget._btn_import_shared.accessibleName())
 
