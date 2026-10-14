@@ -1,5 +1,8 @@
 """Named export preferences, separate from alpha presets and editor projects."""
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class VideoExportPresets:
@@ -41,6 +44,7 @@ class VideoExportPresets:
             try:
                 result[name] = self.validate(record)
             except ValueError:
+                logger.warning("Ignoring malformed video export preset %r", name, exc_info=True)
                 continue
         return result
 

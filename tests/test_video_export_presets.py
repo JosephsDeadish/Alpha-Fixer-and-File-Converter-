@@ -143,6 +143,20 @@ def test_invalid_entries_rejected_atomically_and_preserved(video, settings, fiel
     }
 
 
+def test_malformed_export_preset_is_skipped_with_warning(video, settings, caplog):
+    manager, _ = settings
+    manager.set(VideoExportPresets.KEY, json.dumps({
+        "version": 1,
+        "presets": {
+            "Good": PREFERENCES,
+            "Broken": {"format": "webm", "fps": 30, "keep_audio": False, "mute_audio": True, "volume": 175},
+        },
+    }))
+    caplog.set_level("WARNING", logger="src.core.video_presets")
+    available = VideoExportPresets(manager).available()
+    assert available == {"Good": PREFERENCES}
+    assert any("Ignoring malformed video export preset" in message for message in caplog.messages)
+
 def test_duplicate_names_never_replace_or_delete_other_presets(video, settings):
     manager, _ = settings
     video._export_presets.save("One", PREFERENCES)
