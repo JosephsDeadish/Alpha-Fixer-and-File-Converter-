@@ -3559,6 +3559,16 @@ class TestTooltipManager(unittest.TestCase):
                 self.assertIn("zone", text)
                 self.assertNotIn("mask copy", text)
 
+    def test_alpha_painter_slot_tips_use_zone_language(self):
+        from src.ui.tooltip_manager import _DUMBED, _NORMAL, _VULGAR
+
+        for key in ("sa_slot_combo", "sa_slot_save", "sa_slot_paste", "sa_slot_add", "sa_slot_del", "sa_slot_clear", "sa_slot_rename"):
+            for mode in (_NORMAL, _DUMBED, _VULGAR):
+                with self.subTest(key=key, mode=mode):
+                    text = " ".join(mode[key]).lower()
+                    self.assertIn("zone", text)
+                    self.assertNotIn("mask slot", text)
+
     def test_high_traffic_tooltip_keys_keep_mode_alignment(self):
         from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR
         aligned_keys = [
