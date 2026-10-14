@@ -113,8 +113,12 @@ def output_format_unavailable_reason(target_format: str) -> str:
         pil_format = Image.registered_extensions().get(ext.lower())
         if pil_format and pil_format in Image.SAVE:
             return ""
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "Falling back to unavailable output-format hint for %s: %s",
+            target_format,
+            exc,
+        )
     return _FORMAT_UNAVAILABLE_HINTS.get(
         target_format,
         f"{target_format} export is unavailable in this Pillow build.",

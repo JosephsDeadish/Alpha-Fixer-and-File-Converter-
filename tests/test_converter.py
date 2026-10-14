@@ -2910,6 +2910,13 @@ class TestConvertFile(unittest.TestCase):
                 self.assertIn("libavif", output_format_unavailable_reason("AVIF"))
                 self.assertFalse(output_format_available("AVIF"))
 
+    def test_output_format_unavailable_reason_logs_probe_failure_and_falls_back(self):
+        with mock.patch.object(Image, "init", side_effect=RuntimeError("probe failed")):
+            with self.assertLogs("src.core.file_converter", level="WARNING") as logs:
+                reason = output_format_unavailable_reason("AVIF")
+        self.assertIn("avif", reason.lower())
+        self.assertTrue(any("probe failed" in entry.lower() for entry in logs.output))
+
     def test_png_to_jpeg(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             src = os.path.join(tmpdir, "input.png")
