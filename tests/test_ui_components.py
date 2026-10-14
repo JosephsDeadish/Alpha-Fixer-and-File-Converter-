@@ -8780,6 +8780,8 @@ class TestDialogAccessibility(unittest.TestCase):
         with patch.object(SettingsDialog, "_load_values", lambda self: None):
             settings = SettingsDialog(_SettingsStub())
         self._widgets.append(settings)
+        from PyQt6.QtWidgets import QLabel
+
         self.assertIn("history report", history._btn_export.accessibleName())
         self.assertIn("report file", history._btn_export.accessibleDescription())
         self.assertIn("Clear all history", history._btn_clear.accessibleName())
@@ -8793,6 +8795,10 @@ class TestDialogAccessibility(unittest.TestCase):
         self.assertIn("JSON backup", settings._btn_export_theme.accessibleDescription())
         self.assertIn("Import theme backup", settings._btn_import_theme.accessibleName())
         self.assertIn("bring a theme over from another install", settings._btn_import_theme.accessibleDescription())
+        self.assertIn("Alpha Painter", settings._chk_track_sel_alpha.text())
+        self.assertIn("Alpha Painter", settings._chk_track_sel_alpha.toolTip())
+        self.assertIn("Alpha Painter", settings._history_max_sel_spin.toolTip())
+        self.assertIn("Alpha Painter:", {label.text() for label in settings.findChildren(QLabel)})
 
     def test_fit_dialog_preserves_geometry_when_already_on_screen(self):
         from PyQt6.QtCore import QRect
