@@ -251,6 +251,19 @@ def test_export_cleanup_failure_logs_but_keeps_final_file(dialog, tmp_path, capl
     assert dialog._export_content.isEnabled()
 
 
+def test_export_frame_reader_cleanup_failure_logs(dialog, tmp_path, caplog):
+    output = tmp_path / "out.gif"
+    frame_getter = dialog._clips[0]["frame_getter"]
+    with patch.object(vt.QFileDialog, "getSaveFileName", return_value=(str(output), "")), \
+            patch.object(frame_getter, "_close_reader", side_effect=RuntimeError("reader locked")):
+        caplog.set_level("WARNING", logger="src.core.video_export")
+        dialog._export()
+        wait_for_video_export(dialog)
+    assert output.exists()
+    assert any("could not close frame reader" in message.lower() for message in caplog.messages)
+    assert dialog._export_content.isEnabled()
+
+
 @pytest.mark.parametrize("outcome,close_fails", [
     ("cancel", False), ("cancel", True),
     ("render_error", False), ("render_error", True),

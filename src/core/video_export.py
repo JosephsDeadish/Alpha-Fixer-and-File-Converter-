@@ -353,4 +353,8 @@ class VideoExportWorker(QThread):
                 try:
                     clip["frame_getter"]._close_reader()
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Video export cleanup could not close frame reader for %s",
+                        clip.get("path", "<unknown>"),
+                        exc_info=True,
+                    )
