@@ -174,6 +174,19 @@ class TestPresets(unittest.TestCase):
         self.assertTrue(result)
         self.assertIsNone(self._mgr.get_preset("ToDelete"))
 
+    def test_malformed_custom_presets_are_skipped_with_warning(self):
+        mock_settings = MagicMock()
+        mock_settings.get_custom_presets.return_value = [
+            ["not", "a", "preset"],
+            {"name": "Broken", "clamp_min": "oops"},
+        ]
+        with self.assertLogs("src.core.presets", level="WARNING") as cm:
+            mgr = PresetManager(mock_settings)
+        self.assertEqual(mgr.custom_presets(), [])
+        self.assertTrue(
+            any("Ignoring malformed custom preset record" in message for message in cm.output)
+        )
+
     def test_cannot_delete_builtin(self):
         result = self._mgr.delete_custom_preset(self._PS2_FULL_OPAQUE_NAME)
         self.assertFalse(result)
