@@ -3558,7 +3558,7 @@ class TestTooltipManager(unittest.TestCase):
                 with self.subTest(key=key, mode=mode):
                     text = " ".join(mode[key]).lower()
                     self.assertIn("zone", text)
-                    self.assertNotIn("mask copy", text)
+                    self.assertNotIn("mask", text)
 
     def test_alpha_painter_slot_tips_use_zone_language(self):
         from src.ui.tooltip_manager import _DUMBED, _NORMAL, _VULGAR
