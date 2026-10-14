@@ -3579,6 +3579,8 @@ class TestTooltipManager(unittest.TestCase):
                     text = " ".join(mode[key]).lower()
                     self.assertIn("zone", text)
                     self.assertNotIn("mask is still there", text)
+                    self.assertNotIn("mask is always there", text)
+                    self.assertNotIn("mask still exists", text)
 
     def test_high_traffic_tooltip_keys_keep_mode_alignment(self):
         from src.ui.tooltip_manager import _NORMAL, _DUMBED, _VULGAR

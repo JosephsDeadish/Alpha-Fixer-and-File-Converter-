@@ -6814,11 +6814,11 @@ _VULGAR: dict[str, list[str]] = {
     ],
     "sa_zone_visibility": [
         "The eye button. Hides or shows this zone's overlay. Simple.",
-        "Hidden = you can't see it. Visible = you can. The mask is always there either way.",
+        "Hidden = you can't see it. Visible = you can. The zone is always there either way.",
         "Hiding a zone overlay doesn't delete shit. The zone is preserved.",
         "Toggle off to see what's under the blob. Toggle on to see the blob again.",
         "If you want to check the source image under a painted zone, this is what you use.",
-        "The eye icon. Click it to make one zone's overlay invisible. The mask still exists. It's just shy.",
+        "The eye icon. Click it to make one zone's overlay invisible. The zone still exists. It's just shy.",
         "Hiding a zone visually doesn't remove the paint. The zone is still there, it's just invisible. Ghost zone.",
         "Toggle visibility per-zone. See exactly how each zone sits against the source image without the blob in the way.",
     ],
