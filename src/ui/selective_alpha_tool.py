@@ -90,7 +90,7 @@ def _np_to_qimage(arr: np.ndarray) -> QImage:
 
 def _selective_alpha_capability_summary() -> str:
     return (
-        "Ready: paint zones, import shared zones, undo/redo, save layouts, and preview/export tools are available."
+        "Ready: edit zones, import shared zones, undo/redo, save layouts, and preview/export tools are available."
     )
 
 
@@ -1770,7 +1770,7 @@ class SelectiveAlphaTool(QWidget):
         if not src_path:
             if has_shared_zones:
                 return "Next step: open an image, then import the shared zones, save them to a Full Layout Slot, or copy one zone to the clipboard."
-            return "Next step: open an image or copy zones from Alpha & RGBA Adjuster to begin painting."
+            return "Next step: open an image or copy zones from Alpha & RGBA Adjuster to begin editing."
         if result_ready:
             return "Next step: save the current result, or keep refining the zones and save again when it looks right."
         if has_shared_zones:
@@ -1888,7 +1888,7 @@ class SelectiveAlphaTool(QWidget):
             "Summarizes the current tool, loaded image, and what to do next."
         )
         wf_lay.addWidget(self._session_status_lbl)
-        self._next_step_lbl = QLabel("Next step: open an image or copy zones from Alpha & RGBA Adjuster to begin painting.")
+        self._next_step_lbl = QLabel("Next step: open an image or copy zones from Alpha & RGBA Adjuster to begin editing.")
         self._next_step_lbl.setWordWrap(True)
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._next_step_lbl.setProperty("toolGuidance", True)

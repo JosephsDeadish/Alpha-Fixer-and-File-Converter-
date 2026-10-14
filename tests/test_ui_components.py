@@ -8042,9 +8042,11 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("zone clipboard ready", summary)
         self.assertIn("full-layout slot", summary)
         self.assertIn("result ready to save", summary)
+        self.assertIn("edit zones", self._widget._capability_lbl.text())
         self.assertIn("sample.png", self._widget._session_status_lbl.text())
         self.assertIn("Next:", self._widget._session_status_lbl.text())
         self.assertIn("save the current result", self._widget._next_step_lbl.text())
+        self.assertIn("begin editing", self._widget._next_step_lbl.text())
 
     def test_selective_alpha_slot_labels_explain_next_actions(self):
         self.assertIn("Empty", self._widget._slot_info_lbl.text())
