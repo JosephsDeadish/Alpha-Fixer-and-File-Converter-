@@ -1008,6 +1008,7 @@ def execute_disc_video_manifest_report(
                 allow_download=manifest_downloads_enabled(),
             )
         except Exception as exc:
+            logger.warning("Manifest materialization failed during disc-video report for %s: %s", _entry_source_path(raw_entry) or _entry_download_url(raw_entry) or "sample", exc)
             sample_path = _entry_source_path(raw_entry) or _entry_download_url(raw_entry) or ""
             result = _manifest_sample_stub(raw_entry, sample_path, label=Path(sample_path or "sample").name)
             return _fail(result, "materialize", f"manifest materialization failed: {exc}")
@@ -1234,6 +1235,7 @@ def execute_dds_manifest_report(
                 allow_download=manifest_downloads_enabled(),
             )
         except Exception as exc:
+            logger.warning("Manifest materialization failed during DDS report for %s: %s", _entry_source_path(raw_entry) or _entry_download_url(raw_entry) or "sample", exc)
             sample_path = _entry_source_path(raw_entry) or _entry_download_url(raw_entry) or ""
             result = _manifest_sample_stub(raw_entry, sample_path, label=Path(sample_path or "sample").name)
             return _fail(result, "materialize", f"manifest materialization failed: {exc}")
@@ -1352,6 +1354,7 @@ def execute_format_matrix_manifest_report(
                 allow_download=manifest_downloads_enabled(),
             )
         except Exception as exc:
+            logger.warning("Manifest materialization failed during format-matrix report for %s: %s", _entry_source_path(raw_entry) or _entry_download_url(raw_entry) or "sample", exc)
             sample_path = _entry_source_path(raw_entry) or _entry_download_url(raw_entry) or ""
             result = _manifest_sample_stub(raw_entry, sample_path, label=Path(sample_path or "sample").name)
             return _fail(result, "materialize", f"manifest materialization failed: {exc}")

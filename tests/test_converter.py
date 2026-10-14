@@ -537,6 +537,15 @@ class TestCorpusHelperInputs(unittest.TestCase):
         self.assertTrue(report["ok"], msg=report["detail"])
         self.assertTrue(any("Ignoring malformed manifest size" in entry for entry in logs.output))
 
+    def test_execute_dds_manifest_report_logs_materialization_failures(self):
+        entries = [{"path": "/tmp/sample.dds", "expect": "load"}]
+        with self.assertLogs("src.core.runtime_validation", level="WARNING") as logs:
+            with mock.patch("src.core.runtime_validation.materialize_manifest_entry", side_effect=RuntimeError("boom")):
+                report = execute_dds_manifest_report(entries, lambda _path: None)
+        self.assertFalse(report["ok"])
+        self.assertIn("manifest materialization failed: boom", report["detail"])
+        self.assertTrue(any("Manifest materialization failed during DDS report" in entry for entry in logs.output))
+
     def test_private_odd_container_video_manifest_template_loads(self):
         manifest_path = os.path.join(
             os.path.dirname(__file__),
