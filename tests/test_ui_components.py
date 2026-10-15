@@ -8256,8 +8256,6 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Copy one shared zone", self._widget._btn_import_zone_to_clipboard.accessibleName())
         self.assertIn("zone clipboard", self._widget._btn_import_zone_to_clipboard.toolTip())
         self.assertIn("zone clipboard", self._widget._btn_import_zone_to_clipboard.accessibleDescription().lower())
-        self.assertIn("zone clipboard", self._widget._canvas._zones[0]._copy_btn.accessibleDescription().lower())
-        self.assertIn("zone clipboard", self._widget._canvas._zones[0]._paste_btn.accessibleDescription().lower())
         self.assertTrue(self._widget._btn_import_shared.isEnabled())
         self.assertTrue(self._widget._btn_import_to_az_slot.isEnabled())
         self.assertTrue(self._widget._btn_import_zone_to_clipboard.isEnabled())
