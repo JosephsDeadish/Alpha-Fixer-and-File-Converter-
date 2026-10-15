@@ -2303,7 +2303,7 @@ class SettingsDialog(QDialog):
             "Normal":       "Clean, detailed tooltips with straightforward guidance.",
             "Off":          "Turns tooltip popups off everywhere in the app.",
             "Dumbed Down":  "Shorter, snarkier tooltips that still explain the control.",
-            "No Filter 🤬": "Profane, joke-heavy tooltips that still describe the control accurately.",
+            "No Filter 🤬": "Profane, joke-heavy tooltips from the unfiltered mode that still describe the control accurately.",
         }
         for mode in TOOLTIP_MODES:
             self._tooltip_mode_combo.addItem(mode)
@@ -2313,11 +2313,12 @@ class SettingsDialog(QDialog):
                 self._tooltip_mode_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._tooltip_mode_combo.setAccessibleName("Tooltip wording mode")
         self._tooltip_mode_combo.setAccessibleDescription(
-            "Choose how tooltip text is written. Use Tooltip Box Style to change the popup appearance."
+            "Choose how tooltip text is written. No Filter 🤬 is the unfiltered mode. Use Tooltip Box Style to change the popup appearance."
         )
         self._tooltip_mode_combo.setToolTip(
             "Controls how tooltips appear throughout the app.\n"
-            "Tooltip Wording changes the text; Tooltip Box Style changes the popup appearance."
+            "Tooltip Wording changes the text; No Filter 🤬 is the unfiltered mode.\n"
+            "Tooltip Box Style changes the popup appearance."
         )
         self._tooltip_mode_combo.setMaximumWidth(220)
         misc_gl.addWidget(self._tooltip_mode_combo, 1, 1, Qt.AlignmentFlag.AlignLeft)
@@ -2348,7 +2349,7 @@ class SettingsDialog(QDialog):
         self._tooltip_style_combo.setMaximumWidth(220)
         misc_gl.addWidget(self._tooltip_style_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
         tooltip_note = QLabel(
-            "ℹ  Tooltip Wording changes the text. Tooltip Box Style changes the popup appearance."
+            "ℹ  Tooltip Wording changes the text; No Filter 🤬 is the unfiltered mode. Tooltip Box Style changes the popup appearance."
         )
         tooltip_note.setWordWrap(True)
         tooltip_note.setProperty("settingsHint", True)

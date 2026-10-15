@@ -4530,7 +4530,7 @@ class MainWindow(QMainWindow):
             "background flock with themed emoji (Use theme flock), blood/water drip</li>"
             "<li>Button press animations: press, fall, bounce, shake, shatter</li>"
             "<li>Animated banner (10 modes) + animated emoji cursors: spin, wobble, cycling</li>"
-            "<li>Cycling tooltips with Normal, Dumbed Down, and No Filter 🤬 modes</li>"
+            "<li>Cycling tooltips with Normal, Dumbed Down, and No Filter 🤬 (unfiltered) modes</li>"
             "<li>Keyboard shortcuts are configurable. View current bindings in "
             f"Help → Keyboard Shortcuts (current key: {help_binding}).</li>"
             "</ul>"
