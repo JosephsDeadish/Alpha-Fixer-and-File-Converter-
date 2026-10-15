@@ -482,7 +482,7 @@ class SettingsDialog(QDialog):
         ev.addWidget(effects_intro)
 
         # ---- Preset GroupBox ----
-        grp_preset_select = QGroupBox("Active Theme Preset")
+        grp_preset_select = QGroupBox("Theme Presets & Backup")
         ps_vl = QVBoxLayout(grp_preset_select)
         ps_vl.setSpacing(4)
         ps_vl.setContentsMargins(6, 4, 6, 4)
@@ -494,11 +494,11 @@ class SettingsDialog(QDialog):
         self._theme_search = QLineEdit()
         filter_label.setBuddy(self._theme_search)
         self._theme_search.setAccessibleName("Filter themes")
-        self._theme_search.setPlaceholderText("Type to filter themes…")
+        self._theme_search.setPlaceholderText("Type to filter theme names…")
         self._theme_search.setClearButtonEnabled(True)
         self._theme_search.setToolTip(
             "Type part of a theme name to filter the list below.\n"
-            "Press Enter to focus the results; filtering does not change the active theme."
+            "Press Enter to focus the matching results; filtering does not change the active theme."
         )
         self._theme_search.setAccessibleDescription(self._theme_search.toolTip())
         self._theme_search.installEventFilter(self)
@@ -517,7 +517,7 @@ class SettingsDialog(QDialog):
         self._theme_preset_combo.setMinimumWidth(200)
         self._theme_preset_combo.setToolTip(
             "Choose a visual theme for the application.\n"
-            "Hover over each theme to see its style, and watch for unlock markers on hidden themes."
+            "Hover over each preset to preview its style, and watch for unlock markers on hidden themes."
         )
         self._theme_preset_combo.setAccessibleDescription(self._theme_preset_combo.toolTip())
         self._rebuild_theme_combo()
@@ -526,17 +526,25 @@ class SettingsDialog(QDialog):
         self._btn_delete_theme = QPushButton("Delete")
         self._btn_export_theme = QPushButton("Export Theme…")
         self._btn_import_theme = QPushButton("Import Theme…")
+        self._btn_save_theme.setAccessibleName("Save custom theme")
+        self._btn_save_theme.setAccessibleDescription(
+            "Saves the current appearance settings as a custom theme preset."
+        )
+        self._btn_delete_theme.setAccessibleName("Delete custom theme")
+        self._btn_delete_theme.setAccessibleDescription(
+            "Deletes the selected custom theme preset if it is not built in."
+        )
         self._btn_save_theme.setMinimumWidth(75)
         self._btn_delete_theme.setMinimumWidth(62)
         self._btn_export_theme.setMinimumWidth(110)
         self._btn_import_theme.setMinimumWidth(110)
         self._btn_export_theme.setToolTip(
             "Export the current theme settings to a JSON backup file.\n"
-            "Use this to move a theme to another install or keep a copy before experimenting."
+            "Use this to keep a recovery copy or move the theme to another install."
         )
         self._btn_import_theme.setToolTip(
             "Import a theme from a JSON backup file and apply it immediately.\n"
-            "Use this to restore a saved look or bring a theme over from another install."
+            "Use this to restore a saved look or bring a theme in from another install."
         )
         self._btn_export_theme.setAccessibleName("Export theme backup")
         self._btn_export_theme.setAccessibleDescription(
@@ -2768,6 +2776,7 @@ class SettingsDialog(QDialog):
         self._btn_reset.setObjectName("resetBtn")
         self._btn_reset.setToolTip(
             "⚠ Reset all settings, unlock flags, and history to factory defaults.\n"
+            "This clears custom themes and saved history from this install.\n"
             "This cannot be undone. Restart afterward to fully apply the reset."
         )
         self._btn_reset.setAccessibleName("Reset all settings")
@@ -2778,7 +2787,7 @@ class SettingsDialog(QDialog):
         self._btn_reset_unlocks = QPushButton("Reset Unlocks & Clicks…")
         self._btn_reset_unlocks.setToolTip(
             "Reset only the unlock flags and click counter to zero.\n"
-            "All other settings (theme, sound, trail, etc.) are preserved.\n"
+            "Theme, sound, appearance, and other settings are preserved.\n"
             "Useful for re-testing hidden theme unlocks without losing your setup."
         )
         self._btn_reset_unlocks.setAccessibleName("Reset unlocks and clicks")

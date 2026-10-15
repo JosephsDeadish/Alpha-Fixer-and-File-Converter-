@@ -355,6 +355,8 @@ class TestConverterTab(unittest.TestCase):
             self.assertFalse(model.item(dxt1_idx).isEnabled())
             self.assertFalse(model.item(dxt3_idx).isEnabled())
             self.assertFalse(model.item(dxt5_idx).isEnabled())
+            self.assertIn("ImageMagick/wand", self._widget._dds_variant_combo.toolTip())
+            self.assertIn("compressed BC1/DXT1", self._widget._status_lbl.text())
 
     def test_alpha_incompatible_format_sets_status_note(self):
         idx = self._widget._fmt_combo.findText("JPEG", self._qt.MatchFlag.MatchContains)
@@ -368,6 +370,24 @@ class TestConverterTab(unittest.TestCase):
         self._widget._fmt_combo.setCurrentIndex(idx)
         if not self._widget._dds_compression_available:
             self.assertIn("BC2/DXT3", self._widget._status_lbl.text())
+
+    def test_dds_controls_and_failure_actions_surface_clearer_guidance(self):
+        idx = self._widget._fmt_combo.findText("DDS", self._qt.MatchFlag.MatchContains)
+        self.assertGreaterEqual(idx, 0)
+        self._widget._fmt_combo.setCurrentIndex(idx)
+        self.assertIn("BC2/DXT3", self._widget._dds_variant_combo.toolTip())
+        self.assertIn("Compressed variants need ImageMagick/wand", self._widget._dds_variant_combo.accessibleDescription())
+        from collections import Counter
+
+        self._widget._last_run_files = ["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"]
+        self._widget._batch_error_reasons = Counter({"missing alpha": 2, "ffmpeg unavailable": 1})
+        with patch.object(self._widget, "_failed_source_paths", return_value=["/tmp/a.png", "/tmp/c.png"]):
+            self._widget._refresh_failure_actions()
+        self.assertIn("Recovery actions ready:", self._widget._failure_actions_lbl.text())
+        self.assertIn("2 failed files", self._widget._failure_actions_lbl.text())
+        self.assertEqual("Retry Failed Files", self._widget._btn_retry_failed.text())
+        self.assertEqual("Keep Failed Files", self._widget._btn_keep_failed.text())
+        self.assertEqual("Remove Failed Files", self._widget._btn_skip_failed.text())
 
     def test_converter_capability_summary_reports_optional_limits(self):
         import src.ui.converter_tool as ct
@@ -7770,10 +7790,10 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("Next:", tab._session_status_lbl.text())
             tab._vid_search.setText("transcode")
             self.assertIn("filter transcode", tab.get_status_bar_text())
-            self.assertIn("review status and notes details", tab._next_step_lbl.text())
+            self.assertIn("review status and notes", tab._next_step_lbl.text())
             tab._vid_search.setText("missing")
             self.assertIn("0/1 shown", tab.get_status_bar_text())
-            self.assertIn("bring matching history entries back", tab._next_step_lbl.text())
+            self.assertIn("bring matching rows back", tab._next_step_lbl.text())
         finally:
             tab.close()
             tab.deleteLater()
@@ -8894,11 +8914,14 @@ class TestDialogAccessibility(unittest.TestCase):
         self.assertIn("Reset all settings", settings._btn_reset.accessibleName())
         self.assertIn("factory defaults", settings._btn_reset.accessibleDescription())
         self.assertIn("Reset unlocks", settings._btn_reset_unlocks.accessibleName())
-        self.assertIn("preserving the rest of your settings", settings._btn_reset_unlocks.accessibleDescription())
+        self.assertIn("appearance", settings._btn_reset_unlocks.toolTip())
         self.assertIn("Export theme backup", settings._btn_export_theme.accessibleName())
         self.assertIn("JSON backup file", settings._btn_export_theme.accessibleDescription())
         self.assertIn("Import theme backup", settings._btn_import_theme.accessibleName())
         self.assertIn("Imports a JSON theme backup", settings._btn_import_theme.accessibleDescription())
+        self.assertEqual("Save custom theme", settings._btn_save_theme.accessibleName())
+        self.assertEqual("Delete custom theme", settings._btn_delete_theme.accessibleName())
+        self.assertIn("theme names", settings._theme_search.placeholderText())
         self.assertIn("Alpha Painter", settings._chk_track_sel_alpha.text())
         self.assertIn("Alpha Painter", settings._chk_track_sel_alpha.toolTip())
         self.assertIn("Alpha Painter", settings._history_max_sel_spin.toolTip())

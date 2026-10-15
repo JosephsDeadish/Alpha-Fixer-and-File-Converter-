@@ -42,9 +42,12 @@ def _converter_capability_summary() -> str:
         formats = ", ".join(name for name, _reason in unavailable)
         parts.append(f"optional exports limited ({formats} fall back to PNG)")
     if compressed_dds:
-        parts.append("standard image conversion and DDS raw/compressed output are ready")
+        parts.append("standard image conversion and raw/compressed DDS output are ready")
     else:
-        parts.append("standard image conversion is ready; DDS compressed output needs ImageMagick/wand")
+        parts.append(
+            "standard image conversion and raw DDS output are ready; "
+            "compressed BC1/DXT1, BC2/DXT3, and BC3/DXT5 variants need ImageMagick/wand"
+        )
     prefix = "Limited:" if unavailable or not compressed_dds else "Ready:"
     return prefix + " " + " ".join(parts)
 
@@ -585,8 +588,12 @@ class ConverterTab(QWidget):
         self._sync_dds_variant_availability()
         self._dds_variant_combo.setToolTip(
             "Choose how DDS output should be written.\n"
-            "Auto keeps opaque images as RGB DDS and images with transparency as RGBA DDS.\n"
+            "Auto keeps opaque images as RGB DDS and transparent images as RGBA DDS.\n"
             "Compressed BC1/DXT1, BC2/DXT3, and BC3/DXT5 variants need ImageMagick/wand."
+        )
+        self._dds_variant_combo.setAccessibleDescription(
+            "Choose raw DDS output or compressed BC1/DXT1, BC2/DXT3, and BC3/DXT5 variants. "
+            "Compressed variants need ImageMagick/wand."
         )
         ge_layout.addWidget(self._dds_variant_combo, 1, 1)
 
@@ -668,21 +675,21 @@ class ConverterTab(QWidget):
         self._failure_actions_lbl.setProperty("toolGuidance", True)
         self._failure_actions_lbl.setWordWrap(True)
         log_btn_row.addWidget(self._failure_actions_lbl, 1)
-        self._btn_retry_failed = QPushButton("Retry Failed")
+        self._btn_retry_failed = QPushButton("Retry Failed Files")
         self._btn_retry_failed.setEnabled(False)
         self._btn_retry_failed.setToolTip(
             "Replace the current queue with only the files that failed in the last batch and rerun them."
         )
         self._btn_retry_failed.setAccessibleDescription(self._btn_retry_failed.toolTip())
         log_btn_row.addWidget(self._btn_retry_failed)
-        self._btn_keep_failed = QPushButton("Keep Failed Only")
+        self._btn_keep_failed = QPushButton("Keep Failed Files")
         self._btn_keep_failed.setEnabled(False)
         self._btn_keep_failed.setToolTip(
             "Replace the current queue with only the files that failed in the last batch so you can continue working on them."
         )
         self._btn_keep_failed.setAccessibleDescription(self._btn_keep_failed.toolTip())
         log_btn_row.addWidget(self._btn_keep_failed)
-        self._btn_skip_failed = QPushButton("Remove Failed")
+        self._btn_skip_failed = QPushButton("Remove Failed Files")
         self._btn_skip_failed.setEnabled(False)
         self._btn_skip_failed.setToolTip(
             "Remove the last batch's failed files from the current queue and keep the rest."
@@ -1270,7 +1277,10 @@ class ConverterTab(QWidget):
         if format_unavailable:
             ready_text = f"Ready. {fmt} export unavailable here — batch will fall back to PNG."
         elif dds_selected and not self._dds_compression_available:
-            ready_text = "Ready. DDS raw variants are available; BC1/DXT1, BC2/DXT3, and BC3/DXT5 need ImageMagick/wand."
+            ready_text = (
+                "Ready. DDS raw variants are available; compressed BC1/DXT1, BC2/DXT3, "
+                "and BC3/DXT5 need ImageMagick/wand."
+            )
         elif output_format_discards_alpha(fmt):
             ready_text = f"Ready. Transparent sources will be auto-saved as PNG because {fmt} does not preserve alpha."
         if not busy:
@@ -1283,7 +1293,7 @@ class ConverterTab(QWidget):
         elif dds_selected:
             self._dds_variant_combo.setToolTip(
                 "Choose how DDS output should be written.\n"
-                "Compressed BC1/DXT1 and BC3/DXT5 variants are available."
+                "Compressed BC1/DXT1, BC2/DXT3, and BC3/DXT5 variants are available."
             )
         # When GIF is selected, the Process button opens the GIF Builder instead
         if not busy:
@@ -1794,7 +1804,7 @@ class ConverterTab(QWidget):
             ""
         )
         self._failure_actions_lbl.setText(
-            f"Recovery options ready: {len(failed_files)} failed file{'s' if len(failed_files) != 1 else ''}.{repeat_text}{top_reason}"
+            f"Recovery actions ready: {len(failed_files)} failed file{'s' if len(failed_files) != 1 else ''}.{repeat_text}{top_reason}"
         )
         self._btn_retry_failed.setEnabled(True)
         self._btn_keep_failed.setEnabled(True)
@@ -2120,7 +2130,7 @@ class ConverterTab(QWidget):
             self._log_msg(f"Failure summary: {'  •  '.join(parts)}")
             successful = len(self._successful_source_paths())
             self._log_msg(
-                f"Recovery actions ready: Retry Failed, Keep Failed Only, or Remove Failed. {successful} succeeded / {len(self._last_failed_files)} failed."
+                f"Recovery actions ready: Retry Failed Files, Keep Failed Files, or Remove Failed Files. {successful} succeeded / {len(self._last_failed_files)} failed."
             )
             self._refresh_failure_actions()
         else:

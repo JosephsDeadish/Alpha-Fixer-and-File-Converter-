@@ -417,12 +417,12 @@ def _set_builder_tooltip(item: QTreeWidgetItem, columns: int, base_text: str, fi
 
 def _history_next_step_text(total: int, visible: int, filter_text: str) -> str:
     if total <= 0:
-        return "Next step: run a tool or export from a builder to populate history here."
+        return "Next step: run a tool or export from a builder to add history entries here."
     if filter_text and visible <= 0:
-        return "Next step: clear or loosen the current filter to bring matching history entries back into view."
+        return "Next step: clear or loosen the current filter to bring matching rows back into view."
     if filter_text and visible < total:
-        return "Next step: review the filtered status and notes, then clear the filter or export the current view."
-    return "Next step: review status and notes, export the current view, or switch history sub-tabs."
+        return "Next step: review the filtered rows, then clear the filter or export the current view."
+    return "Next step: review status and notes, export the current view, or switch history tabs."
 
 
 def _video_history_status(errors: object, notes: str) -> str:
@@ -815,10 +815,10 @@ class HistoryTab(QWidget):
                   "selective": "Alpha Painter", "gif": "GIF Builder", "video": "Video Builder"}
         field.setAccessibleName(f"Filter {titles.get(name, name)} history")
         field.setAccessibleDescription(
-            "Filter history by text or field expressions such as status:, file:, notes:, or format:. "
+            "Filter this history view by text or field expressions such as status:, file:, notes:, recovery:, or format:. "
             "Clear the search to show all entries."
         )
-        field.setPlaceholderText("🔍  Filter by text or use status:, file:, source:, format:, notes:, recovery:, clip:, audio:, alpha:, canvas:, delay:, errors:, or wildcards/ranges …")
+        field.setPlaceholderText("🔍  Filter by text or fields like status:, file:, notes:, recovery:, format:, or source: …")
         field.setClearButtonEnabled(True)
         return field
 
