@@ -2278,6 +2278,10 @@ class SelectiveAlphaTool(QWidget):
         )
         _sz_hint.setProperty("toolGuidance", True)
         _sz_hint.setWordWrap(True)
+        _sz_hint.setAccessibleName("Single-zone slot guidance")
+        _sz_hint.setAccessibleDescription(
+            "Explains how single-zone slots store one painted zone at a time for later reuse."
+        )
         sv.addWidget(_sz_hint)
 
         # Slot selector row (combo on its own row so the name shows in full)
@@ -2328,6 +2332,10 @@ class SelectiveAlphaTool(QWidget):
         self._slot_info_lbl = QLabel(self._empty_single_zone_slot_text())
         self._slot_info_lbl.setProperty("toolGuidance", True)
         self._slot_info_lbl.setWordWrap(True)
+        self._slot_info_lbl.setAccessibleName("Single-zone slot status")
+        self._slot_info_lbl.setAccessibleDescription(
+            "Shows the selected single-zone slot's stored zone summary and whether it is empty or ready to paste."
+        )
         sv.addWidget(self._slot_info_lbl)
 
         # Row 1: Save | Paste
@@ -2393,6 +2401,10 @@ class SelectiveAlphaTool(QWidget):
         )
         _az_hint.setProperty("toolGuidance", True)
         _az_hint.setWordWrap(True)
+        _az_hint.setAccessibleName("Full zone layout guidance")
+        _az_hint.setAccessibleDescription(
+            "Explains how full-layout slots store and restore every painted zone together."
+        )
         azv.addWidget(_az_hint)
 
         # Slot selector row (combo on its own row so the name shows in full)
@@ -2439,6 +2451,10 @@ class SelectiveAlphaTool(QWidget):
         self._az_slot_info_lbl = QLabel(self._empty_full_layout_slot_text())
         self._az_slot_info_lbl.setProperty("toolGuidance", True)
         self._az_slot_info_lbl.setWordWrap(True)
+        self._az_slot_info_lbl.setAccessibleName("Full zone layout slot status")
+        self._az_slot_info_lbl.setAccessibleDescription(
+            "Shows the selected full-layout slot's stored zone summary and whether it is empty or ready to restore."
+        )
         azv.addWidget(self._az_slot_info_lbl)
 
         # Row 1: Copy All | Paste All

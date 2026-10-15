@@ -8163,6 +8163,8 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
     def test_selective_alpha_tool_names_are_more_descriptive(self):
         from PyQt6.QtWidgets import QLabel
 
+        labels = self._widget.findChildren(QLabel)
+        label_by_name = {label.accessibleName(): label for label in labels}
         self.assertIn("Brush", self._widget._tool_btns["freehand"].text())
         self.assertIn("Erase", self._widget._tool_btns["eraser"].text())
         self.assertIn("Move", self._widget._tool_btns["transform"].text())
@@ -8175,6 +8177,11 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("every alpha-zone highlight", self._widget._btn_show_highlights.accessibleDescription())
         self.assertEqual("Close polygon shape", self._widget._btn_close_poly.accessibleName())
         self.assertIn("fills the finished shape", self._widget._btn_close_poly.accessibleDescription())
+        self.assertIn("Single-zone slot guidance", label_by_name)
+        self.assertIn(
+            "single-zone slots store one painted zone",
+            label_by_name["Single-zone slot guidance"].accessibleDescription(),
+        )
         self.assertEqual("Clear active zone", self._widget._ze_clear_btn.accessibleName())
         self.assertIn("without changing its name", self._widget._ze_clear_btn.accessibleDescription())
         self.assertIn("Open image for Alpha Painter", self._widget._btn_open.accessibleName())
@@ -8196,6 +8203,9 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Active zone label", {label.accessibleName() for label in labels})
         self.assertIn("Zone alpha label", {label.accessibleName() for label in labels})
         self.assertIn("Single-zone slot label", {label.accessibleName() for label in labels})
+        self.assertIn("Single-zone slot status", {label.accessibleName() for label in labels})
+        self.assertIn("Full zone layout guidance", {label.accessibleName() for label in labels})
+        self.assertIn("Full zone layout slot status", {label.accessibleName() for label in labels})
         self.assertIn("Tool: Brush", self._widget._status_lbl.text())
 
     def test_selective_alpha_zone_row_icon_controls_are_labeled(self):
