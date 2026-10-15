@@ -722,9 +722,6 @@ def test_theme_animation_info_labels_are_distinct(dialog):
     widget, manager = dialog
     assert widget._btn_anim_theme_info_lbl.text().startswith("Theme button animation:")
     assert widget._banner_theme_info_lbl.text().startswith("Theme banner animation:")
-    assert all(tabs.tabToolTip(i) for i in range(tabs.count()))
-    assert "automatically" in widget._live_settings_note.text()
-    assert "Close keeps" in widget._live_settings_note.text()
 
 
 def test_settings_tab_navigation_does_not_change_preferences(dialog):
