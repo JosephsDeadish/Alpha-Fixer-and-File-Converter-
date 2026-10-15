@@ -2092,6 +2092,10 @@ class SelectiveAlphaTool(QWidget):
         self._active_zone_combo.setToolTip(
             "Select the zone to edit. The chosen zone becomes the active target for every drawing tool."
         )
+        self._active_zone_combo.setAccessibleName("Active zone selector")
+        self._active_zone_combo.setAccessibleDescription(
+            "Selects which zone the painting tools will edit."
+        )
         self._active_zone_combo.currentIndexChanged.connect(
             lambda idx: self._on_zone_action(idx)
         )
@@ -2123,15 +2127,21 @@ class SelectiveAlphaTool(QWidget):
             "background:#ff4444;border:1px solid #666;border-radius:3px;padding:0;"
         )
         self._ze_swatch_btn.setToolTip("Click to choose a colour for this zone")
+        self._ze_swatch_btn.setAccessibleName("Choose active zone overlay color")
+        self._ze_swatch_btn.setAccessibleDescription(
+            "Opens a colour picker for the active zone overlay."
+        )
         ze_row1.addWidget(self._ze_swatch_btn)
         self._ze_name_edit = QLineEdit(ZONE_NAMES[0])
         self._ze_name_edit.setAccessibleName("Active zone name")
-        self._ze_swatch_btn.setAccessibleName("Choose active zone overlay color")
         self._ze_name_edit.setPlaceholderText("Zone name…")
         self._ze_name_edit.setToolTip(
             "Custom name for this zone.\n"
             "Leave blank to keep the auto-derived colour name.\n"
             "Press Enter or Tab to confirm."
+        )
+        self._ze_name_edit.setAccessibleDescription(
+            "Renames the active zone without changing its paint or alpha value."
         )
         self._ze_name_edit.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
@@ -2142,7 +2152,9 @@ class SelectiveAlphaTool(QWidget):
         self._ze_alpha_spin = QSpinBox()
         zone_alpha_label.setBuddy(self._ze_alpha_spin)
         self._ze_alpha_spin.setAccessibleName("Active zone alpha (0–255)")
-        self._ze_alpha_spin.setAccessibleDescription("0 is transparent; 255 is opaque.")
+        self._ze_alpha_spin.setAccessibleDescription(
+            "Sets the transparency level used for the active zone. 0 is transparent; 255 is opaque."
+        )
         self._ze_alpha_spin.setRange(0, 255)
         self._ze_alpha_spin.setValue(128)
         self._ze_alpha_spin.setMinimumWidth(62)
@@ -2158,6 +2170,12 @@ class SelectiveAlphaTool(QWidget):
         ze_row3.setSpacing(4)
         self._ze_copy_btn = QPushButton("📋  Copy Zone to Clipboard")
         self._ze_paste_btn = QPushButton("📌  Paste Zone from Clipboard")
+        self._ze_copy_btn.setAccessibleDescription(
+            "Copies the active zone so it can be pasted into another slot or image."
+        )
+        self._ze_paste_btn.setAccessibleDescription(
+            "Pastes the copied zone into the active slot or image."
+        )
         self._ze_paste_btn.setEnabled(False)
         ze_row3.addWidget(self._ze_copy_btn)
         ze_row3.addWidget(self._ze_paste_btn)
