@@ -2023,6 +2023,10 @@ class SelectiveAlphaTool(QWidget):
         # Close Polygon button
         self._btn_close_poly = QPushButton("⬠ Close Polygon")
         self._btn_close_poly.setToolTip("Close and fill the in-progress polygon")
+        self._btn_close_poly.setAccessibleName("Close polygon shape")
+        self._btn_close_poly.setAccessibleDescription(
+            "Closes the polygon tool path and fills the finished shape."
+        )
         self._btn_close_poly.setMinimumHeight(28)
         self._btn_close_poly.setVisible(False)
         self._btn_close_poly.clicked.connect(self._on_close_polygon)
@@ -2073,6 +2077,10 @@ class SelectiveAlphaTool(QWidget):
             "When checked, freehand and line strokes snap toward nearby strong edges after you release.\n"
             "Use it to make rough strokes hug object boundaries without painstaking tracing."
         )
+        self._autocorrect_chk.setAccessibleName("Auto-correct edge snapping")
+        self._autocorrect_chk.setAccessibleDescription(
+            "Makes freehand and line strokes snap toward nearby edges after you release the mouse."
+        )
         self._autocorrect_chk.toggled.connect(
             lambda v: self._canvas.set_autocorrect(v)
         )
@@ -2099,6 +2107,10 @@ class SelectiveAlphaTool(QWidget):
             "Turn off to see the image without coloured highlights and alpha labels.\n"
             "Automatically turns on when multiple alpha zones are detected in an image.\n"
             "Keyboard shortcut: H"
+        )
+        self._btn_show_highlights.setAccessibleName("Show all zone highlights")
+        self._btn_show_highlights.setAccessibleDescription(
+            "Shows or hides every alpha-zone highlight overlay on the canvas."
         )
         self._btn_show_highlights.clicked.connect(self._on_show_highlights_toggled)
         zv.addWidget(self._btn_show_highlights)
@@ -2200,6 +2212,10 @@ class SelectiveAlphaTool(QWidget):
 
         # Row 2: Clear button
         self._ze_clear_btn = QPushButton("🗑  Clear")
+        self._ze_clear_btn.setAccessibleName("Clear active zone")
+        self._ze_clear_btn.setAccessibleDescription(
+            "Clears the active zone's painted area without changing its name or alpha value."
+        )
         ze_vlay.addWidget(self._ze_clear_btn)
 
         # Row 3: Copy + Paste buttons
