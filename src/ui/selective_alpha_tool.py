@@ -1882,7 +1882,7 @@ class SelectiveAlphaTool(QWidget):
         wf_box = QGroupBox("Workflow: Open → Paint → Save")
         wf_box.setAccessibleName("Alpha Painter workflow")
         wf_box.setAccessibleDescription(
-            "Groups the open, paint, and save steps so the main workflow is easy to scan."
+            "Keeps the open, paint, and save steps together so the main workflow is easy to scan."
         )
         wf_lay = QVBoxLayout(wf_box)
         wf_lay.setSpacing(3)
@@ -1891,6 +1891,10 @@ class SelectiveAlphaTool(QWidget):
         self._btn_open = QPushButton("\U0001f4c2  Open Image\u2026")
         self._btn_open.setMinimumHeight(26)
         self._btn_open.setToolTip("Open an image to edit  (Ctrl+O)")
+        self._btn_open.setAccessibleName("Open image for Alpha Painter")
+        self._btn_open.setAccessibleDescription(
+            "Opens an image so you can paint alpha zones on it."
+        )
         self._btn_open.clicked.connect(self._on_open)
         wf_lay.addWidget(self._btn_open)
         self._session_status_lbl = QLabel("")
@@ -1902,7 +1906,9 @@ class SelectiveAlphaTool(QWidget):
             "Summarizes the current tool, loaded image, and what to do next."
         )
         wf_lay.addWidget(self._session_status_lbl)
-        self._next_step_lbl = QLabel("Next step: open an image or copy zones from Alpha & RGBA Adjuster to begin editing.")
+        self._next_step_lbl = QLabel(
+            "Next step: open an image, or copy zones from Alpha & RGBA Adjuster to begin editing."
+        )
         self._next_step_lbl.setWordWrap(True)
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._next_step_lbl.setProperty("toolGuidance", True)
@@ -1942,6 +1948,10 @@ class SelectiveAlphaTool(QWidget):
             "Apply the painted zones and save the result to disk  (Ctrl+S)\n"
             "Alpha zones are applied automatically — no separate Apply step needed."
         )
+        self._btn_save.setAccessibleName("Save edited image")
+        self._btn_save.setAccessibleDescription(
+            "Applies the painted zones and saves the result to disk."
+        )
         self._btn_save.clicked.connect(self._on_save)
         self._btn_save.setEnabled(False)
         self._btn_save.setStyleSheet("QPushButton:enabled { font-weight: bold; }")
@@ -1951,6 +1961,10 @@ class SelectiveAlphaTool(QWidget):
         self._btn_clear_all = QPushButton("\U0001f5d1  Clear All Zones")
         self._btn_clear_all.setMinimumHeight(26)
         self._btn_clear_all.setToolTip("Erase all painted zones and start over.")
+        self._btn_clear_all.setAccessibleName("Clear all zones")
+        self._btn_clear_all.setAccessibleDescription(
+            "Erases every painted zone and starts over."
+        )
         self._btn_clear_all.clicked.connect(self._on_clear_all)
         wf_lay.addWidget(self._btn_clear_all)
 
@@ -2105,11 +2119,11 @@ class SelectiveAlphaTool(QWidget):
                 self._make_zone_color_icon(r, g, b), ZONE_NAMES[i]
             )
         self._active_zone_combo.setToolTip(
-            "Select the zone to edit. The chosen zone becomes the active target for every drawing tool."
+            "Choose the zone to edit. The selected zone becomes the active target for every drawing tool."
         )
         self._active_zone_combo.setAccessibleName("Active zone selector")
         self._active_zone_combo.setAccessibleDescription(
-            "Selects which zone the drawing tools will edit. Brush, erase, and move tools all follow this choice."
+            "Chooses which zone the drawing tools will edit. Brush, erase, move, and shape tools all follow this choice."
         )
         self._active_zone_combo.currentIndexChanged.connect(
             lambda idx: self._on_zone_action(idx)
@@ -2213,7 +2227,7 @@ class SelectiveAlphaTool(QWidget):
         slots_box = QGroupBox("Single-Zone Slots")
         slots_box.setAccessibleName("Alpha Painter single-zone slots")
         slots_box.setAccessibleDescription(
-            "Stores reusable copies of one painted zone at a time for later paste operations."
+            "Stores reusable copies of one painted zone at a time for later paste, rename, or clear operations."
         )
         sv = QVBoxLayout(slots_box)
         sv.setSpacing(4)
@@ -2222,7 +2236,7 @@ class SelectiveAlphaTool(QWidget):
         # Short description so users know what this section is for
         _sz_hint = QLabel(
             "Save and paste one painted zone at a time.\n"
-            "Store reusable zone shapes for the active zone."
+            "Keep reusable zone shapes ready for the active zone."
         )
         _sz_hint.setProperty("toolGuidance", True)
         _sz_hint.setWordWrap(True)
@@ -2458,7 +2472,7 @@ class SelectiveAlphaTool(QWidget):
         import_box = QGroupBox("Import Shared Zones from Alpha & RGBA Adjuster")
         import_box.setAccessibleName("Alpha Painter shared zone import")
         import_box.setAccessibleDescription(
-            "Imports shared zones from Alpha & RGBA Adjuster, then lets you save them, copy one zone, or edit them on the canvas."
+            "Imports shared zones from Alpha & RGBA Adjuster, then lets you save the layout, copy one zone, or edit them on the canvas."
         )
         iv = QVBoxLayout(import_box)
         iv.setSpacing(4)
@@ -2466,7 +2480,7 @@ class SelectiveAlphaTool(QWidget):
 
         import_note = QLabel(
             "Import shared zones from Alpha & RGBA Adjuster, then bring them onto the canvas,\n"
-            "save the whole set into a Full Layout Slot, or copy one zone to the clipboard for quick reuse."
+            "save the whole set into a full-layout slot, or copy one zone to the zone clipboard for quick reuse."
         )
         import_note.setWordWrap(True)
         import_note.setProperty("toolGuidance", True)
