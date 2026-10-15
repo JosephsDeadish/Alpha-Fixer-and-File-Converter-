@@ -1484,7 +1484,7 @@ class MainWindow(QMainWindow):
         btn_settings.setMinimumWidth(88)
         btn_settings.setMaximumWidth(170)
         btn_settings.setMinimumHeight(26)
-        btn_settings.setToolTip("Open Settings (Ctrl+,)")
+        btn_settings.setToolTip("Open Settings — theme backup & recovery, sound, effects (Ctrl+,)")
         btn_settings.clicked.connect(self._open_settings)
         utility_layout.addWidget(btn_settings)
         self._btn_settings = btn_settings

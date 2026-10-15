@@ -708,7 +708,7 @@ def test_settings_effects_have_dedicated_tab_without_duplicated_controls(dialog)
     ]
     theme_groups = {group.title() for group in tabs.widget(0).findChildren(QGroupBox)}
     effect_groups = {group.title() for group in tabs.widget(3).findChildren(QGroupBox)}
-    assert "Active Theme Preset, Backup & Recovery" in theme_groups
+    assert "Theme Presets, Backup, and Recovery" in theme_groups
     assert "Theme Colors" in theme_groups
     for title in ["Click Effect Style", "Hold-Click Effects", "Background Effects",
                   "Mouse Trail", "Cursor", "Button Press Animation"]:
@@ -716,6 +716,12 @@ def test_settings_effects_have_dedicated_tab_without_duplicated_controls(dialog)
         assert title in effect_groups
         assert sum(group.title() == title for group in widget.findChildren(QGroupBox)) == 1
     assert "Sound" not in effect_groups
+
+
+def test_theme_animation_info_labels_are_distinct(dialog):
+    widget, manager = dialog
+    assert widget._btn_anim_theme_info_lbl.text().startswith("Theme button animation:")
+    assert widget._banner_theme_info_lbl.text().startswith("Theme banner animation:")
     assert all(tabs.tabToolTip(i) for i in range(tabs.count()))
     assert "automatically" in widget._live_settings_note.text()
     assert "Close keeps" in widget._live_settings_note.text()
@@ -1924,8 +1930,8 @@ def test_theme_filter_keyboard_labels_and_enter_do_not_open_save_dialog(dialog, 
     widget.show()
     widget.activateWindow()
     app.processEvents()
-    for control, name in ((widget._theme_search, "Filter themes"),
-                          (widget._theme_preset_combo, "Theme preset")):
+    for control, name in ((widget._theme_search, "Search themes"),
+                          (widget._theme_preset_combo, "Theme preset list")):
         assert control.accessibleName() == name
         assert control.accessibleDescription()
         assert sum(label.buddy() is control for label in widget.findChildren(QLabel)) == 1
