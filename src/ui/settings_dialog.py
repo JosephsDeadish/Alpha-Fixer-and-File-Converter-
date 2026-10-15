@@ -2719,6 +2719,10 @@ class SettingsDialog(QDialog):
         self._chk_track_converter.setToolTip(
             "When checked, File Converter batches are saved to history."
         )
+        self._chk_track_converter.setAccessibleName("Track Converter history")
+        self._chk_track_converter.setAccessibleDescription(
+            self._chk_track_converter.toolTip()
+        )
         hist_gl.addWidget(self._chk_track_converter, 8, 0)
 
         self._chk_track_alpha = QCheckBox("Alpha & RGBA Adjuster")
@@ -2726,12 +2730,18 @@ class SettingsDialog(QDialog):
         self._chk_track_alpha.setToolTip(
             "When checked, Alpha & RGBA Adjuster batches are saved to history."
         )
+        self._chk_track_alpha.setAccessibleName("Track Alpha and RGBA Adjuster history")
+        self._chk_track_alpha.setAccessibleDescription(self._chk_track_alpha.toolTip())
         hist_gl.addWidget(self._chk_track_alpha, 9, 0)
 
         self._chk_track_sel_alpha = QCheckBox("Alpha Painter")
         self._chk_track_sel_alpha.setChecked(True)
         self._chk_track_sel_alpha.setToolTip(
             "When checked, Alpha Painter saves are recorded in history."
+        )
+        self._chk_track_sel_alpha.setAccessibleName("Track Alpha Painter history")
+        self._chk_track_sel_alpha.setAccessibleDescription(
+            self._chk_track_sel_alpha.toolTip()
         )
         hist_gl.addWidget(self._chk_track_sel_alpha, 10, 0)
 
@@ -2740,6 +2750,8 @@ class SettingsDialog(QDialog):
         self._chk_track_gif.setToolTip(
             "When checked, GIF Builder exports are saved to history."
         )
+        self._chk_track_gif.setAccessibleName("Track GIF Builder history")
+        self._chk_track_gif.setAccessibleDescription(self._chk_track_gif.toolTip())
         hist_gl.addWidget(self._chk_track_gif, 8, 1)
 
         self._chk_track_video = QCheckBox("Video Builder")
@@ -2747,6 +2759,8 @@ class SettingsDialog(QDialog):
         self._chk_track_video.setToolTip(
             "When checked, Video Builder exports are saved to history."
         )
+        self._chk_track_video.setAccessibleName("Track Video Builder history")
+        self._chk_track_video.setAccessibleDescription(self._chk_track_video.toolTip())
         hist_gl.addWidget(self._chk_track_video, 9, 1)
 
         hist_note = QLabel(

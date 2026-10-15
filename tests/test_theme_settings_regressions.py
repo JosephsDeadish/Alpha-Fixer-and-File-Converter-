@@ -178,7 +178,7 @@ def test_tooltip_settings_controls_use_clearer_labels(dialog):
     assert "unfiltered mode" in widget._tooltip_mode_combo.accessibleDescription().lower()
     assert "No Filter 🤬 is the unfiltered mode" in widget._tooltip_mode_combo.toolTip()
     assert "tooltip boxes" in widget._tooltip_style_combo.toolTip().lower()
-    assert "review the layout before you apply it" in widget._theme_preset_combo.toolTip().lower()
+    assert "compare layouts before you apply one" in widget._theme_preset_combo.toolTip().lower()
     assert widget._btn_save_theme.accessibleName() == "Save theme preset"
     assert widget._btn_delete_theme.accessibleName() == "Delete theme preset"
     assert widget._btn_export_theme.accessibleName() == "Export theme backup"
@@ -202,6 +202,20 @@ def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
     assert "preview the current ui scale" in widget._scale_preview_button.accessibleDescription().lower()
     assert "preview the current ui scale" in widget._scale_preview_combo.accessibleDescription().lower()
     assert "backup / recovery tools" in tab_bar.tabToolTip(0).lower()
+
+
+def test_history_tracking_controls_have_screen_reader_descriptions(dialog):
+    widget, _manager = dialog
+    controls = [
+        (widget._chk_track_converter, "Track Converter history", "File Converter batches are saved to history."),
+        (widget._chk_track_alpha, "Track Alpha and RGBA Adjuster history", "Alpha & RGBA Adjuster batches are saved to history."),
+        (widget._chk_track_sel_alpha, "Track Alpha Painter history", "Alpha Painter saves are recorded in history."),
+        (widget._chk_track_gif, "Track GIF Builder history", "GIF Builder exports are saved to history."),
+        (widget._chk_track_video, "Track Video Builder history", "Video Builder exports are saved to history."),
+    ]
+    for control, name, tip in controls:
+        assert control.accessibleName() == name
+        assert tip in control.accessibleDescription()
 
 
 def test_malformed_saved_theme_settings_emit_warning_and_fall_back(dialog, caplog):
