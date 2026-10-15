@@ -2861,6 +2861,13 @@ class TestRound3Hardening(unittest.TestCase):
             "ConverterTool._run() must disconnect old worker signals before replacement",
         )
 
+    def test_alpha_tool_rom_banner_is_accessible_and_cover_art_copy_is_clear(self):
+        src = self._alpha_tool_source()
+        self.assertIn('setAccessibleName("Game folder detection banner")', src)
+        self.assertIn("optional cover art for game folders", src)
+        self.assertIn("Cover art:", src)
+        self.assertIn("setAccessibleDescription(text)", src)
+
 
 # ---------------------------------------------------------------------------
 # Round-4 crash/hang/resource prevention tests

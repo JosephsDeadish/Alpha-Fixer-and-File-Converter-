@@ -504,6 +504,10 @@ class AlphaFixerTab(QWidget):
         self._rom_banner = QLabel()
         self._rom_banner.setObjectName("rom_banner")
         self._rom_banner.setWordWrap(True)
+        self._rom_banner.setAccessibleName("Game folder detection banner")
+        self._rom_banner.setAccessibleDescription(
+            "Shows the detected console, disc ID, title guess, and optional cover art for game folders."
+        )
         self._rom_banner.hide()
         la_layout.addWidget(self._rom_banner)
 
@@ -1487,8 +1491,9 @@ class AlphaFixerTab(QWidget):
             if result.detected:
                 text = result.description()
                 if result.cover_art_hint:
-                    text += f"  🖼 Cover: {result.cover_art_hint}"
+                    text += f"  🖼 Cover art: {result.cover_art_hint}"
                 self._rom_banner.setText(text)
+                self._rom_banner.setAccessibleDescription(text)
                 self._rom_banner.show()
             else:
                 self._rom_banner.hide()
