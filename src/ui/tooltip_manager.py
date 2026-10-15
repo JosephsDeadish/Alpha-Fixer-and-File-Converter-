@@ -2475,7 +2475,7 @@ _NORMAL: dict[str, list[str]] = {
         "Paste is undoable — use Undo drawing to restore the previous zone.",
         "The pasted zone is a copy; changing it later does not affect the source zone.",
         "Paste only becomes active after at least one Copy Zone operation.",
-        "Pastes the copied zone into this zone, replacing whatever was painted here.",
+        "Pastes the zone clipboard into this zone, replacing whatever was painted here.",
         "Original zone is unchanged. You're copying, not moving. The source stays intact.",
         "Zone-to-zone shape transfer, complete.",
     ],

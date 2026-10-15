@@ -1647,7 +1647,9 @@ class _ZoneRow(QWidget):
             "Use 'Paste Zone' on any zone to apply this copy."
         )
         self._copy_btn.setAccessibleName(f"Copy {color_name} zone")
-        self._copy_btn.setAccessibleDescription(self._copy_btn.toolTip())
+        self._copy_btn.setAccessibleDescription(
+            f"Copies the painted zone for {color_name} into the zone clipboard so it can be pasted elsewhere."
+        )
         self._copy_btn.clicked.connect(lambda: self.copy_requested.emit(self._idx))
         cp_row.addWidget(self._copy_btn)
 
@@ -1658,7 +1660,9 @@ class _ZoneRow(QWidget):
             f"Paste the copied zone into {color_name}, replacing its current paint."
         )
         self._paste_btn.setAccessibleName(f"Paste zone into {color_name}")
-        self._paste_btn.setAccessibleDescription(self._paste_btn.toolTip())
+        self._paste_btn.setAccessibleDescription(
+            f"Pastes the zone clipboard into {color_name}, replacing its current paint."
+        )
         self._paste_btn.clicked.connect(lambda: self.paste_requested.emit(self._idx))
         cp_row.addWidget(self._paste_btn)
 
@@ -1774,13 +1778,16 @@ class SelectiveAlphaTool(QWidget):
             if has_shared_zones:
                 return (
                     "Next step: open an image, then import the shared zones, save them to a Full "
-                    "Layout Slot, or copy one zone to the clipboard for reuse."
+                    "Layout Slot, or copy one zone to the zone clipboard for reuse."
                 )
             return "Next step: open an image or copy shared zones from Alpha & RGBA Adjuster to begin editing."
         if result_ready:
             return "Next step: save the current result, or keep refining the zones and save again when it looks right."
         if has_shared_zones:
-            return "Next step: import the shared zones, refine any zones you need, then save when the preview looks right."
+            return (
+                "Next step: import the shared zones, refine any zones you need, copy one zone to "
+                "the clipboard if you want reuse, then save when the preview looks right."
+            )
         return "Next step: paint or refine your zones, then save when the preview looks right."
 
     @staticmethod
