@@ -1892,7 +1892,8 @@ class SelectiveAlphaTool(QWidget):
             "Keeps the open, paint, and save steps together so the main workflow is easy to scan."
         )
         wf_lay = QVBoxLayout(wf_box)
-        wf_lay.setSpacing(3)
+        wf_lay.setContentsMargins(6, 4, 6, 4)
+        wf_lay.setSpacing(4)
 
         # Row 1: Open image
         self._btn_open = QPushButton("\U0001f4c2  Open Image\u2026")
@@ -2482,8 +2483,8 @@ class SelectiveAlphaTool(QWidget):
             "Imports shared zones from Alpha & RGBA Adjuster, then lets you save the layout, copy one zone, or edit them on the canvas."
         )
         iv = QVBoxLayout(import_box)
-        iv.setSpacing(4)
-        iv.setContentsMargins(4, 4, 4, 4)
+        iv.setContentsMargins(6, 4, 6, 4)
+        iv.setSpacing(6)
 
         import_note = QLabel(
             "Import shared zones from Alpha & RGBA Adjuster, then bring them onto the canvas,\n"

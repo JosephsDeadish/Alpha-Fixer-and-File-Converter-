@@ -190,11 +190,15 @@ def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
     widget, _manager = dialog
     tab_bar = widget.findChild(QTabBar)
     assert tab_bar is not None
+    assert widget._grp_preset_select.accessibleName() == "Theme preset and recovery tools"
+    assert "json recovery backups" in widget._grp_preset_select.accessibleDescription().lower()
     assert "preview updates when a valid file is chosen" in widget._custom_bg_check.toolTip().lower()
     assert "return to a custom file" in widget._use_theme_bg_check.toolTip().lower()
     assert "live preview" in widget._custom_bg_preview.accessibleDescription().lower()
     assert widget._scale_preview_title.accessibleDescription() == "Heading for the UI scale live preview area."
     assert widget._scale_preview_sample_label.accessibleName() == "UI scale preview sample label"
+    assert widget._scale_preview_detail.accessibleName() == "UI scale preview details"
+    assert "button height" in widget._scale_preview_detail.accessibleDescription().lower()
     assert "preview the current ui scale" in widget._scale_preview_button.accessibleDescription().lower()
     assert "preview the current ui scale" in widget._scale_preview_combo.accessibleDescription().lower()
     assert "backup / recovery tools" in tab_bar.tabToolTip(0).lower()

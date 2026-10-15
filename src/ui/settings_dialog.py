@@ -483,6 +483,10 @@ class SettingsDialog(QDialog):
 
         # ---- Preset GroupBox ----
         self._grp_preset_select = QGroupBox("Theme Presets, Backup, and Recovery")
+        self._grp_preset_select.setAccessibleName("Theme preset and recovery tools")
+        self._grp_preset_select.setAccessibleDescription(
+            "Search, choose, save, export, and import themes from one place. Export and import buttons create and restore JSON recovery backups."
+        )
         ps_vl = QVBoxLayout(self._grp_preset_select)
         ps_vl.setSpacing(4)
         ps_vl.setContentsMargins(6, 4, 6, 4)
@@ -2466,8 +2470,9 @@ class SettingsDialog(QDialog):
             "Button height, spacing, border radius, and padding all update live as you change the controls."
         )
         self._scale_preview_detail.setWordWrap(True)
+        self._scale_preview_detail.setAccessibleName("UI scale preview details")
         self._scale_preview_detail.setAccessibleDescription(
-            "Explains how the live preview reflects the current layout controls."
+            "Explains how the live preview reflects the current layout controls, including button height, spacing, border radius, and padding."
         )
         scale_preview_layout.addWidget(self._scale_preview_detail)
         scale_gl.addWidget(self._scale_preview_frame, 6, 0, 1, 2)
