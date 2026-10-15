@@ -2435,7 +2435,7 @@ class SelectiveAlphaTool(QWidget):
         iv.setContentsMargins(4, 4, 4, 4)
 
         import_note = QLabel(
-            "Bring detected zones here from Alpha & RGBA Adjuster, then import them onto the canvas,\n"
+            "Import shared zones from Alpha & RGBA Adjuster, then bring them onto the canvas,\n"
             "save the whole set into a Full Layout Slot, or copy one zone to the clipboard for quick reuse."
         )
         import_note.setWordWrap(True)
@@ -2454,14 +2454,14 @@ class SelectiveAlphaTool(QWidget):
         self._import_shared_status.setProperty("toolGuidance", True)
         self._import_shared_status.setAccessibleName("Shared zone import status")
         self._import_shared_status.setAccessibleDescription(
-            "Explains whether shared zones are ready and what to do next."
+            "Explains whether shared zones are ready to import and which follow-up action to take next."
         )
         iv.addWidget(self._import_shared_status)
 
         self._btn_import_shared = QPushButton("📥 Import Shared Zones to Canvas")
         self._btn_import_shared.setEnabled(False)
         self._btn_import_shared.setToolTip(
-            "Load the shared zones from Alpha & RGBA Adjuster onto the Alpha Painter canvas.\n\n"
+            "Import the shared zones from Alpha & RGBA Adjuster into the Alpha Painter canvas.\n\n"
             "Each detected alpha value becomes its own editable zone."
         )
         self._btn_import_shared.setAccessibleName("Import shared zones to canvas")
