@@ -3649,6 +3649,10 @@ class TestTooltipManager(unittest.TestCase):
                     text = " ".join(mode[key]).lower()
                     self.assertIn("zone", text)
                     self.assertIn("zone clipboard", text)
+                    if key.endswith("copy_mask"):
+                        self.assertIn("another zone", text)
+                    else:
+                        self.assertIn("replace", text)
                     self.assertNotIn("copy mask", text)
                     self.assertNotIn("paste mask", text)
 
