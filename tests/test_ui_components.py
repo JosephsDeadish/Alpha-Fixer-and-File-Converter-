@@ -8182,6 +8182,9 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
             "single-zone slots store one painted zone",
             label_by_name["Single-zone slot guidance"].accessibleDescription(),
         )
+        self.assertIn("single-zone slot", self._widget._btn_slot_add.accessibleDescription())
+        self.assertIn("full-layout slot", self._widget._btn_az_slot_add.accessibleDescription())
+        self.assertIn("restores every painted zone", self._widget._btn_paste_all_zones.accessibleDescription().lower())
         self.assertEqual("Clear active zone", self._widget._ze_clear_btn.accessibleName())
         self.assertIn("without changing its name", self._widget._ze_clear_btn.accessibleDescription())
         self.assertIn("Open image for Alpha Painter", self._widget._btn_open.accessibleName())

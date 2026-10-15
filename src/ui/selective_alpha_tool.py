@@ -2516,7 +2516,56 @@ class SelectiveAlphaTool(QWidget):
             (self._btn_az_slot_clear, "Clear full zone layout slot"),
         ):
             control.setAccessibleName(name)
-            control.setAccessibleDescription(control.toolTip())
+            if control is self._btn_slot_add:
+                control.setAccessibleDescription(
+                    "Adds a new empty single-zone slot so you can store one painted zone."
+                )
+            elif control is self._btn_slot_del:
+                control.setAccessibleDescription(
+                    "Deletes the selected single-zone slot and any painted zone stored in it."
+                )
+            elif control is self._btn_slot_save:
+                control.setAccessibleDescription(
+                    "Saves the currently active zone into the selected single-zone slot."
+                )
+            elif control is self._btn_slot_paste:
+                control.setAccessibleDescription(
+                    "Restores the selected single-zone slot into the active zone on the canvas."
+                )
+            elif control is self._btn_slot_rename:
+                control.setAccessibleDescription(
+                    "Lets you change the selected single-zone slot name."
+                )
+            elif control is self._btn_slot_clear:
+                control.setAccessibleDescription(
+                    "Removes the stored zone from the selected single-zone slot without deleting the slot itself."
+                )
+            elif control is self._btn_az_slot_add:
+                control.setAccessibleDescription(
+                    "Adds an empty full-layout slot for storing all painted zones together."
+                )
+            elif control is self._btn_az_slot_del:
+                control.setAccessibleDescription(
+                    "Deletes the selected full-layout slot and the whole zone layout stored inside it."
+                )
+            elif control is self._btn_copy_all_zones:
+                control.setAccessibleDescription(
+                    "Saves every painted zone into the selected full-layout slot."
+                )
+            elif control is self._btn_paste_all_zones:
+                control.setAccessibleDescription(
+                    "Restores every painted zone from the selected full-layout slot back onto the canvas."
+                )
+            elif control is self._btn_az_slot_rename:
+                control.setAccessibleDescription(
+                    "Lets you change the selected full-layout slot name."
+                )
+            elif control is self._btn_az_slot_clear:
+                control.setAccessibleDescription(
+                    "Removes the stored layout from the selected full-layout slot without deleting the slot."
+                )
+            else:
+                control.setAccessibleDescription(control.toolTip())
 
         lv.addWidget(all_zones_box)
 
