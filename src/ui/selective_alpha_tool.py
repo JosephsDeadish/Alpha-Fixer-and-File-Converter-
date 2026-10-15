@@ -1777,16 +1777,16 @@ class SelectiveAlphaTool(QWidget):
         if not src_path:
             if has_shared_zones:
                 return (
-                    "Next step: open an image, then import the shared zones, save them to a Full "
-                    "Layout Slot, or copy one zone to the zone clipboard for reuse."
+                    "Next step: open an image, then import the shared zones, save them to a full-layout "
+                    "slot, or copy one zone to the zone clipboard for reuse."
                 )
             return "Next step: open an image or copy shared zones from Alpha & RGBA Adjuster to begin editing."
         if result_ready:
             return "Next step: save the current result, or keep refining the zones and save again when it looks right."
         if has_shared_zones:
             return (
-                "Next step: import the shared zones, refine any zones you need, copy one zone to "
-                "the zone clipboard if you want reuse, then save when the preview looks right."
+                "Next step: import the shared zones, refine any zones you need, copy one zone to the "
+                "zone clipboard if you want reuse, then save when the preview looks right."
             )
         return "Next step: paint or refine your zones, then save when the preview looks right."
 
@@ -1794,7 +1794,7 @@ class SelectiveAlphaTool(QWidget):
     def _shared_zone_import_instructions() -> str:
         return (
             "In Alpha & RGBA Adjuster: turn on 'Highlight Alpha Values', right-click the preview, "
-            "then choose 'Copy shared zones → Alpha Painter tool' to send the shared zones into Alpha Painter."
+            "then choose 'Copy shared zones → Alpha Painter tool' so Alpha Painter can load the shared zones here."
         )
 
     @classmethod
@@ -2506,7 +2506,7 @@ class SelectiveAlphaTool(QWidget):
         self._import_shared_status.setProperty("toolGuidance", True)
         self._import_shared_status.setAccessibleName("Shared zone import status")
         self._import_shared_status.setAccessibleDescription(
-            "Explains whether shared zones are ready to import and which follow-up action to take next."
+            "Explains whether shared zones are ready and which follow-up action to take next: import them, save them to a full-layout slot, or copy one zone to the clipboard."
         )
         iv.addWidget(self._import_shared_status)
 
@@ -2514,7 +2514,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_import_shared.setEnabled(False)
         self._btn_import_shared.setToolTip(
             "Import the shared zones from Alpha & RGBA Adjuster into the Alpha Painter canvas.\n\n"
-            "Each detected alpha value becomes its own editable zone."
+            "Each detected alpha value becomes its own editable zone on the canvas, ready to refine or save."
         )
         self._btn_import_shared.setAccessibleName("Import shared zones to canvas")
         self._btn_import_shared.setAccessibleDescription(
@@ -2570,7 +2570,7 @@ class SelectiveAlphaTool(QWidget):
         left_scroll.setObjectName("painterControlsScroll")
         left_scroll.setAccessibleName("Alpha Painter controls")
         left_scroll.setAccessibleDescription(
-            "Scroll to reach painting, zone, slot and import controls."
+            "Scroll to reach painting, zone, slot, and import controls."
         )
         left_scroll.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
         left_scroll.setMaximumWidth(360)
