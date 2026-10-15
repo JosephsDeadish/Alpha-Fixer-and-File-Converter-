@@ -9026,7 +9026,7 @@ class TestDialogAccessibility(unittest.TestCase):
         self.assertIn("Alpha Painter", settings._chk_track_sel_alpha.toolTip())
         self.assertEqual("Save Alpha Painter history", settings._chk_track_sel_alpha.accessibleName())
         self.assertIn("Alpha Painter", settings._history_max_sel_spin.toolTip())
-        self.assertTrue(any("Choose which tools and builders save history" in label.text() for label in settings.findChildren(QLabel)))
+        self.assertTrue(any("Record history for these tools and builders" in label.text() for label in settings.findChildren(QLabel)))
         self.assertTrue(any("Alpha Painter" in label.text() for label in settings.findChildren(QLabel)))
 
     def test_fit_dialog_preserves_geometry_when_already_on_screen(self):

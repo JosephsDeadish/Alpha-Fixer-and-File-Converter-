@@ -219,6 +219,7 @@ def test_history_tracking_controls_have_screen_reader_descriptions(dialog):
         assert tip in control.accessibleDescription()
     assert widget._chk_track_alpha.text() == "Alpha and RGBA Adjuster"
     assert "Alpha and RGBA Adjuster" in widget._history_max_alpha_spin.toolTip()
+    assert widget._history_max_alpha_spin.toolTip().startswith("Maximum history entries for the Alpha and RGBA Adjuster")
 
 
 def test_malformed_saved_theme_settings_emit_warning_and_fall_back(dialog, caplog):

@@ -2747,12 +2747,12 @@ class SettingsDialog(QDialog):
         hist_gl.addWidget(self._history_max_video_spin, 6, 1, Qt.AlignmentFlag.AlignLeft)
 
         # Track history checkboxes
-        track_lbl = QLabel("Choose which tools and builders save history:")
+        track_lbl = QLabel("Record history for these tools and builders:")
         track_lbl.setProperty("settingsHint", True)
         track_lbl.setWordWrap(True)
         track_lbl.setAccessibleName("History tracking options")
         track_lbl.setAccessibleDescription(
-            "Introduces the switches that decide which tools and builders save history entries."
+            "Introduces the switches that decide whether each tool and builder records history entries."
         )
         hist_gl.addWidget(track_lbl, 7, 0, 1, 2)
 
