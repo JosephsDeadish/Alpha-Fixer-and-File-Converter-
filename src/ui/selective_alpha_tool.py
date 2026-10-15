@@ -1908,7 +1908,7 @@ class SelectiveAlphaTool(QWidget):
         self._next_step_lbl.setProperty("toolGuidance", True)
         self._next_step_lbl.setAccessibleName("Alpha Painter next step")
         self._next_step_lbl.setAccessibleDescription(
-            "Short action hint that explains whether to open an image, import shared zones, or save the current result."
+            "Short action hint that explains whether to open an image, import shared zones, save the current result, or copy one zone for reuse."
         )
         wf_lay.addWidget(self._next_step_lbl)
 
@@ -2456,10 +2456,10 @@ class SelectiveAlphaTool(QWidget):
         import_box = QGroupBox("Import Shared Zones from Alpha & RGBA Adjuster")
         import_box.setAccessibleName("Alpha Painter shared zone import")
         import_box.setAccessibleDescription(
-            "Imports shared zones from Alpha & RGBA Adjuster and lets you save them or copy one zone."
+            "Imports shared zones from Alpha & RGBA Adjuster, then lets you save them, copy one zone, or edit them on the canvas."
         )
         iv = QVBoxLayout(import_box)
-        iv.setSpacing(3)
+        iv.setSpacing(4)
         iv.setContentsMargins(4, 4, 4, 4)
 
         import_note = QLabel(
