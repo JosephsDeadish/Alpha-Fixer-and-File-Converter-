@@ -178,6 +178,26 @@ def test_tooltip_settings_controls_use_clearer_labels(dialog):
     assert "unfiltered mode" in widget._tooltip_mode_combo.accessibleDescription().lower()
     assert "No Filter 🤬 is the unfiltered mode" in widget._tooltip_mode_combo.toolTip()
     assert "tooltip boxes" in widget._tooltip_style_combo.toolTip().lower()
+    assert "review the layout before you apply it" in widget._theme_preset_combo.toolTip().lower()
+    assert widget._btn_save_theme.accessibleName() == "Save theme preset"
+    assert widget._btn_delete_theme.accessibleName() == "Delete theme preset"
+    assert widget._btn_export_theme.accessibleName() == "Export theme backup"
+    assert widget._btn_import_theme.accessibleName() == "Import theme backup"
+    assert "recovery copy" in widget._btn_export_theme.toolTip().lower()
+
+
+def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
+    widget, _manager = dialog
+    tab_bar = widget.findChild(QTabBar)
+    assert tab_bar is not None
+    assert "preview updates when a valid file is chosen" in widget._custom_bg_check.toolTip().lower()
+    assert "return to a custom file" in widget._use_theme_bg_check.toolTip().lower()
+    assert "live preview" in widget._custom_bg_preview.accessibleDescription().lower()
+    assert widget._scale_preview_title.accessibleDescription() == "Heading for the UI scale live preview area."
+    assert widget._scale_preview_sample_label.accessibleName() == "UI scale preview sample label"
+    assert "preview the current ui scale" in widget._scale_preview_button.accessibleDescription().lower()
+    assert "preview the current ui scale" in widget._scale_preview_combo.accessibleDescription().lower()
+    assert "backup / recovery tools" in tab_bar.tabToolTip(0).lower()
 
 
 def test_malformed_saved_theme_settings_emit_warning_and_fall_back(dialog, caplog):

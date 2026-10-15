@@ -498,7 +498,7 @@ class SettingsDialog(QDialog):
         self._theme_search.setClearButtonEnabled(True)
         self._theme_search.setToolTip(
             "Type part of a theme name to filter the preset list below.\n"
-            "Press Enter to focus the matching result; searching never changes the active theme."
+            "Press Enter to focus the matching result; filtering never changes the active theme."
         )
         self._theme_search.setAccessibleDescription(self._theme_search.toolTip())
         self._theme_search.installEventFilter(self)
@@ -518,7 +518,7 @@ class SettingsDialog(QDialog):
         self._theme_preset_combo.setToolTip(
             "Choose an application theme.\n"
             "Locked entries stay greyed out until they are unlocked; hidden themes show unlock markers.\n"
-            "Use the live preview below to confirm the layout before applying it."
+            "Use the live preview below to review the layout before you apply it."
         )
         self._theme_preset_combo.setAccessibleDescription(self._theme_preset_combo.toolTip())
         self._rebuild_theme_combo()
@@ -527,11 +527,11 @@ class SettingsDialog(QDialog):
         self._btn_delete_theme = QPushButton("Delete Preset")
         self._btn_export_theme = QPushButton("Export Backup…")
         self._btn_import_theme = QPushButton("Import Backup…")
-        self._btn_save_theme.setAccessibleName("Save preset")
+        self._btn_save_theme.setAccessibleName("Save theme preset")
         self._btn_save_theme.setAccessibleDescription(
-            "Saves the current appearance settings as a custom theme preset."
+            "Saves the current appearance settings as a custom theme preset for later reuse."
         )
-        self._btn_delete_theme.setAccessibleName("Delete preset")
+        self._btn_delete_theme.setAccessibleName("Delete theme preset")
         self._btn_delete_theme.setAccessibleDescription(
             "Deletes the selected custom theme preset if it is not built in."
         )
@@ -541,17 +541,17 @@ class SettingsDialog(QDialog):
         self._btn_import_theme.setMinimumWidth(110)
         self._btn_export_theme.setToolTip(
             "Export the current theme settings to a JSON backup file.\n"
-            "Use this to keep a recovery copy, restore it later, or move the theme to another install."
+            "Use this as a recovery copy, or move the theme to another install."
         )
         self._btn_import_theme.setToolTip(
             "Import a theme from a JSON backup file and apply it immediately.\n"
             "Use this to restore a saved look or bring a backup in from another install."
         )
-        self._btn_export_theme.setAccessibleName("Export backup")
+        self._btn_export_theme.setAccessibleName("Export theme backup")
         self._btn_export_theme.setAccessibleDescription(
             "Exports the current theme settings to a JSON backup file for safekeeping, recovery, or transfer."
         )
-        self._btn_import_theme.setAccessibleName("Import backup")
+        self._btn_import_theme.setAccessibleName("Import theme backup")
         self._btn_import_theme.setAccessibleDescription(
             "Imports a JSON theme backup and applies it immediately so you can recover a saved look or transfer a preset from another install."
         )
@@ -575,7 +575,7 @@ class SettingsDialog(QDialog):
             "When enabled the application window background uses a custom image,\n"
             "animated GIF, or video file instead of the solid theme colour.\n"
             "Supported: the app's image formats plus the video formats supported by Video Builder.\n"
-            "You can also drag a local file into the path field below."
+            "Drag a file into the path field below or browse for one; the preview updates when a valid file is chosen."
         )
         self._custom_bg_check.setAccessibleName("Enable custom background media")
         self._custom_bg_check.setAccessibleDescription(
@@ -591,9 +591,8 @@ class SettingsDialog(QDialog):
             "Follow active theme background instead of a custom file"
         )
         self._use_theme_bg_check.setToolTip(
-            "When enabled the active theme's built-in background is used,\n"
-            "overriding any custom file selection below.\n"
-            "Uncheck to force a custom file or a plain solid colour."
+            "Use the active theme's built-in background instead of any custom file below.\n"
+            "Uncheck it to return to a custom file or the plain solid colour."
         )
         self._use_theme_bg_check.setAccessibleName("Use theme background instead of custom file")
         self._use_theme_bg_check.setAccessibleDescription(
@@ -2434,9 +2433,13 @@ class SettingsDialog(QDialog):
         self._scale_preview_title = QLabel("Live preview")
         self._scale_preview_title.setWordWrap(True)
         self._scale_preview_title.setAccessibleName("Live preview heading")
+        self._scale_preview_title.setAccessibleDescription(
+            "Heading for the UI scale live preview area."
+        )
         scale_preview_layout.addWidget(self._scale_preview_title)
         self._scale_preview_sample_label = QLabel("Sample label follows the current UI scale.")
         self._scale_preview_sample_label.setWordWrap(True)
+        self._scale_preview_sample_label.setAccessibleName("UI scale preview sample label")
         self._scale_preview_sample_label.setAccessibleDescription(
             "Sample text that changes with the current UI scale settings."
         )
@@ -2446,10 +2449,16 @@ class SettingsDialog(QDialog):
         sample_row.setSpacing(6)
         self._scale_preview_button = QPushButton("Sample button")
         self._scale_preview_button.setAccessibleName("Scale preview sample button")
+        self._scale_preview_button.setAccessibleDescription(
+            "Sample button used to preview the current UI scale."
+        )
         self._scale_preview_combo = QComboBox()
         self._scale_preview_combo.addItems(["Sample A", "Sample B", "Sample C"])
         self._scale_preview_combo.setMaximumWidth(160)
         self._scale_preview_combo.setAccessibleName("Scale preview sample combo box")
+        self._scale_preview_combo.setAccessibleDescription(
+            "Sample combo box used to preview the current UI scale."
+        )
         sample_row.addWidget(self._scale_preview_button)
         sample_row.addWidget(self._scale_preview_combo, 1)
         scale_preview_layout.addLayout(sample_row)
@@ -2621,15 +2630,15 @@ class SettingsDialog(QDialog):
         self._history_max_spin.setSuffix("  entries")
         self._history_max_spin.setMaximumWidth(130)
         self._history_max_spin.setToolTip(
-            "Default maximum number of history entries kept per tool.\n"
-            "Overridden by per-tool limits below when those are non-zero.\n"
+            "Default maximum number of history entries kept per tool or builder.\n"
+            "Non-zero per-tool limits below override this value.\n"
             "Oldest entries are automatically removed when the limit is reached.\n"
             "Default: 50.  Maximum: 5000."
         )
         hist_gl.addWidget(self._history_max_spin, 0, 1, Qt.AlignmentFlag.AlignLeft)
 
         # Per-tool max entries
-        per_lbl = QLabel("Per-tool / per-builder limits (0 = use default above):")
+        per_lbl = QLabel("Per-tool / per-builder limits (0 uses the default above):")
         per_lbl.setProperty("settingsHint", True)
         per_lbl.setWordWrap(True)
         hist_gl.addWidget(per_lbl, 1, 0, 1, 2)
@@ -2642,7 +2651,7 @@ class SettingsDialog(QDialog):
         self._history_max_conv_spin.setSuffix("  entries")
         self._history_max_conv_spin.setMaximumWidth(130)
         self._history_max_conv_spin.setToolTip(
-            "Max history entries for the File Converter (0 = use default above)."
+            "Maximum history entries for the File Converter (0 uses the default above)."
         )
         hist_gl.addWidget(self._history_max_conv_spin, 2, 1, Qt.AlignmentFlag.AlignLeft)
 
@@ -2654,7 +2663,7 @@ class SettingsDialog(QDialog):
         self._history_max_alpha_spin.setSuffix("  entries")
         self._history_max_alpha_spin.setMaximumWidth(130)
         self._history_max_alpha_spin.setToolTip(
-            "Max history entries for the Alpha & RGBA Adjuster (0 = use default above)."
+            "Maximum history entries for the Alpha & RGBA Adjuster (0 uses the default above)."
         )
         hist_gl.addWidget(self._history_max_alpha_spin, 3, 1, Qt.AlignmentFlag.AlignLeft)
 
@@ -2666,7 +2675,7 @@ class SettingsDialog(QDialog):
         self._history_max_sel_spin.setSuffix("  entries")
         self._history_max_sel_spin.setMaximumWidth(130)
         self._history_max_sel_spin.setToolTip(
-            "Max history entries for Alpha Painter (0 = use default above)."
+            "Maximum history entries for Alpha Painter (0 uses the default above)."
         )
         hist_gl.addWidget(self._history_max_sel_spin, 4, 1, Qt.AlignmentFlag.AlignLeft)
 
@@ -2678,7 +2687,7 @@ class SettingsDialog(QDialog):
         self._history_max_gif_spin.setSuffix("  entries")
         self._history_max_gif_spin.setMaximumWidth(130)
         self._history_max_gif_spin.setToolTip(
-            "Max history entries for the GIF Builder (0 = use default above)."
+            "Maximum history entries for the GIF Builder (0 uses the default above)."
         )
         hist_gl.addWidget(self._history_max_gif_spin, 5, 1, Qt.AlignmentFlag.AlignLeft)
 
@@ -2690,7 +2699,7 @@ class SettingsDialog(QDialog):
         self._history_max_video_spin.setSuffix("  entries")
         self._history_max_video_spin.setMaximumWidth(130)
         self._history_max_video_spin.setToolTip(
-            "Max history entries for the Video Builder (0 = use default above)."
+            "Maximum history entries for the Video Builder (0 uses the default above)."
         )
         hist_gl.addWidget(self._history_max_video_spin, 6, 1, Qt.AlignmentFlag.AlignLeft)
 
@@ -2782,10 +2791,10 @@ class SettingsDialog(QDialog):
         effects_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         effects_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         tabs.addTab(effects_scroll, "✨ Effects")
-        tabs.setTabToolTip(0, "Theme presets, palette editing, custom background, and backup recovery.")
-        tabs.setTabToolTip(1, "Layout, scaling, tooltips, and history preferences with live preview.")
-        tabs.setTabToolTip(2, "Sound enablement, theme sound profiles, and event volumes.")
-        tabs.setTabToolTip(3, "Optional click, background, mouse, cursor, and button effects.")
+        tabs.setTabToolTip(0, "Theme presets, palette editing, custom backgrounds, and backup / recovery tools.")
+        tabs.setTabToolTip(1, "Layout, scaling, tooltip wording, and history controls with live preview.")
+        tabs.setTabToolTip(2, "Sound toggles, profiles, and event volumes.")
+        tabs.setTabToolTip(3, "Optional click, background, cursor, and button effects.")
 
         for grid, rows in ((misc_gl, (0, 1, 2)), (scale_gl, (0, 2, 3, 4, 5)),
                            (hist_gl, (0, 2, 3, 4, 5, 6))):
