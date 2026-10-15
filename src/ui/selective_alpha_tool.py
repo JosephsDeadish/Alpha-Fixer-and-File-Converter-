@@ -1643,7 +1643,7 @@ class _ZoneRow(QWidget):
         self._copy_btn = QPushButton("📋  Copy Zone")
         self._copy_btn.setMinimumHeight(24)
         self._copy_btn.setToolTip(
-            f"Copy the painted zone for {color_name} to the zone clipboard.\n"
+            f"Copy the painted zone for {color_name} into the zone clipboard.\n"
             "Use 'Paste Zone' on any zone to apply this copy."
         )
         self._copy_btn.setAccessibleName(f"Copy {color_name} zone")
@@ -1655,7 +1655,7 @@ class _ZoneRow(QWidget):
         self._paste_btn.setMinimumHeight(24)
         self._paste_btn.setEnabled(False)
         self._paste_btn.setToolTip(
-            f"Paste the copied zone onto {color_name}, replacing its current paint."
+            f"Paste the copied zone into {color_name}, replacing its current paint."
         )
         self._paste_btn.setAccessibleName(f"Paste zone into {color_name}")
         self._paste_btn.setAccessibleDescription(self._paste_btn.toolTip())
@@ -2443,7 +2443,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_import_shared.setEnabled(False)
         self._btn_import_shared.setToolTip(
             "Load the shared zones from Alpha & RGBA Adjuster onto the Alpha Painter canvas.\n\n"
-            "Each detected alpha value becomes its own editable zone, so you can send the shared zones here."
+            "Each detected alpha value becomes its own editable zone."
         )
         self._btn_import_shared.setAccessibleName("Import shared zones to canvas")
         self._btn_import_shared.setAccessibleDescription(self._btn_import_shared.toolTip())

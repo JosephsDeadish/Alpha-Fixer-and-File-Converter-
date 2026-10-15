@@ -2456,7 +2456,7 @@ _NORMAL: dict[str, list[str]] = {
         "Use to preview the image under a zone without deleting the zone. Very handy.",
     ],
     "sa_zone_copy_mask": [
-        "Copy this zone's painted area to the internal clipboard.",
+        "Copy this zone's painted area to the zone clipboard.",
         "After copying, Paste Zone becomes available on all zones.",
         "The copied zone stores the exact pixel pattern painted in this zone.",
         "Use to duplicate a zone from one zone to another in one step.",
@@ -4603,7 +4603,7 @@ _DUMBED: dict[str, list[str]] = {
         "Use to preview the image under a zone without deleting the zone. Very handy.",
     ],
     "sa_zone_copy_mask": [
-        "Copies this zone's painted shape into a clipboard. Like Ctrl+C but for paint zones.",
+        "Copies this zone's painted shape into the zone clipboard. Like Ctrl+C but for paint zones.",
         "After copying, every zone's Paste button becomes available.",
         "Copy once, paste anywhere. Efficient.",
         "One clipboard. If you copy again you lose the first copy.",
@@ -6821,7 +6821,7 @@ _VULGAR: dict[str, list[str]] = {
         "Toggle visibility per-zone. See exactly how each zone sits against the source image without the blob in the way.",
     ],
     "sa_zone_copy_mask": [
-        "Copies this zone's area to the clipboard. One zone's painted area, now duplicatable.",
+        "Copies this zone's area to the zone clipboard. One zone's painted area, now duplicatable.",
         "Enables Paste Zone on every other zone after copying.",
         "One clipboard slot. Copy again and you lose the previous copy. Pay attention.",
         "Use this to apply the same painted pattern to multiple zones without repainting.",

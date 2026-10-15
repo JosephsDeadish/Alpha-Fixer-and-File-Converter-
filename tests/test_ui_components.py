@@ -3611,6 +3611,7 @@ class TestTooltipManager(unittest.TestCase):
                 with self.subTest(key=key, mode=mode):
                     text = " ".join(mode[key]).lower()
                     self.assertIn("zone", text)
+                    self.assertIn("clipboard", text)
                     self.assertNotIn("copy mask", text)
                     self.assertNotIn("paste mask", text)
 
@@ -8157,7 +8158,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
     def test_selective_alpha_shared_zone_status_points_to_import_actions(self):
         self.assertIn("No shared zones ready yet", self._widget._import_shared_status.text())
         self.assertIn("right-click the preview", self._widget._import_shared_status.text())
-        self.assertIn("send the shared zones here", self._widget._btn_import_shared.toolTip())
+        self.assertIn("Load the shared zones", self._widget._btn_import_shared.toolTip())
         self.assertIn("Alpha & RGBA Adjuster", self._widget._btn_import_shared.toolTip())
         self.assertIn("Select the zone to edit", self._widget._active_zone_combo.toolTip())
         self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=np.uint8))])
@@ -8165,6 +8166,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Next: open an image, import the shared zones", self._widget._import_shared_status.text())
         self.assertIn("Import Shared Zones to Canvas", self._widget._btn_import_shared.text())
         self.assertIn("Import shared zones", self._widget._btn_import_shared.accessibleName())
+        self.assertIn("Load the shared zones", self._widget._btn_import_shared.toolTip())
 
         self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=bool))])
         text = self._widget._import_shared_status.text()
@@ -8173,6 +8175,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Import Shared Zones to Canvas", self._widget._btn_import_shared.text())
         self.assertIn("Copy One Zone", self._widget._btn_import_zone_to_clipboard.text())
         self.assertIn("Copy one shared zone", self._widget._btn_import_zone_to_clipboard.accessibleName())
+        self.assertIn("zone clipboard", self._widget._btn_import_zone_to_clipboard.toolTip())
         self.assertTrue(self._widget._btn_import_shared.isEnabled())
         self.assertTrue(self._widget._btn_import_to_az_slot.isEnabled())
         self.assertTrue(self._widget._btn_import_zone_to_clipboard.isEnabled())
