@@ -8169,12 +8169,16 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("paste all zones onto the current image", self._widget._az_slot_info_lbl.text())
 
     def test_selective_alpha_shared_zone_status_points_to_import_actions(self):
-        from PyQt6.QtWidgets import QLabel
+        from PyQt6.QtWidgets import QLabel, QGroupBox
         from src.ui.selective_alpha_tool import SelectiveAlphaTool
 
         import_note = next(
             label for label in self._widget.findChildren(QLabel)
             if label.accessibleName() == "Shared zone import guidance"
+        )
+        import_box = next(
+            box for box in self._widget.findChildren(QGroupBox)
+            if box.accessibleName() == "Alpha Painter shared zone import"
         )
         self.assertIn("No shared zones ready yet", self._widget._import_shared_status.text())
         self.assertIn("right-click the preview", self._widget._import_shared_status.text())
@@ -8182,6 +8186,8 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("zone clipboard", import_note.accessibleDescription().lower())
         self.assertIn("clipboard", import_note.text().lower())
         self.assertIn("full-layout slot", import_note.accessibleDescription())
+        self.assertEqual("Alpha Painter shared zone import", import_box.accessibleName())
+        self.assertIn("save them or copy one zone", import_box.accessibleDescription().lower())
         self.assertIn("Import the shared zones", self._widget._btn_import_shared.toolTip())
         self.assertIn("Alpha & RGBA Adjuster", self._widget._btn_import_shared.toolTip())
         self.assertIn("Select the zone to edit", self._widget._active_zone_combo.toolTip())

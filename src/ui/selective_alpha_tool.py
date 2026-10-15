@@ -1880,6 +1880,10 @@ class SelectiveAlphaTool(QWidget):
         # All primary actions are grouped here at the top so the workflow
         # is immediately obvious.
         wf_box = QGroupBox("Workflow: Open → Paint → Save")
+        wf_box.setAccessibleName("Alpha Painter workflow")
+        wf_box.setAccessibleDescription(
+            "Groups the open, paint, and save steps so the main workflow is easy to scan."
+        )
         wf_lay = QVBoxLayout(wf_box)
         wf_lay.setSpacing(3)
 
@@ -1957,6 +1961,10 @@ class SelectiveAlphaTool(QWidget):
 
         # ── Drawing tools ─────────────────────────────────────────────────
         tools_box = QGroupBox("Drawing Tools")
+        tools_box.setAccessibleName("Alpha Painter drawing tools")
+        tools_box.setAccessibleDescription(
+            "Contains the brush, line, shape, fill, erase, and move tools used to edit alpha zones."
+        )
         tg = QGridLayout(tools_box)
         tg.setSpacing(4)
 
@@ -2002,6 +2010,10 @@ class SelectiveAlphaTool(QWidget):
 
         # Tool sizes + Auto-correct grouped together
         size_box = QGroupBox("Tool Size")
+        size_box.setAccessibleName("Alpha Painter tool size settings")
+        size_box.setAccessibleDescription(
+            "Contains brush size and auto-correct controls for the active drawing tool."
+        )
         sg = QGridLayout(size_box)
         sg.setSpacing(4)
         brush_label = QLabel("Brush (px):")
@@ -2050,6 +2062,10 @@ class SelectiveAlphaTool(QWidget):
 
         # Zone rows
         zones_box = QGroupBox("Alpha Zones")
+        zones_box.setAccessibleName("Alpha Painter alpha zones")
+        zones_box.setAccessibleDescription(
+            "Contains the active zone selector, zone visibility controls, and per-zone settings."
+        )
         zv = QVBoxLayout(zones_box)
         zv.setSpacing(2)
 
@@ -2193,6 +2209,10 @@ class SelectiveAlphaTool(QWidget):
         self._mask_slot_names: list[str] = [""] * _MASK_SLOT_INIT
 
         slots_box = QGroupBox("Single-Zone Slots")
+        slots_box.setAccessibleName("Alpha Painter single-zone slots")
+        slots_box.setAccessibleDescription(
+            "Stores reusable copies of one painted zone at a time for later paste operations."
+        )
         sv = QVBoxLayout(slots_box)
         sv.setSpacing(4)
         sv.setContentsMargins(4, 4, 4, 4)
@@ -2302,6 +2322,10 @@ class SelectiveAlphaTool(QWidget):
 
         # ── Copy / Paste all zones ──────────────────────────────────────────
         all_zones_box = QGroupBox("📋 Full Layout Slots")
+        all_zones_box.setAccessibleName("Alpha Painter full-layout slots")
+        all_zones_box.setAccessibleDescription(
+            "Stores complete zone layouts so every painted zone can be copied and restored together."
+        )
         azv = QVBoxLayout(all_zones_box)
         azv.setSpacing(4)
         azv.setContentsMargins(4, 4, 4, 4)
@@ -2430,6 +2454,10 @@ class SelectiveAlphaTool(QWidget):
         # the zone data is deposited here so the user can import it into the
         # painting canvas with a single button click.
         import_box = QGroupBox("Import Shared Zones from Alpha & RGBA Adjuster")
+        import_box.setAccessibleName("Alpha Painter shared zone import")
+        import_box.setAccessibleDescription(
+            "Imports shared zones from Alpha & RGBA Adjuster and lets you save them or copy one zone."
+        )
         iv = QVBoxLayout(import_box)
         iv.setSpacing(3)
         iv.setContentsMargins(4, 4, 4, 4)
@@ -2480,7 +2508,9 @@ class SelectiveAlphaTool(QWidget):
             "Use this when you want to reuse the whole zone layout on another image later."
         )
         self._btn_import_to_az_slot.setAccessibleName("Save shared zones to full layout slot")
-        self._btn_import_to_az_slot.setAccessibleDescription(self._btn_import_to_az_slot.toolTip())
+        self._btn_import_to_az_slot.setAccessibleDescription(
+            "Saves every shared zone into the selected full-layout slot so the layout can be reused later."
+        )
         self._btn_import_to_az_slot.clicked.connect(self._on_import_to_az_slot)
         iv.addWidget(self._btn_import_to_az_slot)
 
