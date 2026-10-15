@@ -102,7 +102,7 @@ def test_five_real_history_views_at_retention_limits(history, app, tmp_path, cou
         assert len(visible(tree)) == 1
         search.setText("file:never-present")
         assert visible(tree) == []
-        assert f"0/{count} shown" in history.get_status_bar_text()
+        assert f"showing 0/{count} rows" in history.get_status_bar_text()
         search.clear()
         assert len(visible(tree)) == count
         assert all(item.icon(0).isNull() for item in visible(tree))

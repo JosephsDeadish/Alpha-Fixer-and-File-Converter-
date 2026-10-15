@@ -943,13 +943,13 @@ class HistoryTab(QWidget):
         visible = sum(1 for row in range(total) if not tree.topLevelItem(row).isHidden())
         parts = [label]
         parts.append(
-            f"{visible}/{total} shown"
+            f"showing {visible}/{total} rows"
             if total and visible != total
-            else (f"{total} item{'s' if total != 1 else ''}" if total else "no entries yet")
+            else (f"{total} row{'s' if total != 1 else ''}" if total else "no entries yet")
         )
         filter_text = search.text().strip()
         if filter_text:
-            parts.append(f"filter {filter_text}")
+            parts.append(f"filter: {filter_text}")
         summary_text = summary_lbl.text().strip()
         if summary_text:
             parts.append(summary_text)
