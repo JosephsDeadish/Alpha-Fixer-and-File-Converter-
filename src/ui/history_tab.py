@@ -25,7 +25,7 @@ _THUMB_SIZE = 32  # thumbnail icon size (pixels, square)
 
 def _history_capability_summary() -> str:
     return (
-        "Ready: browse, filter, preview, and export history reports for Converter, Alpha & RGBA Adjuster, Alpha Painter, GIF Builder, and Video Builder."
+        "Ready: browse, filter, preview, and export history reports for Converter, Alpha and RGBA Adjuster, Alpha Painter, GIF Builder, and Video Builder."
     )
 
 
@@ -551,7 +551,7 @@ class HistoryTab(QWidget):
         self._action_update_timer.setSingleShot(True)
         self._action_update_timer.timeout.connect(self._update_action_layout)
 
-        # Sub-tabs: Converter | Alpha & RGBA Adjuster | Selective Alpha
+        # Sub-tabs: Converter | Alpha and RGBA Adjuster | Selective Alpha
         self._sub_tabs = QTabWidget()
         self._sub_tabs.setDocumentMode(True)
         self._sub_tabs.setUsesScrollButtons(True)
@@ -584,7 +584,7 @@ class HistoryTab(QWidget):
         self._sub_tabs.addTab(conv_widget, "🔄 Converter")
         self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(conv_widget), "Converter history")
 
-        # --- Alpha & RGBA Adjuster sub-tab ---
+        # --- Alpha and RGBA Adjuster sub-tab ---
         alpha_widget = QWidget()
         alpha_layout = QVBoxLayout(alpha_widget)
         alpha_layout.setContentsMargins(0, 4, 0, 0)
@@ -607,8 +607,8 @@ class HistoryTab(QWidget):
         self._alpha_summary.setObjectName("subheader")
         self._alpha_summary.setWordWrap(True)
         alpha_layout.addWidget(self._alpha_summary)
-        self._sub_tabs.addTab(alpha_widget, "🖼  Alpha & RGBA")
-        self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(alpha_widget), "Alpha & RGBA Adjuster history")
+        self._sub_tabs.addTab(alpha_widget, "🖼  Alpha and RGBA")
+        self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(alpha_widget), "Alpha and RGBA Adjuster history")
 
         # --- Selective Alpha sub-tab ---
         sel_widget = QWidget()
@@ -812,7 +812,7 @@ class HistoryTab(QWidget):
         """Return a styled search QLineEdit for a history sub-tab."""
         field = QLineEdit()
         field.setObjectName(f"history_search_{name}")
-        titles = {"converter": "Converter", "alpha": "Alpha & RGBA Adjuster",
+        titles = {"converter": "Converter", "alpha": "Alpha and RGBA Adjuster",
                   "selective": "Alpha Painter", "gif": "GIF Builder", "video": "Video Builder"}
         field.setAccessibleName(f"Filter {titles.get(name, name)} history")
         field.setAccessibleDescription(
@@ -902,7 +902,7 @@ class HistoryTab(QWidget):
         # Decorate the sub-tab labels with the theme icon.
         icon = get_theme_icon(theme_name)
         self._sub_tabs.setTabText(0, f"{icon}🔄 Converter")
-        self._sub_tabs.setTabText(1, f"{icon}🖼 Alpha & RGBA Adjuster")
+        self._sub_tabs.setTabText(1, f"{icon}🖼 Alpha and RGBA Adjuster")
         self._sub_tabs.setTabText(2, f"{icon}🎭 Alpha Painter")
         self._sub_tabs.setTabText(3, f"{icon}🎞 GIF Builder")
         self._sub_tabs.setTabText(4, f"{icon}🎬 Video Builder")
@@ -1077,7 +1077,7 @@ class HistoryTab(QWidget):
         self._alpha_summary.setText(
             f"{total} session{'s' if total != 1 else ''} recorded"
             + ("  (most recent first)" if total > 0 else
-               " — run the Alpha & RGBA Adjuster to see history here.")
+               " — run the Alpha and RGBA Adjuster to see history here.")
         )
 
     def _refresh_selective_alpha(self):

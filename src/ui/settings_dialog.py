@@ -2698,7 +2698,7 @@ class SettingsDialog(QDialog):
         )
         hist_gl.addWidget(self._history_max_conv_spin, 2, 1, Qt.AlignmentFlag.AlignLeft)
 
-        hist_gl.addWidget(QLabel("  Alpha & RGBA Adjuster:"), 3, 0)
+        hist_gl.addWidget(QLabel("  Alpha and RGBA Adjuster:"), 3, 0)
         self._history_max_alpha_spin = QSpinBox()
         self._history_max_alpha_spin.setRange(0, 5000)
         self._history_max_alpha_spin.setSpecialValueText("default")
@@ -2706,7 +2706,7 @@ class SettingsDialog(QDialog):
         self._history_max_alpha_spin.setSuffix("  entries")
         self._history_max_alpha_spin.setMaximumWidth(130)
         self._history_max_alpha_spin.setToolTip(
-            "Maximum history entries for the Alpha & RGBA Adjuster (0 keeps the default above)."
+            "Maximum history entries for the Alpha and RGBA Adjuster (0 keeps the default above)."
         )
         hist_gl.addWidget(self._history_max_alpha_spin, 3, 1, Qt.AlignmentFlag.AlignLeft)
 
@@ -2747,7 +2747,7 @@ class SettingsDialog(QDialog):
         hist_gl.addWidget(self._history_max_video_spin, 6, 1, Qt.AlignmentFlag.AlignLeft)
 
         # Track history checkboxes
-        track_lbl = QLabel("Save history for these tools and builders:")
+        track_lbl = QLabel("Choose which tools and builders save history:")
         track_lbl.setProperty("settingsHint", True)
         track_lbl.setWordWrap(True)
         track_lbl.setAccessibleName("History tracking options")
@@ -2767,10 +2767,10 @@ class SettingsDialog(QDialog):
         )
         hist_gl.addWidget(self._chk_track_converter, 8, 0)
 
-        self._chk_track_alpha = QCheckBox("Alpha & RGBA Adjuster")
+        self._chk_track_alpha = QCheckBox("Alpha and RGBA Adjuster")
         self._chk_track_alpha.setChecked(True)
         self._chk_track_alpha.setToolTip(
-            "Save Alpha & RGBA Adjuster batches to history when enabled."
+            "Save Alpha and RGBA Adjuster batches to history when enabled."
         )
         self._chk_track_alpha.setAccessibleName("Save Alpha and RGBA Adjuster history")
         self._chk_track_alpha.setAccessibleDescription(self._chk_track_alpha.toolTip())

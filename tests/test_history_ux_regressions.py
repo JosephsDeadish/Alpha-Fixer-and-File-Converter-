@@ -124,6 +124,12 @@ def test_gif_column_help_matches_optimize_and_loop_fields(history):
     assert "Loop count" in header.toolTip(6)
 
 
+def test_alpha_history_search_copy_uses_consistent_wording(history):
+    assert history._alpha_search.accessibleName() == "Filter Alpha and RGBA Adjuster history"
+    assert "Alpha and RGBA Adjuster" in history._sub_tabs.tabToolTip(1)
+    assert "Alpha and RGBA Adjuster" in history._capability_lbl.toolTip()
+
+
 def test_animation_only_runs_while_history_tree_is_visible(app, tmp_path):
     path = tmp_path / "animation.gif"
     images = [Image.new("RGB", (12, 8), color) for color in ("red", "blue")]

@@ -7805,7 +7805,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("report formats", tab._capability_lbl.toolTip().lower())
             self.assertTrue(tab._sub_tabs.usesScrollButtons())
             self.assertFalse(tab._sub_tabs.tabBar().expanding())
-            self.assertEqual(tab._sub_tabs.tabBar().tabToolTip(1), "Alpha & RGBA Adjuster history")
+            self.assertEqual(tab._sub_tabs.tabBar().tabToolTip(1), "Alpha and RGBA Adjuster history")
             self.assertIn("field expressions", tab._vid_search.accessibleDescription().lower())
             self.assertIn("csv, json, html, or text", tab._btn_export.accessibleDescription().lower())
             tab._sub_tabs.setCurrentIndex(4)
@@ -9026,7 +9026,7 @@ class TestDialogAccessibility(unittest.TestCase):
         self.assertIn("Alpha Painter", settings._chk_track_sel_alpha.toolTip())
         self.assertEqual("Save Alpha Painter history", settings._chk_track_sel_alpha.accessibleName())
         self.assertIn("Alpha Painter", settings._history_max_sel_spin.toolTip())
-        self.assertTrue(any("Save history for these tools and builders" in label.text() for label in settings.findChildren(QLabel)))
+        self.assertTrue(any("Choose which tools and builders save history" in label.text() for label in settings.findChildren(QLabel)))
         self.assertTrue(any("Alpha Painter" in label.text() for label in settings.findChildren(QLabel)))
 
     def test_fit_dialog_preserves_geometry_when_already_on_screen(self):

@@ -209,7 +209,7 @@ def test_history_tracking_controls_have_screen_reader_descriptions(dialog):
     widget, _manager = dialog
     controls = [
         (widget._chk_track_converter, "Save Converter history", "Save File Converter batches to history when enabled."),
-        (widget._chk_track_alpha, "Save Alpha and RGBA Adjuster history", "Save Alpha & RGBA Adjuster batches to history when enabled."),
+        (widget._chk_track_alpha, "Save Alpha and RGBA Adjuster history", "Save Alpha and RGBA Adjuster batches to history when enabled."),
         (widget._chk_track_sel_alpha, "Save Alpha Painter history", "Save Alpha Painter runs to history when enabled."),
         (widget._chk_track_gif, "Save GIF Builder history", "Save GIF Builder exports to history when enabled."),
         (widget._chk_track_video, "Save Video Builder history", "Save Video Builder exports to history when enabled."),
@@ -217,6 +217,8 @@ def test_history_tracking_controls_have_screen_reader_descriptions(dialog):
     for control, name, tip in controls:
         assert control.accessibleName() == name
         assert tip in control.accessibleDescription()
+    assert widget._chk_track_alpha.text() == "Alpha and RGBA Adjuster"
+    assert "Alpha and RGBA Adjuster" in widget._history_max_alpha_spin.toolTip()
 
 
 def test_malformed_saved_theme_settings_emit_warning_and_fall_back(dialog, caplog):
