@@ -2094,7 +2094,7 @@ class SelectiveAlphaTool(QWidget):
         )
         self._active_zone_combo.setAccessibleName("Active zone selector")
         self._active_zone_combo.setAccessibleDescription(
-            "Selects which zone the painting tools will edit."
+            "Selects which zone the painting tools will edit. Brush, erase, and transform tools all follow this choice."
         )
         self._active_zone_combo.currentIndexChanged.connect(
             lambda idx: self._on_zone_action(idx)
@@ -2129,7 +2129,7 @@ class SelectiveAlphaTool(QWidget):
         self._ze_swatch_btn.setToolTip("Click to choose a colour for this zone")
         self._ze_swatch_btn.setAccessibleName("Choose active zone overlay color")
         self._ze_swatch_btn.setAccessibleDescription(
-            "Opens a colour picker for the active zone overlay."
+            "Opens a colour picker for the active zone overlay so you can change that zone's colour."
         )
         ze_row1.addWidget(self._ze_swatch_btn)
         self._ze_name_edit = QLineEdit(ZONE_NAMES[0])
@@ -2444,7 +2444,7 @@ class SelectiveAlphaTool(QWidget):
         import_note.setToolTip(self._shared_zone_import_instructions())
         import_note.setAccessibleName("Shared zone import guidance")
         import_note.setAccessibleDescription(
-            "Explains how to import shared zones, save them to a full-layout slot, or copy one zone to the clipboard."
+            "Explains how to import shared zones, save them to a full-layout slot, or copy one zone to the zone clipboard."
         )
         iv.addWidget(import_note)
 
@@ -2467,7 +2467,7 @@ class SelectiveAlphaTool(QWidget):
         )
         self._btn_import_shared.setAccessibleName("Import shared zones to canvas")
         self._btn_import_shared.setAccessibleDescription(
-            "Imports shared zones from Alpha & RGBA Adjuster into the Alpha Painter canvas."
+            "Imports shared zones from Alpha & RGBA Adjuster into the Alpha Painter canvas and turns them into editable zones."
         )
         self._btn_import_shared.clicked.connect(self._on_import_shared_zones)
         iv.addWidget(self._btn_import_shared)

@@ -8172,6 +8172,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("No shared zones ready yet", self._widget._import_shared_status.text())
         self.assertIn("right-click the preview", self._widget._import_shared_status.text())
         self.assertEqual("Shared zone import guidance", import_note.accessibleName())
+        self.assertIn("zone clipboard", import_note.accessibleDescription().lower())
         self.assertIn("clipboard", import_note.text().lower())
         self.assertIn("full-layout slot", import_note.accessibleDescription())
         self.assertIn("Load the shared zones", self._widget._btn_import_shared.toolTip())
@@ -8185,6 +8186,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Import Shared Zones to Canvas", self._widget._btn_import_shared.text())
         self.assertIn("Import shared zones", self._widget._btn_import_shared.accessibleName())
         self.assertIn("Load the shared zones", self._widget._btn_import_shared.toolTip())
+        self.assertIn("editable zones", self._widget._btn_import_shared.accessibleDescription().lower())
 
         self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=bool))])
         text = self._widget._import_shared_status.text()
