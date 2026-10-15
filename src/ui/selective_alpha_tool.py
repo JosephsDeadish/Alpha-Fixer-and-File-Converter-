@@ -2184,7 +2184,9 @@ class SelectiveAlphaTool(QWidget):
         ze_row3 = QHBoxLayout()
         ze_row3.setSpacing(4)
         self._ze_copy_btn = QPushButton("📋  Copy Zone to Clipboard")
+        self._ze_copy_btn.setAccessibleName("Copy active zone to clipboard")
         self._ze_paste_btn = QPushButton("📌  Paste Zone from Clipboard")
+        self._ze_paste_btn.setAccessibleName("Paste active zone from clipboard")
         self._ze_copy_btn.setAccessibleDescription(
             "Copies the active zone so it can be pasted into another slot or image."
         )

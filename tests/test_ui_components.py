@@ -8146,6 +8146,8 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Brush, erase, and move tools", self._widget._active_zone_combo.accessibleDescription())
         self.assertIn("renames the active zone", self._widget._ze_name_edit.accessibleDescription().lower())
         self.assertIn("opens a colour picker", self._widget._ze_swatch_btn.accessibleDescription().lower())
+        self.assertIn("Copy active zone", self._widget._ze_copy_btn.accessibleName())
+        self.assertIn("Paste active zone", self._widget._ze_paste_btn.accessibleName())
         self.assertIn("Tool: Brush", self._widget._status_lbl.text())
 
     def test_selective_alpha_slot_labels_explain_next_actions(self):
