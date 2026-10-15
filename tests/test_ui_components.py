@@ -8164,6 +8164,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         )
         self.assertIn("No shared zones ready yet", self._widget._import_shared_status.text())
         self.assertIn("right-click the preview", self._widget._import_shared_status.text())
+        self.assertEqual("Shared zone import guidance", import_note.accessibleName())
         self.assertIn("clipboard", import_note.text().lower())
         self.assertIn("Load the shared zones", self._widget._btn_import_shared.toolTip())
         self.assertIn("Alpha & RGBA Adjuster", self._widget._btn_import_shared.toolTip())
