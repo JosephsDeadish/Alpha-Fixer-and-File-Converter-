@@ -517,7 +517,8 @@ class SettingsDialog(QDialog):
         self._theme_preset_combo.setMinimumWidth(200)
         self._theme_preset_combo.setToolTip(
             "Choose an application theme.\n"
-            "Hover over each preset to preview its style, watch for unlock markers on hidden themes, and use the live preview below to confirm the layout before applying it."
+            "Locked entries stay greyed out until they are unlocked; hidden themes show unlock markers.\n"
+            "Use the live preview below to confirm the layout before applying it."
         )
         self._theme_preset_combo.setAccessibleDescription(self._theme_preset_combo.toolTip())
         self._rebuild_theme_combo()
@@ -576,7 +577,10 @@ class SettingsDialog(QDialog):
             "Supported: the app's image formats plus the video formats supported by Video Builder.\n"
             "You can also drag a local file into the path field below."
         )
-        self._custom_bg_check.setAccessibleDescription(self._custom_bg_check.toolTip())
+        self._custom_bg_check.setAccessibleName("Enable custom background media")
+        self._custom_bg_check.setAccessibleDescription(
+            "Turns on a custom image, GIF, or video background instead of the solid theme colour. You can also drag a local file into the path field below."
+        )
         custom_bg_layout.addWidget(self._custom_bg_check)
         # Sub-container: hidden when custom bg is disabled
         self._custom_bg_sub = QWidget()
@@ -590,6 +594,10 @@ class SettingsDialog(QDialog):
             "When enabled the active theme's built-in background is used,\n"
             "overriding any custom file selection below.\n"
             "Uncheck to force a custom file or a plain solid colour."
+        )
+        self._use_theme_bg_check.setAccessibleName("Use theme background instead of custom file")
+        self._use_theme_bg_check.setAccessibleDescription(
+            "Uses the active theme's built-in background instead of a custom background file."
         )
         self._use_theme_bg_check.setChecked(False)
         _cbg_vl.addWidget(self._use_theme_bg_check)
@@ -629,6 +637,7 @@ class SettingsDialog(QDialog):
             "You can also drag a local file from Explorer/Finder onto this field.\n"
             "Use the clear button to remove the path."
         )
+        self._custom_bg_path_edit.setAccessibleName("Custom background file path")
         self._custom_bg_path_edit.setAccessibleDescription(
             "Path to the custom background file that will be previewed live when custom backgrounds are enabled."
         )
@@ -664,6 +673,7 @@ class SettingsDialog(QDialog):
             "Choose from recently used background files.\n"
             "Selecting an entry will fill the background path field."
         )
+        self._custom_bg_recent_combo.setAccessibleName("Recent background files")
         self._custom_bg_recent_combo.setAccessibleDescription(self._custom_bg_recent_combo.toolTip())
         _cbg_recent_hl.addWidget(self._custom_bg_recent_combo, 1)
         _cbg_vl.addWidget(self._custom_bg_recent_row)
@@ -2772,8 +2782,8 @@ class SettingsDialog(QDialog):
         effects_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         effects_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         tabs.addTab(effects_scroll, "✨ Effects")
-        tabs.setTabToolTip(0, "Theme presets, colors, custom background, and banner appearance.")
-        tabs.setTabToolTip(1, "Layout, scaling, tooltips, and history preferences.")
+        tabs.setTabToolTip(0, "Theme presets, palette editing, custom background, and backup recovery.")
+        tabs.setTabToolTip(1, "Layout, scaling, tooltips, and history preferences with live preview.")
         tabs.setTabToolTip(2, "Sound enablement, theme sound profiles, and event volumes.")
         tabs.setTabToolTip(3, "Optional click, background, mouse, cursor, and button effects.")
 

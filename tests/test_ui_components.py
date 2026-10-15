@@ -3605,6 +3605,7 @@ class TestTooltipManager(unittest.TestCase):
         self.assertIn("backup", " ".join(_DUMBED["settings_theme_tab"]).lower())
         self.assertIn("backup", " ".join(_VULGAR["settings_theme_tab"]).lower())
         self.assertIn("recovery backup", " ".join(_NORMAL["settings_theme_tab"]).lower())
+        self.assertIn("custom backgrounds", " ".join(_NORMAL["settings_theme_tab"]).lower())
         self.assertIn("automatically match", " ".join(_NORMAL["settings_general_tab"]).lower())
         self.assertIn("live preview", " ".join(_NORMAL["settings_general_tab"]).lower())
         self.assertIn("live preview", " ".join(_DUMBED["settings_general_tab"]).lower())
@@ -7435,7 +7436,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             get_status_bar_text=lambda: "📋 History: 3 items  •  filter status:partial",
             _session_status_lbl=types.SimpleNamespace(text=lambda: "Tool status: 📋 History: 3 items  •  filter status:partial"),
             _capability_lbl=types.SimpleNamespace(text=lambda: ""),
-            _next_step_lbl=types.SimpleNamespace(text=lambda: "Next step: adjust the filter or export the visible rows."),
+            _next_step_lbl=types.SimpleNamespace(text=lambda: "Next step: adjust the filter or export the current report."),
         )
         fake_self = types.SimpleNamespace(
             _gif_builder_dlg=None,
@@ -7450,7 +7451,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
 
         active_builder.isActiveWindow = lambda: False
         text, tooltip = mw.MainWindow._current_tool_status_context(fake_self)
-        self.assertEqual(text, "Selected: 📋 History  •  Next: adjust the filter or export the visible rows.")
+        self.assertEqual(text, "Selected: 📋 History  •  Next: adjust the filter or export the current report.")
         self.assertIn("adjust the filter", tooltip)
 
     def test_converter_open_gif_builder_delegates_to_main_window_when_available(self):
@@ -7791,6 +7792,8 @@ class TestBuilderHistoryPolish(unittest.TestCase):
         tab = HistoryTab(settings)
         try:
             self.assertIn("Ready:", tab._capability_lbl.text())
+            self.assertIn("history reports", tab._capability_lbl.text().lower())
+            self.assertIn("report formats", tab._capability_lbl.toolTip().lower())
             self.assertTrue(tab._sub_tabs.usesScrollButtons())
             self.assertFalse(tab._sub_tabs.tabBar().expanding())
             self.assertEqual(tab._sub_tabs.tabBar().tabToolTip(1), "Alpha & RGBA Adjuster history")
@@ -7801,7 +7804,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             self.assertIn("Next:", tab._session_status_lbl.text())
             tab._vid_search.setText("transcode")
             self.assertIn("filter transcode", tab.get_status_bar_text())
-            self.assertIn("review status and notes", tab._next_step_lbl.text())
+            self.assertIn("review status and recovery notes", tab._next_step_lbl.text())
             tab._vid_search.setText("missing")
             self.assertIn("0/1 shown", tab.get_status_bar_text())
             self.assertIn("bring matching rows back", tab._next_step_lbl.text())
@@ -8941,7 +8944,8 @@ class TestDialogAccessibility(unittest.TestCase):
         self.assertIn("Import backup", settings._btn_import_theme.accessibleName())
         self.assertIn("backup", settings._btn_import_theme.toolTip().lower())
         self.assertIn("recover a saved look", settings._btn_import_theme.accessibleDescription().lower())
-        self.assertIn("confirm the layout", settings._theme_preset_combo.toolTip().lower())
+        self.assertIn("locked entries stay greyed out", settings._theme_preset_combo.toolTip().lower())
+        self.assertIn("use the live preview below", settings._theme_preset_combo.toolTip().lower())
         self.assertIn("particle style", settings._click_effects_theme_check.toolTip().lower())
         self.assertIn("manual particle style", settings._click_effects_theme_check.accessibleDescription().lower())
         self.assertIn("manual effect picker", settings._use_theme_effect_check.toolTip().lower())
@@ -8960,6 +8964,10 @@ class TestDialogAccessibility(unittest.TestCase):
         self.assertIn("live preview", settings._grp_custom_bg.title().lower())
         self.assertEqual("Browse custom background file", settings._custom_bg_browse_btn.accessibleName())
         self.assertIn("previewed live", settings._custom_bg_path_edit.accessibleDescription().lower())
+        self.assertEqual("Enable custom background media", settings._custom_bg_check.accessibleName())
+        self.assertEqual("Use theme background instead of custom file", settings._use_theme_bg_check.accessibleName())
+        self.assertEqual("Custom background file path", settings._custom_bg_path_edit.accessibleName())
+        self.assertEqual("Recent background files", settings._custom_bg_recent_combo.accessibleName())
         self.assertIn("Alpha Painter", settings._chk_track_sel_alpha.text())
         self.assertIn("Alpha Painter", settings._chk_track_sel_alpha.toolTip())
         self.assertIn("Alpha Painter", settings._history_max_sel_spin.toolTip())

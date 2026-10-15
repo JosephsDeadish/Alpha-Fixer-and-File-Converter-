@@ -779,12 +779,12 @@ _NORMAL: dict[str, list[str]] = {
         "Import themes created by the community using the Import button.",
         "Locked themes stay greyed out until they are unlocked through normal use.",
         "15 customizable color slots. Click any swatch to change it. Instant preview.",
-        "This tab keeps theme presets, custom backgrounds, and palette editing together.",
+        "This tab keeps theme presets, custom backgrounds, palette editing, and backup recovery together.",
         "Locked themes show a lock icon until they unlock naturally.",
         "Pick a palette here when you want the UI to feel like yours instead of stock software.",
     ],
     "settings_general_tab": [
-        "General settings for click effects, trails, cursor, font, and tooltip style.",
+        "General settings for click effects, trails, cursor, font, tooltip style, and live preview helpers.",
         "Most settings apply immediately, so you can preview changes without clicking Apply.",
         "Trail and cursor options include theme-matched styles that automatically match the active theme.",
         "Tooltip Mode changes how tips are written — Normal, Dumbed Down, or fully unfiltered No Filter 🤬.",
@@ -6009,6 +6009,7 @@ _VULGAR: dict[str, list[str]] = {
         "Hidden themes unlock at certain click counts. Keep clicking the logo if you want to find them.",
         "The color picker has a hex input for precision work. Type your cursed hex codes. Own your palette.",
         "15 color roles. All editable. Change all of them. Make it yours. Make it hideous. Make it beautiful.",
+        "This tab keeps presets, palette editing, custom backgrounds, and recovery backups in one place.",
     ],
     "settings_general_tab": [
         "General tab. Effects, trails, cursors, fonts, tooltip mode, and the live preview.",

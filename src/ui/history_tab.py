@@ -25,7 +25,7 @@ _THUMB_SIZE = 32  # thumbnail icon size (pixels, square)
 
 def _history_capability_summary() -> str:
     return (
-        "Ready: browse, filter, preview, and export Converter, Alpha & RGBA Adjuster, Alpha Painter, GIF Builder, and Video Builder history."
+        "Ready: browse, filter, preview, and export history reports for Converter, Alpha & RGBA Adjuster, Alpha Painter, GIF Builder, and Video Builder."
     )
 
 
@@ -40,8 +40,9 @@ def _history_capability_details() -> str:
             "",
             "History tools available here:",
             "• Filter across visible columns, status, notes, file names, and field-specific queries.",
-            "• Export the current sub-tab to CSV, JSON, HTML, or plain text.",
+            "• Export the current sub-tab to CSV, JSON, HTML, or plain text report formats.",
             "• Preview thumbnails appear when stored source/output media is still available locally.",
+            "• Recovery and partial-status labels help you spot entries that need another look.",
         ]
     )
 
@@ -421,8 +422,8 @@ def _history_next_step_text(total: int, visible: int, filter_text: str) -> str:
     if filter_text and visible <= 0:
         return "Next step: clear or loosen the current filter to bring matching rows back into view."
     if filter_text and visible < total:
-        return "Next step: review the filtered rows, then clear the filter or export the current view."
-    return "Next step: review status and notes, export the current view, or switch history tabs."
+        return "Next step: review the filtered rows, then clear the filter or export the current report."
+    return "Next step: review status and recovery notes, export the current report, or switch history tabs."
 
 
 def _video_history_status(errors: object, notes: str) -> str:
