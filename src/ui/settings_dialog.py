@@ -524,8 +524,8 @@ class SettingsDialog(QDialog):
         psl.addWidget(self._theme_preset_combo, 0, 1, 1, 3)
         self._btn_save_theme = QPushButton("Save as…")
         self._btn_delete_theme = QPushButton("Delete")
-        self._btn_export_theme = QPushButton("Export Theme…")
-        self._btn_import_theme = QPushButton("Import Theme…")
+        self._btn_export_theme = QPushButton("Export Theme Backup…")
+        self._btn_import_theme = QPushButton("Import Theme Backup…")
         self._btn_save_theme.setAccessibleName("Save custom theme")
         self._btn_save_theme.setAccessibleDescription(
             "Saves the current appearance settings as a custom theme preset."
@@ -2398,22 +2398,32 @@ class SettingsDialog(QDialog):
 
         self._scale_preview_frame = QFrame()
         self._scale_preview_frame.setObjectName("scalePreviewFrame")
+        self._scale_preview_frame.setAccessibleName("UI scale live preview")
+        self._scale_preview_frame.setAccessibleDescription(
+            "Shows how button height, spacing, border radius, and padding change live."
+        )
         scale_preview_layout = QVBoxLayout(self._scale_preview_frame)
         scale_preview_layout.setContentsMargins(8, 8, 8, 8)
         scale_preview_layout.setSpacing(6)
         self._scale_preview_title = QLabel("Live preview")
         self._scale_preview_title.setWordWrap(True)
+        self._scale_preview_title.setAccessibleName("Live preview heading")
         scale_preview_layout.addWidget(self._scale_preview_title)
         self._scale_preview_sample_label = QLabel("Sample label follows the current UI scale.")
         self._scale_preview_sample_label.setWordWrap(True)
+        self._scale_preview_sample_label.setAccessibleDescription(
+            "Sample text that changes with the current UI scale settings."
+        )
         scale_preview_layout.addWidget(self._scale_preview_sample_label)
         sample_row = QHBoxLayout()
         sample_row.setContentsMargins(0, 0, 0, 0)
         sample_row.setSpacing(6)
         self._scale_preview_button = QPushButton("Sample button")
+        self._scale_preview_button.setAccessibleName("Scale preview sample button")
         self._scale_preview_combo = QComboBox()
         self._scale_preview_combo.addItems(["Sample A", "Sample B", "Sample C"])
         self._scale_preview_combo.setMaximumWidth(160)
+        self._scale_preview_combo.setAccessibleName("Scale preview sample combo box")
         sample_row.addWidget(self._scale_preview_button)
         sample_row.addWidget(self._scale_preview_combo, 1)
         scale_preview_layout.addLayout(sample_row)
@@ -2421,6 +2431,9 @@ class SettingsDialog(QDialog):
             "Button height, spacing, border radius, and padding all update live."
         )
         self._scale_preview_detail.setWordWrap(True)
+        self._scale_preview_detail.setAccessibleDescription(
+            "Explains how the live preview reflects the current layout controls."
+        )
         scale_preview_layout.addWidget(self._scale_preview_detail)
         scale_gl.addWidget(self._scale_preview_frame, 6, 0, 1, 2)
 
@@ -2781,7 +2794,7 @@ class SettingsDialog(QDialog):
         )
         self._btn_reset.setAccessibleName("Reset all settings")
         self._btn_reset.setAccessibleDescription(
-            "Resets all settings, unlock flags, and history to factory defaults."
+            "Resets all settings, unlock flags, custom themes, and history to factory defaults."
         )
         btn_row.addWidget(self._btn_reset)
         self._btn_reset_unlocks = QPushButton("Reset Unlocks & Clicks…")
