@@ -4130,7 +4130,7 @@ _DUMBED: dict[str, list[str]] = {
         "Highlights visible = editing mode. Highlights off = review mode. Use both.",
     ],
     "sa_tool_freehand": [
-        "Hold mouse, drag, paint zone colour everywhere you drag. Like MS Paint but for alpha.",
+        "Brush: hold mouse, drag, paint zone colour everywhere you drag. Like MS Paint but for alpha.",
         "Drag over the stuff you want to mark. Simple as that.",
         "Bigger brush = wider stroke. Use the brush size spinbox below.",
         "Auto-correct will tidy up wobbly strokes if you check the checkbox.",
@@ -4190,7 +4190,7 @@ _DUMBED: dict[str, list[str]] = {
         "Esc cancels. Close Polygon button also works. Multiple ways out if it goes wrong.",
     ],
     "sa_tool_eraser": [
-        "Drag to erase. Removes paint from ALL zones, not just the active one. All of them.",
+        "Erase: drag to erase. Removes paint from ALL zones, not just the active one. All of them.",
         "The eraser does not discriminate between zones. Complete and total erasure.",
         "Erase size below controls how wide the erased area is.",
         "Great for fixing the overlaps you definitely didn't intend to make.",
@@ -6348,7 +6348,7 @@ _VULGAR: dict[str, list[str]] = {
         "Show Highlights = see all the painted blobs. Hide Highlights = see the actual image.",
     ],
     "sa_tool_freehand": [
-        "Hold mouse, drag, paint zone colour wherever the hell you drag. Brush. Classic chaos.",
+        "Brush: hold mouse, drag, paint zone colour wherever the hell you drag. Brush. Classic chaos.",
         "The most intuitive tool. Just drag over the shit you want to mark and it gets marked.",
         "Brush size controls stroke width. Big brush = fast coverage. Small = detail work.",
         "Auto-correct will clean up your wobbly-ass strokes if you enable the checkbox.",
@@ -6408,7 +6408,7 @@ _VULGAR: dict[str, list[str]] = {
         "Esc to bail at any time. No commitment until you double-click. Unlike your other life choices.",
     ],
     "sa_tool_eraser": [
-        "Drag to erase zone paint. Removes from ALL zones simultaneously. No discrimination.",
+        "Erase: drag to erase zone paint. Removes from ALL zones simultaneously. No discrimination.",
         "The eraser does not give a shit which zone is active. It erases every painted zone under it.",
         "Erase size below controls the affected radius. Big = fast wipe. Small = precise removal.",
         "Use it to fix overlaps, clean up sloppy boundaries, or just nuke an entire region.",

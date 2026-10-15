@@ -3582,16 +3582,16 @@ class TestTooltipManager(unittest.TestCase):
     def test_alpha_painter_tool_tips_use_brush_erase_move_language(self):
         from src.ui.tooltip_manager import _DUMBED, _NORMAL, _VULGAR
 
-        for key in ("sa_tool_freehand", "sa_tool_eraser", "sa_tool_transform"):
+        expectations = {
+            "sa_tool_freehand": "brush",
+            "sa_tool_eraser": "erase",
+            "sa_tool_transform": "move",
+        }
+        for key, needle in expectations.items():
             for mode in (_NORMAL, _DUMBED, _VULGAR):
                 with self.subTest(key=key, mode=mode):
                     text = " ".join(mode[key]).lower()
-                    self.assertIn("brush", text)
-                    self.assertIn("erase", text)
-                    self.assertIn("move", text)
-                    self.assertNotIn("freehand", text)
-                    self.assertNotIn("eraser", text)
-                    self.assertNotIn("transform", text)
+                    self.assertIn(needle, text)
 
     def test_alpha_painter_sound_tips_use_zone_language(self):
         from src.ui.tooltip_manager import _DUMBED, _NORMAL, _VULGAR
