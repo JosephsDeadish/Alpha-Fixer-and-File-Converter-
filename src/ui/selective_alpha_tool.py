@@ -2080,7 +2080,6 @@ class SelectiveAlphaTool(QWidget):
         az_sel_row.addWidget(active_label)
         self._active_zone_combo = QComboBox()
         active_label.setBuddy(self._active_zone_combo)
-        self._active_zone_combo.setAccessibleName("Active paint zone")
         self._active_zone_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -2094,7 +2093,7 @@ class SelectiveAlphaTool(QWidget):
         )
         self._active_zone_combo.setAccessibleName("Active zone selector")
         self._active_zone_combo.setAccessibleDescription(
-            "Selects which zone the painting tools will edit. Brush, erase, and transform tools all follow this choice."
+            "Selects which zone the painting tools will edit. Brush, erase, and move tools all follow this choice."
         )
         self._active_zone_combo.currentIndexChanged.connect(
             lambda idx: self._on_zone_action(idx)
