@@ -8166,6 +8166,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
 
     def test_selective_alpha_shared_zone_status_points_to_import_actions(self):
         from PyQt6.QtWidgets import QLabel
+        from src.ui.selective_alpha_tool import SelectiveAlphaTool
 
         import_note = next(
             label for label in self._widget.findChildren(QLabel)
@@ -8189,6 +8190,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Import shared zones", self._widget._btn_import_shared.accessibleName())
         self.assertIn("Import the shared zones", self._widget._btn_import_shared.toolTip())
         self.assertIn("editable zones", self._widget._btn_import_shared.accessibleDescription().lower())
+        self.assertIn("Copy shared zones → Alpha Painter tool", SelectiveAlphaTool._shared_zone_import_instructions())
 
         self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=bool))])
         text = self._widget._import_shared_status.text()

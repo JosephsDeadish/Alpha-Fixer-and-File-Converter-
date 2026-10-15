@@ -1175,16 +1175,16 @@ class SelectiveAlphaCanvas(QWidget):
         act_paste_all = menu.addAction("Paste All Zones")
         act_paste_all.setEnabled(self.has_image() and self._paste_all_available)
         menu.addSeparator()
-        act_paste_alpha = menu.addAction("📋  Paste Zone from Alpha & RGBA Adjuster")
+        act_paste_alpha = menu.addAction("📋  Paste Shared Zone from Alpha & RGBA Adjuster")
         act_paste_alpha.setEnabled(self.has_image() and self._alpha_paste_available)
         act_paste_alpha.setToolTip(
-            "Paste the alpha zone received from the Alpha & RGBA Adjuster\n"
+            "Paste the shared zone received from the Alpha & RGBA Adjuster\n"
             "into the currently active zone on this canvas."
         )
-        act_paste_all_alpha = menu.addAction("📋  Paste All Zones from Alpha & RGBA Adjuster")
+        act_paste_all_alpha = menu.addAction("📋  Paste All Shared Zones from Alpha & RGBA Adjuster")
         act_paste_all_alpha.setEnabled(self.has_image() and self._alpha_paste_available)
         act_paste_all_alpha.setToolTip(
-            "Paste all alpha zones received from the Alpha & RGBA Adjuster\n"
+            "Paste all shared zones received from the Alpha & RGBA Adjuster\n"
             "into the corresponding zones on this canvas."
         )
         try:
@@ -1787,7 +1787,7 @@ class SelectiveAlphaTool(QWidget):
     def _shared_zone_import_instructions() -> str:
         return (
             "In Alpha & RGBA Adjuster: turn on 'Highlight Alpha Values', right-click the preview, "
-            "then choose 'Copy zones → Alpha Painter tool' to send the shared zones here."
+            "then choose 'Copy shared zones → Alpha Painter tool' to send the shared zones here."
         )
 
     @classmethod
