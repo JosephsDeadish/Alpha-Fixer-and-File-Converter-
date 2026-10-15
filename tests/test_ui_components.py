@@ -8187,7 +8187,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Next: open an image, import the shared zones", self._widget._import_shared_status.text())
         self.assertIn("Import Shared Zones to Canvas", self._widget._btn_import_shared.text())
         self.assertIn("Import shared zones", self._widget._btn_import_shared.accessibleName())
-        self.assertIn("Load the shared zones", self._widget._btn_import_shared.toolTip())
+        self.assertIn("Import the shared zones", self._widget._btn_import_shared.toolTip())
         self.assertIn("editable zones", self._widget._btn_import_shared.accessibleDescription().lower())
 
         self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=bool))])
