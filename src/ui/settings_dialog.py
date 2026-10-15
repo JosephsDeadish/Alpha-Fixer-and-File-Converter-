@@ -485,7 +485,8 @@ class SettingsDialog(QDialog):
         self._grp_preset_select = QGroupBox("Theme Presets, Backup, and Recovery")
         self._grp_preset_select.setAccessibleName("Theme preset and recovery tools")
         self._grp_preset_select.setAccessibleDescription(
-            "Search, choose, save, export, and import themes from one place. Export and import buttons create and restore JSON recovery backups."
+            "Search, choose, save, export, and import themes and preferences from one place. "
+            "Export and import buttons create and restore JSON recovery backups without touching history or unlock progress."
         )
         ps_vl = QVBoxLayout(self._grp_preset_select)
         ps_vl.setSpacing(4)
@@ -529,8 +530,8 @@ class SettingsDialog(QDialog):
         psl.addWidget(self._theme_preset_combo, 0, 1, 1, 3)
         self._btn_save_theme = QPushButton("Save Preset…")
         self._btn_delete_theme = QPushButton("Delete Preset")
-        self._btn_export_theme = QPushButton("Export Backup…")
-        self._btn_import_theme = QPushButton("Import Backup…")
+        self._btn_export_theme = QPushButton("Export Preferences Backup…")
+        self._btn_import_theme = QPushButton("Import Preferences Backup…")
         self._btn_save_theme.setAccessibleName("Save theme preset")
         self._btn_save_theme.setAccessibleDescription(
             "Saves the current appearance settings as a custom theme preset for later reuse."
@@ -544,20 +545,22 @@ class SettingsDialog(QDialog):
         self._btn_export_theme.setMinimumWidth(110)
         self._btn_import_theme.setMinimumWidth(110)
         self._btn_export_theme.setToolTip(
-            "Export the current theme settings to a JSON recovery backup.\n"
-            "Use this as a recovery copy or move the theme to another install."
+            "Export the current preferences to a JSON recovery backup.\n"
+            "Use this as a recovery copy or move your look and other saved preferences to another install.\n"
+            "History and unlock progress stay in the app."
         )
         self._btn_import_theme.setToolTip(
-            "Import a theme from a JSON recovery backup and apply it immediately.\n"
-            "Use this to restore a saved look or bring a backup in from another install."
+            "Import preferences from a JSON recovery backup and apply them immediately.\n"
+            "Use this to restore a saved look or bring preferences in from another install.\n"
+            "History and unlock progress stay in the app."
         )
-        self._btn_export_theme.setAccessibleName("Export theme backup")
+        self._btn_export_theme.setAccessibleName("Export preferences backup")
         self._btn_export_theme.setAccessibleDescription(
-            "Exports the current theme settings to a JSON recovery backup for safekeeping, recovery, or transfer."
+            "Exports the current preferences to a JSON recovery backup for safekeeping, recovery, or transfer. History and unlock progress are not part of the backup."
         )
-        self._btn_import_theme.setAccessibleName("Import theme backup")
+        self._btn_import_theme.setAccessibleName("Import preferences backup")
         self._btn_import_theme.setAccessibleDescription(
-            "Imports a JSON theme recovery backup and applies it immediately so you can recover a saved look or transfer a preset from another install."
+            "Imports a JSON recovery backup and applies it immediately so you can recover saved preferences or transfer them from another install. History and unlock progress are not part of the backup."
         )
         psl.addWidget(self._btn_save_theme, 1, 0)
         psl.addWidget(self._btn_delete_theme, 1, 1)
@@ -567,6 +570,17 @@ class SettingsDialog(QDialog):
         psl.setColumnStretch(2, 1)
         psl.setColumnStretch(3, 1)
         ps_vl.addLayout(psl)
+        self._preset_backup_note = QLabel(
+            "Backups save theme, layout, shortcut, and other preferences. "
+            "History and unlock progress stay in the app."
+        )
+        self._preset_backup_note.setWordWrap(True)
+        self._preset_backup_note.setProperty("settingsHint", True)
+        self._preset_backup_note.setAccessibleName("Theme backup guidance")
+        self._preset_backup_note.setAccessibleDescription(
+            "Explains which settings are included in a recovery backup and which data stays local."
+        )
+        ps_vl.addWidget(self._preset_backup_note)
         tv.addWidget(self._grp_preset_select)
 
         # ---- Custom Background GroupBox (item 81) ----
@@ -2467,7 +2481,7 @@ class SettingsDialog(QDialog):
         sample_row.addWidget(self._scale_preview_combo, 1)
         scale_preview_layout.addLayout(sample_row)
         self._scale_preview_detail = QLabel(
-            "Button height, spacing, border radius, and padding all update live as you change the controls."
+            "Adjust button height, spacing, border radius, and padding to see the preview update immediately."
         )
         self._scale_preview_detail.setWordWrap(True)
         self._scale_preview_detail.setAccessibleName("UI scale preview details")
@@ -2599,7 +2613,7 @@ class SettingsDialog(QDialog):
                 layout.setSpacing(spacing)
                 layout.setContentsMargins(padding, padding, padding, padding)
             self._scale_preview_detail.setText(
-                f"Button height {btn_h}px • widget spacing {spacing}px • border radius {radius}px • panel padding {padding}px."
+                f"Live preview: button height {btn_h}px • widget spacing {spacing}px • border radius {radius}px • panel padding {padding}px."
             )
             self._scale_preview_sample_label.setStyleSheet(f"color: {text}; background: transparent;")
             self._scale_preview_title.setStyleSheet(f"color: {text}; background: transparent;")

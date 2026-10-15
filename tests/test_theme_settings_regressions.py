@@ -181,9 +181,9 @@ def test_tooltip_settings_controls_use_clearer_labels(dialog):
     assert "compare layouts before you apply one" in widget._theme_preset_combo.toolTip().lower()
     assert widget._btn_save_theme.accessibleName() == "Save theme preset"
     assert widget._btn_delete_theme.accessibleName() == "Delete theme preset"
-    assert widget._btn_export_theme.accessibleName() == "Export theme backup"
-    assert widget._btn_import_theme.accessibleName() == "Import theme backup"
-    assert "recovery copy" in widget._btn_export_theme.toolTip().lower()
+    assert widget._btn_export_theme.accessibleName() == "Export preferences backup"
+    assert widget._btn_import_theme.accessibleName() == "Import preferences backup"
+    assert "preferences to a json recovery backup" in widget._btn_export_theme.toolTip().lower()
 
 
 def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
@@ -192,13 +192,14 @@ def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
     assert tab_bar is not None
     assert widget._grp_preset_select.accessibleName() == "Theme preset and recovery tools"
     assert "json recovery backups" in widget._grp_preset_select.accessibleDescription().lower()
+    assert "history and unlock progress" in widget._preset_backup_note.text().lower()
     assert "preview updates when a valid file is chosen" in widget._custom_bg_check.toolTip().lower()
     assert "return to a custom file" in widget._use_theme_bg_check.toolTip().lower()
     assert "live preview" in widget._custom_bg_preview.accessibleDescription().lower()
     assert widget._scale_preview_title.accessibleDescription() == "Heading for the UI scale live preview area."
     assert widget._scale_preview_sample_label.accessibleName() == "UI scale preview sample label"
     assert widget._scale_preview_detail.accessibleName() == "UI scale preview details"
-    assert "button height" in widget._scale_preview_detail.accessibleDescription().lower()
+    assert "update immediately" in widget._scale_preview_detail.text().lower()
     assert "preview the current ui scale" in widget._scale_preview_button.accessibleDescription().lower()
     assert "preview the current ui scale" in widget._scale_preview_combo.accessibleDescription().lower()
     assert "backup / recovery tools" in tab_bar.tabToolTip(0).lower()
