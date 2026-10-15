@@ -2093,7 +2093,7 @@ class SelectiveAlphaTool(QWidget):
         )
         self._active_zone_combo.setAccessibleName("Active zone selector")
         self._active_zone_combo.setAccessibleDescription(
-            "Selects which zone the painting tools will edit. Brush, erase, and move tools all follow this choice."
+            "Selects which zone the drawing tools will edit. Brush, erase, and move tools all follow this choice."
         )
         self._active_zone_combo.currentIndexChanged.connect(
             lambda idx: self._on_zone_action(idx)
@@ -2128,7 +2128,7 @@ class SelectiveAlphaTool(QWidget):
         self._ze_swatch_btn.setToolTip("Click to choose a colour for this zone")
         self._ze_swatch_btn.setAccessibleName("Choose active zone overlay color")
         self._ze_swatch_btn.setAccessibleDescription(
-            "Opens a colour picker for the active zone overlay so you can change that zone's colour."
+            "Opens a colour picker to change the active zone overlay colour."
         )
         ze_row1.addWidget(self._ze_swatch_btn)
         self._ze_name_edit = QLineEdit(ZONE_NAMES[0])
