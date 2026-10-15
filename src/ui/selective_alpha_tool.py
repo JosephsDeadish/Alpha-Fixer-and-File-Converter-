@@ -93,7 +93,7 @@ def _np_to_qimage(arr: np.ndarray) -> QImage:
 
 def _selective_alpha_capability_summary() -> str:
     return (
-        "Ready: edit zones, import shared zones, undo/redo, save layouts, and preview/export tools are available."
+        "Ready: paint zones, import shared zones, undo/redo, save layouts, and preview/export tools are available."
     )
 
 
@@ -1772,8 +1772,11 @@ class SelectiveAlphaTool(QWidget):
     def _next_step_text(src_path: str, has_shared_zones: bool, result_ready: bool) -> str:
         if not src_path:
             if has_shared_zones:
-                return "Next step: open an image, then import the shared zones, save them to a Full Layout Slot, or copy one zone to the clipboard."
-            return "Next step: open an image or copy zones from Alpha & RGBA Adjuster to begin editing."
+                return (
+                    "Next step: open an image, then import the shared zones, save them to a Full "
+                    "Layout Slot, or copy one zone to the clipboard."
+                )
+            return "Next step: open an image or copy shared zones from Alpha & RGBA Adjuster to begin editing."
         if result_ready:
             return "Next step: save the current result, or keep refining the zones and save again when it looks right."
         if has_shared_zones:
@@ -1783,7 +1786,7 @@ class SelectiveAlphaTool(QWidget):
     @staticmethod
     def _shared_zone_import_instructions() -> str:
         return (
-            "In Alpha & RGBA Adjuster: enable 'Highlight Alpha Values', right-click the preview, "
+            "In Alpha & RGBA Adjuster: turn on 'Highlight Alpha Values', right-click the preview, "
             "then choose 'Copy zones → Alpha Painter tool' to send the shared zones here."
         )
 
@@ -1867,6 +1870,10 @@ class SelectiveAlphaTool(QWidget):
             "capabilityState", "limited" if _selective_alpha_capability_has_limits() else "ready"
         )
         self._capability_lbl.setToolTip(_selective_alpha_capability_details())
+        self._capability_lbl.setAccessibleName("Alpha Painter capability summary")
+        self._capability_lbl.setAccessibleDescription(
+            "Summarizes what the Alpha Painter can currently do and whether any tools are limited."
+        )
         lv.addWidget(self._capability_lbl)
 
         # ── Workflow group: Open → Paint → Save ───────────────────────────
@@ -2436,7 +2443,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_import_shared.setEnabled(False)
         self._btn_import_shared.setToolTip(
             "Load the shared zones from Alpha & RGBA Adjuster onto the Alpha Painter canvas.\n\n"
-            "Each detected alpha value becomes its own editable zone."
+            "Each detected alpha value becomes its own editable zone, so you can send the shared zones here."
         )
         self._btn_import_shared.setAccessibleName("Import shared zones to canvas")
         self._btn_import_shared.setAccessibleDescription(self._btn_import_shared.toolTip())
@@ -2550,6 +2557,10 @@ class SelectiveAlphaTool(QWidget):
         self._status_lbl.setProperty("toolGuidance", True)
         self._status_lbl.setWordWrap(True)
         self._status_lbl.setContentsMargins(4, 2, 4, 2)
+        self._status_lbl.setAccessibleName("Alpha Painter canvas status")
+        self._status_lbl.setAccessibleDescription(
+            "Shows the active tool, active zone, brush size, and zoom level for the Alpha Painter canvas."
+        )
         self._status_lbl.setToolTip(
             "Shows the active tool, zone, brush size, and cursor position.\n\n"
             "Navigation tips:\n"

@@ -8088,6 +8088,8 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("paint zones", self._widget._capability_lbl.text())
         self.assertIn("Alpha Painter ready", self._widget.get_status_bar_text())
         self.assertIn("Alpha & RGBA Adjuster", self._widget._next_step_lbl.text())
+        self.assertEqual("Alpha Painter capability summary", self._widget._capability_lbl.accessibleName())
+        self.assertEqual("Alpha Painter canvas status", self._widget._status_lbl.accessibleName())
         self._widget._src_path = "/tmp/sample.png"
         self._widget._shared_zones = [(64, np.zeros((2, 2), dtype=np.uint8))]
         self._widget._mask_clipboard = np.zeros((2, 2), dtype=np.uint8)
@@ -8101,11 +8103,12 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("zone clipboard ready", summary)
         self.assertIn("full-layout slot", summary)
         self.assertIn("result ready to save", summary)
-        self.assertIn("edit zones", self._widget._capability_lbl.text())
+        self.assertIn("paint zones", self._widget._capability_lbl.text())
         self.assertIn("sample.png", self._widget._session_status_lbl.text())
         self.assertIn("Next:", self._widget._session_status_lbl.text())
         self.assertIn("save the current result", self._widget._next_step_lbl.text())
-        self.assertIn("begin editing", self._widget._next_step_lbl.text())
+        self.assertIn("save again when it looks right", self._widget._next_step_lbl.text())
+        self.assertIn("turn on 'Highlight Alpha Values'", self._widget._import_shared_status.text())
 
     def test_selective_alpha_tool_names_are_more_descriptive(self):
         self.assertIn("Brush", self._widget._tool_btns["freehand"].text())
@@ -8163,8 +8166,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
 
         self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=bool))])
         text = self._widget._import_shared_status.text()
-        self.assertIn("1 zone(s) ready", text)
-        self.assertIn("Import Shared Zones to Canvas", text)
+        self.assertIn("1 shared zone(s) ready", text)
         self.assertIn("Paste Zone", text)
         self.assertIn("Import Shared Zones to Canvas", self._widget._btn_import_shared.text())
         self.assertIn("Copy One Zone", self._widget._btn_import_zone_to_clipboard.text())
