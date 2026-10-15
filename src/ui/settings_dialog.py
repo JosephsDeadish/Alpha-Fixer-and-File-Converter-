@@ -517,7 +517,7 @@ class SettingsDialog(QDialog):
         self._theme_preset_combo.setMinimumWidth(200)
         self._theme_preset_combo.setToolTip(
             "Choose an application theme.\n"
-            "Hover over each preset to preview its style, watch for unlock markers on hidden themes, and use the live preview below to confirm the layout."
+            "Hover over each preset to preview its style, watch for unlock markers on hidden themes, and use the live preview below to confirm the layout before applying it."
         )
         self._theme_preset_combo.setAccessibleDescription(self._theme_preset_combo.toolTip())
         self._rebuild_theme_combo()
@@ -552,7 +552,7 @@ class SettingsDialog(QDialog):
         )
         self._btn_import_theme.setAccessibleName("Import theme backup")
         self._btn_import_theme.setAccessibleDescription(
-            "Imports a JSON theme backup and applies it immediately so you can recover a saved look."
+            "Imports a JSON theme backup and applies it immediately so you can recover a saved look or transfer a preset from another install."
         )
         psl.addWidget(self._btn_save_theme, 1, 0)
         psl.addWidget(self._btn_delete_theme, 1, 1)
@@ -1077,6 +1077,12 @@ class SettingsDialog(QDialog):
         effect_layout.setSpacing(6)
         # On/off + use-theme row (mirrors the Mouse Trail group layout)
         self._click_effects_theme_check = QCheckBox("Enable click effects")
+        self._click_effects_theme_check.setToolTip(
+            "Show the click-effect controls and let you pick a particle style for the active theme."
+        )
+        self._click_effects_theme_check.setAccessibleDescription(
+            "Enables click effects so you can choose a manual particle style or follow the current theme."
+        )
         effect_layout.addWidget(self._click_effects_theme_check)
         # Sub-container: hidden until click effects are enabled
         self._click_effect_sub = QWidget()
@@ -1087,8 +1093,11 @@ class SettingsDialog(QDialog):
             "Follow theme effect"
         )
         self._use_theme_effect_check.setToolTip(
-            "When enabled the click effect is chosen automatically to match\n"
-            "the active theme — e.g. Gore gets blood splatter, Bat Cave gets bats."
+            "When enabled the click effect is chosen automatically to match the active theme.\n"
+            "The manual effect picker stays visible but is disabled until you turn this off."
+        )
+        self._use_theme_effect_check.setAccessibleDescription(
+            "Automatically matches the active theme's click effect and disables the manual effect picker."
         )
         _ce_sub_vl.addWidget(self._use_theme_effect_check)
         # Info label shown when "Use theme effect" is ON (replaces manual combo, item 4)
@@ -1133,8 +1142,11 @@ class SettingsDialog(QDialog):
             if tip:
                 self._effect_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._effect_combo.setToolTip(
-            "Choose the click particle effect for this theme.\n"
+            "Choose the click particle effect for this theme when theme matching is off.\n"
             "Select 'Custom' to use your own emoji as particles."
+        )
+        self._effect_combo.setAccessibleDescription(
+            "Chooses the click particle effect used when click effects are enabled and theme matching is off."
         )
         effect_inner.addWidget(self._effect_combo, 1)
         _ce_sub_vl.addWidget(self._effect_inner_widget)
@@ -2794,12 +2806,12 @@ class SettingsDialog(QDialog):
         self._btn_reset.setToolTip(
             "⚠ Reset all settings, unlock flags, and history to factory defaults.\n"
             "This clears custom themes and saved history from this install.\n"
-            "Use Export Theme Backup first if you want a recovery copy.\n"
+            "Export a theme backup first if you want a recovery copy.\n"
             "This cannot be undone. Restart afterward to fully apply the reset."
         )
         self._btn_reset.setAccessibleName("Reset all settings")
         self._btn_reset.setAccessibleDescription(
-            "Resets all settings, unlock flags, custom themes, and history to factory defaults."
+            "Resets all settings, unlock flags, custom themes, and history to factory defaults after you save any recovery copy you need."
         )
         btn_row.addWidget(self._btn_reset)
         self._btn_reset_unlocks = QPushButton("Reset Unlocks & Clicks…")
@@ -2810,7 +2822,7 @@ class SettingsDialog(QDialog):
         )
         self._btn_reset_unlocks.setAccessibleName("Reset unlocks and clicks")
         self._btn_reset_unlocks.setAccessibleDescription(
-            "Resets unlock flags and click count while preserving the rest of your settings."
+            "Resets unlock flags and click count while preserving the rest of your settings and theme choices."
         )
         btn_row.addWidget(self._btn_reset_unlocks)
         btn_row.addStretch(1)
