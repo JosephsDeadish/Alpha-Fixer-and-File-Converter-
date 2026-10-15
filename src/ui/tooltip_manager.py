@@ -770,9 +770,9 @@ _NORMAL: dict[str, list[str]] = {
         "Search the logs when you need to find that one weird session you half-remember and half-resent.",
     ],
     "settings_theme_tab": [
-        "The Theme tab: choose a preset theme, edit colors, and keep a backup of your setup.",
+        "The Theme tab: choose a preset theme, edit colors, and keep a recovery backup of your setup.",
         "Click any color swatch to change that part of the palette. Changes update live.",
-        "Export your current theme as a JSON backup or import one to restore a saved look.",
+        "Export your current theme as a JSON recovery backup or import one to restore a saved look.",
         "Hidden themes appear here once you unlock them.",
         "Use the search box to filter presets and custom themes when the list gets long.",
         "Custom color themes are saved in the INI settings file and persist across sessions.",
@@ -786,7 +786,7 @@ _NORMAL: dict[str, list[str]] = {
     "settings_general_tab": [
         "General settings for click effects, trails, cursor, font, and tooltip style.",
         "Most settings apply immediately, so you can preview changes without clicking Apply.",
-        "Trail and cursor options include theme-matched styles that update automatically with the theme.",
+        "Trail and cursor options include theme-matched styles that automatically match the active theme.",
         "Tooltip Mode changes how tips are written — Normal, Dumbed Down, or No Filter 🤬.",
         "Font size, live preview helpers, and reset options are here too.",
         "Changes update live for most controls, so you can tune the UI without restarting.",
@@ -3258,9 +3258,9 @@ _DUMBED: dict[str, list[str]] = {
         "Congratulations, you found the search box. It works exactly like you'd expect.",
     ],
     "settings_theme_tab": [
-        "Theme tab. Choose presets, edit colors, and keep a backup of your look.",
+        "Theme tab. Choose presets, edit colors, and keep a recovery backup of your look.",
         "Click any color swatch to update that part of the palette. Changes apply live.",
-        "Export your theme as a backup file or import one to restore a saved look.",
+        "Export your theme as a recovery backup file or import one to restore a saved look.",
         "Unlocked themes appear here once you earn them.",
         "Use the search box to filter theme presets and custom themes quickly.",
         "15 customizable color slots. Click any swatch to change it. Instant preview.",
@@ -3270,7 +3270,7 @@ _DUMBED: dict[str, list[str]] = {
     "settings_general_tab": [
         "General tab. Click effects, trails, cursor, font, and tooltip mode live here.",
         "Most settings apply immediately. No save button needed.",
-        "Theme-matched trail, effect, and cursor options update automatically when the theme changes.",
+        "Theme-matched trail, effect, and cursor options automatically match the active theme when it changes.",
         "Tooltip Mode controls how tips are written, including the unfiltered No Filter 🤬 mode.",
         "Font size, reset controls, and live preview helpers are here too.",
         "This tab holds the interaction and appearance toggles that shape the UI feel.",
@@ -6000,7 +6000,7 @@ _VULGAR: dict[str, list[str]] = {
         "Partial matches work. 'we' finds 'webp'. 'ps2' finds anything with PS2 in the preset name.",
     ],
     "settings_theme_tab": [
-        "Theme tab. Colors, presets, custom schemes, and palette tweaks.",
+        "Theme tab. Colors, presets, custom schemes, and recovery backup palette tweaks.",
         "Click any color button to change that aspect of the app. Changes apply immediately in the preview.",
         "Unlocked themes show up here with a little 🔓. Everything else stays hidden until earned.",
         "Export saves your theme color JSON as a recovery backup. Import restores a saved look.",

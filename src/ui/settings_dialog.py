@@ -475,7 +475,7 @@ class SettingsDialog(QDialog):
         ev.setSpacing(6)
         effects_intro = QLabel(
             "Visual effects are optional. Enable only the effects you want. "
-            "Follow theme keeps the active look; turn it off to choose a custom style. "
+            "Use theme keeps the active look; turn it off to choose a custom style. "
             "Turning an effect off keeps its saved preferences."
         )
         effects_intro.setWordWrap(True)
@@ -493,11 +493,11 @@ class SettingsDialog(QDialog):
         search_row.addWidget(filter_label)
         self._theme_search = QLineEdit()
         filter_label.setBuddy(self._theme_search)
-        self._theme_search.setAccessibleName("Search themes")
+        self._theme_search.setAccessibleName("Search theme presets")
         self._theme_search.setPlaceholderText("Search theme names…")
         self._theme_search.setClearButtonEnabled(True)
         self._theme_search.setToolTip(
-            "Type part of a theme name to filter the list below.\n"
+            "Type part of a theme name to filter the preset list below.\n"
             "Press Enter to focus the matching result; searching never changes the active theme."
         )
         self._theme_search.setAccessibleDescription(self._theme_search.toolTip())
@@ -522,15 +522,15 @@ class SettingsDialog(QDialog):
         self._theme_preset_combo.setAccessibleDescription(self._theme_preset_combo.toolTip())
         self._rebuild_theme_combo()
         psl.addWidget(self._theme_preset_combo, 0, 1, 1, 3)
-        self._btn_save_theme = QPushButton("Save Theme…")
-        self._btn_delete_theme = QPushButton("Delete")
-        self._btn_export_theme = QPushButton("Export Theme Backup…")
-        self._btn_import_theme = QPushButton("Import Theme Backup…")
-        self._btn_save_theme.setAccessibleName("Save custom theme preset")
+        self._btn_save_theme = QPushButton("Save Preset…")
+        self._btn_delete_theme = QPushButton("Delete Preset")
+        self._btn_export_theme = QPushButton("Export Backup…")
+        self._btn_import_theme = QPushButton("Import Backup…")
+        self._btn_save_theme.setAccessibleName("Save preset")
         self._btn_save_theme.setAccessibleDescription(
             "Saves the current appearance settings as a custom theme preset."
         )
-        self._btn_delete_theme.setAccessibleName("Delete custom theme")
+        self._btn_delete_theme.setAccessibleName("Delete preset")
         self._btn_delete_theme.setAccessibleDescription(
             "Deletes the selected custom theme preset if it is not built in."
         )
@@ -546,11 +546,11 @@ class SettingsDialog(QDialog):
             "Import a theme from a JSON backup file and apply it immediately.\n"
             "Use this to restore a saved look or bring a backup in from another install."
         )
-        self._btn_export_theme.setAccessibleName("Export theme backup")
+        self._btn_export_theme.setAccessibleName("Export backup")
         self._btn_export_theme.setAccessibleDescription(
             "Exports the current theme settings to a JSON backup file for safekeeping, recovery, or transfer."
         )
-        self._btn_import_theme.setAccessibleName("Import theme backup")
+        self._btn_import_theme.setAccessibleName("Import backup")
         self._btn_import_theme.setAccessibleDescription(
             "Imports a JSON theme backup and applies it immediately so you can recover a saved look or transfer a preset from another install."
         )
@@ -1090,7 +1090,7 @@ class SettingsDialog(QDialog):
         _ce_sub_vl.setContentsMargins(16, 0, 0, 0)
         _ce_sub_vl.setSpacing(4)
         self._use_theme_effect_check = QCheckBox(
-            "Follow theme effect"
+            "Use theme effect"
         )
         self._use_theme_effect_check.setToolTip(
             "When enabled the click effect is chosen automatically to match the active theme.\n"
@@ -1142,7 +1142,7 @@ class SettingsDialog(QDialog):
             if tip:
                 self._effect_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._effect_combo.setToolTip(
-            "Choose the click particle effect for this theme when theme matching is off.\n"
+            "Choose the click particle effect for this theme when Use theme effect is off.\n"
             "Select 'Custom' to use your own emoji as particles."
         )
         self._effect_combo.setAccessibleDescription(
@@ -1316,7 +1316,7 @@ class SettingsDialog(QDialog):
         _hold_sub_vl.setContentsMargins(16, 0, 0, 0)
         _hold_sub_vl.setSpacing(4)
         self._use_theme_hold_check = QCheckBox(
-            "Use theme hold effect  (auto-selects hold effect to match the active theme)"
+            "Use theme hold effect (auto-selects the hold effect to match the active theme)"
         )
         _hold_sub_vl.addWidget(self._use_theme_hold_check)
         self._hold_inner_widget = QWidget()
@@ -1366,7 +1366,7 @@ class SettingsDialog(QDialog):
         bg_drip_sub_layout = QVBoxLayout(self._bg_drip_sub)
         bg_drip_sub_layout.setContentsMargins(16, 0, 0, 0)
         bg_drip_sub_layout.setSpacing(4)
-        self._use_theme_drip_check = QCheckBox("Follow theme drip")
+        self._use_theme_drip_check = QCheckBox("Use theme drip")
         self._use_theme_drip_check.setToolTip(
             "When enabled the drip type is chosen automatically:\n"
             "Gore / Shark themes → Blood Drip\n"
@@ -1387,7 +1387,7 @@ class SettingsDialog(QDialog):
         self._bg_drip_combo.addItem("🩸 Blood Drip", userData="blood")
         self._bg_drip_combo.addItem("💧 Water Drip", userData="water")
         self._bg_drip_combo.setToolTip(
-            "Choose the drip style when 'Follow theme drip' is off.\n"
+            "Choose the drip style when 'Use theme drip' is off.\n"
             "Blood Drip: crimson tear-shaped drops fall from the top.\n"
             "Water Drip: translucent cyan drops fall from the top.\n"
             "To disable drip, uncheck 'Enable background drip' above."
@@ -1451,7 +1451,7 @@ class SettingsDialog(QDialog):
         _bf_sub_vl = QVBoxLayout(self._bg_flock_sub)
         _bf_sub_vl.setContentsMargins(16, 0, 0, 0)
         _bf_sub_vl.setSpacing(4)
-        self._use_theme_flock_check = QCheckBox("Follow theme flock")
+        self._use_theme_flock_check = QCheckBox("Use theme flock")
         self._use_theme_flock_check.setToolTip(
             "When enabled the flock style is chosen automatically from the active theme.\n"
             "Themes without a defined flock (e.g. Panda, Goth) will disable the flock\n"
@@ -1459,7 +1459,7 @@ class SettingsDialog(QDialog):
             "Uncheck to manually pick an emoji style from the list below."
         )
         _bf_sub_vl.addWidget(self._use_theme_flock_check)
-        # Info label shown when "Follow theme flock" is ON (replaces the manual combo, item 4)
+        # Info label shown when "Use theme flock" is ON (replaces the manual combo, item 4)
         self._bg_flock_theme_lbl = QLabel("Theme flock: —")
         self._bg_flock_theme_lbl.setProperty("settingsHint", True)
         self._bg_flock_theme_lbl.setWordWrap(True)
@@ -1477,7 +1477,7 @@ class SettingsDialog(QDialog):
         self._bg_flock_combo.addItem("🦈 Sharks", userData="sharks")
         self._bg_flock_combo.setToolTip(
             "Choose the emoji used for the background flock.\n"
-            "Visible but disabled while 'Follow theme flock' is checked.\n"
+            "Visible but disabled while 'Use theme flock' is checked.\n"
             "Uncheck it to restore your manual flock style."
         )
         self._bg_flock_inner_widget = QWidget()
@@ -1517,7 +1517,7 @@ class SettingsDialog(QDialog):
         _ba_sub_vl = QVBoxLayout(self._bg_ambient_sub)
         _ba_sub_vl.setContentsMargins(16, 0, 0, 0)
         _ba_sub_vl.setSpacing(4)
-        self._use_theme_ambient_check = QCheckBox("Follow theme ambient")
+        self._use_theme_ambient_check = QCheckBox("Use theme ambient")
         self._use_theme_ambient_check.setToolTip(
             "When enabled the ambient style is chosen automatically from the active theme.\n"
             "Themes without a defined ambient will disable the effect automatically.\n"
@@ -1525,7 +1525,7 @@ class SettingsDialog(QDialog):
             "Uncheck to manually pick an ambient style from the list below."
         )
         _ba_sub_vl.addWidget(self._use_theme_ambient_check)
-        # Info label shown when "Follow theme ambient" is ON (replaces the manual combo, item 4)
+        # Info label shown when "Use theme ambient" is ON (replaces the manual combo, item 4)
         self._bg_ambient_theme_lbl = QLabel("Theme ambient: —")
         self._bg_ambient_theme_lbl.setProperty("settingsHint", True)
         self._bg_ambient_theme_lbl.setWordWrap(True)
@@ -1548,7 +1548,7 @@ class SettingsDialog(QDialog):
         self._bg_ambient_combo.addItem("🎋 Bamboo Leaves", userData="bamboo")
         self._bg_ambient_combo.setToolTip(
             "Choose the ambient background animation style.\n"
-            "Visible but disabled while 'Follow theme ambient' is checked.\n"
+            "Visible but disabled while 'Use theme ambient' is checked.\n"
             "Uncheck it to restore your manual ambient style."
         )
         self._bg_ambient_inner_widget = QWidget()
@@ -1593,7 +1593,7 @@ class SettingsDialog(QDialog):
         _notif_sub_vl = QVBoxLayout(self._notif_overlay_sub)
         _notif_sub_vl.setContentsMargins(16, 0, 0, 0)
         _notif_sub_vl.setSpacing(4)
-        self._use_theme_notif_check = QCheckBox("Follow theme notification style")
+        self._use_theme_notif_check = QCheckBox("Use theme notification style")
         self._use_theme_notif_check.setToolTip(
             "When enabled the floating notification style (colors, emoji) is chosen\n"
             "automatically to match the active theme.\n"
@@ -1639,14 +1639,14 @@ class SettingsDialog(QDialog):
         _trail_sub_vl = QVBoxLayout(self._trail_sub)
         _trail_sub_vl.setContentsMargins(0, 0, 0, 0)
         _trail_sub_vl.setSpacing(4)
-        self._use_theme_trail_check = QCheckBox("Follow theme trail")
+        self._use_theme_trail_check = QCheckBox("Use theme trail")
         self._use_theme_trail_check.setToolTip(
             "When enabled the trail color and style are chosen automatically to match\n"
             "the active theme effect.  Fairy Garden gets sparkle fairy dust (✨💫⭐),\n"
             "Ocean/Mermaid get wave emoji (🫧💧🌊), Ice/Sparkle get crystal emoji (✦❄✧)."
         )
         _trail_sub_vl.addWidget(self._use_theme_trail_check)
-        # Info label shown when "Follow theme trail" is ON (replaces manual color/style, item 4)
+        # Info label shown when "Use theme trail" is ON (replaces manual color/style, item 4)
         self._trail_theme_info_lbl = QLabel("Theme trail: —")
         self._trail_theme_info_lbl.setProperty("settingsHint", True)
         self._trail_theme_info_lbl.setWordWrap(True)
@@ -1794,13 +1794,13 @@ class SettingsDialog(QDialog):
         _cursor_sub_vl = QVBoxLayout(self._cursor_sub)
         _cursor_sub_vl.setContentsMargins(8, 0, 0, 0)
         _cursor_sub_vl.setSpacing(4)
-        self._use_theme_cursor_check = QCheckBox("Follow theme cursor")
+        self._use_theme_cursor_check = QCheckBox("Use theme cursor")
         self._use_theme_cursor_check.setToolTip(
             "When enabled the cursor shape is chosen automatically to match the\n"
             "active theme — e.g. Otter Cove gets the 🤘 rock cursor."
         )
         _cursor_sub_vl.addWidget(self._use_theme_cursor_check)
-        # Info label shown when "Follow theme cursor" is ON (item 4)
+        # Info label shown when "Use theme cursor" is ON (item 4)
         self._cursor_theme_info_lbl = QLabel("Theme cursor: —")
         self._cursor_theme_info_lbl.setProperty("settingsHint", True)
         self._cursor_theme_info_lbl.setWordWrap(True)
@@ -1835,7 +1835,7 @@ class SettingsDialog(QDialog):
         self._cursor_combo.setToolTip(
             "Choose the mouse cursor shape used throughout the application.\n"
             "Emoji cursors animate when 'Animate cursor' is enabled.\n"
-            "Shows the theme cursor and is disabled when 'Follow theme cursor' is checked."
+            "Shows the theme cursor and is disabled when 'Use theme cursor' is checked."
         )
         _cmw_gl.addWidget(self._cursor_combo, 0, 1)
         _cursor_sub_vl.addWidget(self._cursor_manual_widget)
@@ -1897,7 +1897,7 @@ class SettingsDialog(QDialog):
 
         # Redirect further adds to sub_sound_gl so they appear inside the container.
         _s = sub_sound_gl
-        self._use_theme_sound_check = QCheckBox("Follow theme sound")
+        self._use_theme_sound_check = QCheckBox("Use theme sound")
         self._use_theme_sound_check.setToolTip(
             "When enabled the click sound automatically uses the sound profile\n"
             "associated with the currently active visual theme.\n"
@@ -1918,7 +1918,7 @@ class SettingsDialog(QDialog):
         self._sound_theme_info_lbl.setVisible(False)
 
         # Sound profile dropdown — stays visible in both manual and use-theme
-        # modes (item 1).  When "Follow theme sound" is ON the combo is disabled
+        # modes (item 1).  When "Use theme sound" is ON the combo is disabled
         # and shows the theme's auto-selected profile; when OFF it is enabled
         # and lets the user pick manually.
         self._sound_profile_lbl = QLabel("Sound profile:")
@@ -1949,9 +1949,9 @@ class SettingsDialog(QDialog):
         for key, label in _SOUND_PROFILE_OPTIONS:
             self._sound_profile_combo.addItem(label, userData=key)
         self._sound_profile_combo.setToolTip(
-            "Click-sound profile used when 'Follow theme sound' is disabled.\n"
+            "Click-sound profile used when 'Use theme sound' is disabled.\n"
             "Each profile has a distinct tone that matches different moods.\n"
-            "Ignored when 'Follow theme sound' is enabled."
+            "Ignored when 'Use theme sound' is enabled."
         )
         _s.addWidget(self._sound_profile_combo, 2, 1)
         self._sound_profile_lbl.setBuddy(self._sound_profile_combo)

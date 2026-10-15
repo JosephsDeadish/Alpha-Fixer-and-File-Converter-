@@ -1927,7 +1927,7 @@ def test_theme_filter_keyboard_labels_and_enter_do_not_open_save_dialog(dialog, 
     widget.show()
     widget.activateWindow()
     app.processEvents()
-    for control, name in ((widget._theme_search, "Search themes"),
+    for control, name in ((widget._theme_search, "Search theme presets"),
                           (widget._theme_preset_combo, "Theme preset list")):
         assert control.accessibleName() == name
         assert control.accessibleDescription()
