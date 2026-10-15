@@ -1904,7 +1904,7 @@ class SelectiveAlphaTool(QWidget):
         self._next_step_lbl.setProperty("toolGuidance", True)
         self._next_step_lbl.setAccessibleName("Alpha Painter next step")
         self._next_step_lbl.setAccessibleDescription(
-            "Short action hint that explains the next recommended Alpha Painter task."
+            "Short action hint that explains whether to open an image, import shared zones, or save the current result."
         )
         wf_lay.addWidget(self._next_step_lbl)
 
@@ -2425,7 +2425,9 @@ class SelectiveAlphaTool(QWidget):
         import_note.setProperty("toolGuidance", True)
         import_note.setToolTip(self._shared_zone_import_instructions())
         import_note.setAccessibleName("Shared zone import guidance")
-        import_note.setAccessibleDescription(import_note.toolTip())
+        import_note.setAccessibleDescription(
+            "Explains how to import shared zones, save them to a full-layout slot, or copy one zone to the clipboard."
+        )
         iv.addWidget(import_note)
 
         self._import_shared_status = QLabel(
@@ -2446,7 +2448,9 @@ class SelectiveAlphaTool(QWidget):
             "Each detected alpha value becomes its own editable zone."
         )
         self._btn_import_shared.setAccessibleName("Import shared zones to canvas")
-        self._btn_import_shared.setAccessibleDescription(self._btn_import_shared.toolTip())
+        self._btn_import_shared.setAccessibleDescription(
+            "Imports shared zones from Alpha & RGBA Adjuster into the Alpha Painter canvas."
+        )
         self._btn_import_shared.clicked.connect(self._on_import_shared_zones)
         iv.addWidget(self._btn_import_shared)
 
@@ -2474,7 +2478,7 @@ class SelectiveAlphaTool(QWidget):
         )
         self._btn_import_zone_to_clipboard.setAccessibleName("Copy one shared zone to clipboard")
         self._btn_import_zone_to_clipboard.setAccessibleDescription(
-            self._btn_import_zone_to_clipboard.toolTip()
+            "Copies one shared zone into the zone clipboard so it can be pasted into the active zone."
         )
         self._btn_import_zone_to_clipboard.clicked.connect(self._on_import_zone_to_clipboard)
         iv.addWidget(self._btn_import_zone_to_clipboard)
