@@ -418,7 +418,7 @@ def _set_builder_tooltip(item: QTreeWidgetItem, columns: int, base_text: str, fi
 
 def _history_next_step_text(total: int, visible: int, filter_text: str) -> str:
     if total <= 0:
-        return "Next step: run a tool or export from a builder to add history entries here."
+        return "Next step: run a tool or export from a builder to record history here."
     if filter_text and visible <= 0:
         return "Next step: clear or loosen the current filter to bring matching rows back into view."
     if filter_text and visible < total:
@@ -520,7 +520,7 @@ class HistoryTab(QWidget):
         self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._session_status_lbl.setProperty("toolGuidance", True)
         layout.addWidget(self._session_status_lbl)
-        self._next_step_lbl = QLabel("Next step: run a tool or export from a builder to populate history here.")
+        self._next_step_lbl = QLabel("Next step: run a tool or export from a builder to record history here.")
         self._next_step_lbl.setWordWrap(True)
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._next_step_lbl.setProperty("toolGuidance", True)
@@ -535,7 +535,7 @@ class HistoryTab(QWidget):
         self._btn_clear = QPushButton("🗑  Clear All History")
         self._btn_export.setAccessibleName("Export history report")
         self._btn_export.setAccessibleDescription(
-            "Export the currently visible history sub-tab to a report file (CSV, JSON, HTML, or text)."
+            "Export the visible history view to a report file such as CSV, JSON, HTML, or text."
         )
         self._btn_clear.setAccessibleName("Clear all history")
         self._btn_clear.setAccessibleDescription(
@@ -817,7 +817,7 @@ class HistoryTab(QWidget):
         field.setAccessibleName(f"Filter {titles.get(name, name)} history")
         field.setAccessibleDescription(
             "Filter this history view by text or field expressions such as status:, file:, notes:, recovery:, or format:. "
-            "Clear the search to show all entries."
+            "Clear the search box or use the × button to show all entries."
         )
         field.setPlaceholderText("🔍  Filter by text or fields like status:, file:, notes:, recovery:, format:, or source: …")
         field.setClearButtonEnabled(True)

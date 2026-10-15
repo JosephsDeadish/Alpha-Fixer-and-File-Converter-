@@ -498,7 +498,7 @@ class SettingsDialog(QDialog):
         self._theme_search.setClearButtonEnabled(True)
         self._theme_search.setToolTip(
             "Type part of a theme name to filter the preset list below.\n"
-            "Press Enter to focus the matching result; filtering never changes the active theme."
+            "Press Enter to focus the first match; filtering never changes the active theme."
         )
         self._theme_search.setAccessibleDescription(self._theme_search.toolTip())
         self._theme_search.installEventFilter(self)
@@ -518,7 +518,7 @@ class SettingsDialog(QDialog):
         self._theme_preset_combo.setToolTip(
             "Choose an application theme.\n"
             "Locked entries stay greyed out until they are unlocked; hidden themes show unlock markers.\n"
-            "Use the live preview below to compare the layout before you apply it."
+            "Use the live preview below to compare layouts before you apply one."
         )
         self._theme_preset_combo.setAccessibleDescription(self._theme_preset_combo.toolTip())
         self._rebuild_theme_combo()
@@ -540,20 +540,20 @@ class SettingsDialog(QDialog):
         self._btn_export_theme.setMinimumWidth(110)
         self._btn_import_theme.setMinimumWidth(110)
         self._btn_export_theme.setToolTip(
-            "Export the current theme settings to a JSON backup file.\n"
+            "Export the current theme settings to a JSON recovery backup.\n"
             "Use this as a recovery copy or move the theme to another install."
         )
         self._btn_import_theme.setToolTip(
-            "Import a theme from a JSON backup file and apply it immediately.\n"
+            "Import a theme from a JSON recovery backup and apply it immediately.\n"
             "Use this to restore a saved look or bring a backup in from another install."
         )
         self._btn_export_theme.setAccessibleName("Export theme backup")
         self._btn_export_theme.setAccessibleDescription(
-            "Exports the current theme settings to a JSON backup file for safekeeping, recovery, or transfer."
+            "Exports the current theme settings to a JSON recovery backup for safekeeping, recovery, or transfer."
         )
         self._btn_import_theme.setAccessibleName("Import theme backup")
         self._btn_import_theme.setAccessibleDescription(
-            "Imports a JSON theme backup and applies it immediately so you can recover a saved look or transfer a preset from another install."
+            "Imports a JSON theme recovery backup and applies it immediately so you can recover a saved look or transfer a preset from another install."
         )
         psl.addWidget(self._btn_save_theme, 1, 0)
         psl.addWidget(self._btn_delete_theme, 1, 1)
@@ -2841,7 +2841,7 @@ class SettingsDialog(QDialog):
         )
         self._btn_reset_unlocks.setAccessibleName("Reset unlocks and clicks")
         self._btn_reset_unlocks.setAccessibleDescription(
-            "Resets unlock flags and click count while preserving the rest of your settings and theme choices."
+            "Resets unlock flags and click count while preserving the rest of your settings, theme choices, and live preview setup."
         )
         btn_row.addWidget(self._btn_reset_unlocks)
         btn_row.addStretch(1)
