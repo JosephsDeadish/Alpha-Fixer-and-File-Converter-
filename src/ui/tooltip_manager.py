@@ -4211,8 +4211,8 @@ _DUMBED: dict[str, list[str]] = {
     ],
     "sa_copy_all_zones": [
         "Copy all zone masks at once. Every zone, one click.",
-        "Saves the current state of all zones to a clipboard.",
-        "Clipboard survives opening a new image. Paste later.",
+        "Saves the current state of all zones to the all-zones clipboard.",
+        "The all-zones clipboard survives opening a new image. Paste later.",
         "Combine with Paste All Zones to clone a layout across images.",
         "Each mask is stored as a separate array. All of them.",
         "Not the same as the single-zone clipboard. Separate thing.",
@@ -4230,7 +4230,7 @@ _DUMBED: dict[str, list[str]] = {
         "Pasting zones from clipboard. All of them. Simultaneously.",
     ],
     "sa_az_slot_combo": [
-        "Pick which all-zones slot to copy into or paste from.",
+        "Pick which all-zones clipboard slot to copy into or paste from.",
         "Each slot holds a complete snapshot of all zone masks.",
         "Multiple slots let you keep several layouts at once without repainting.",
         "Slots survive image switches. Copy, switch images, paste.",
@@ -4240,7 +4240,7 @@ _DUMBED: dict[str, list[str]] = {
         "It's a dropdown. Pick a slot. Use Copy All or Paste All on it.",
     ],
     "sa_az_slot_add": [
-        "Add a new empty all-zones slot to the dropdown.",
+        "Add a new empty all-zones clipboard slot to the dropdown.",
         "Use this when you've filled all existing slots and need another.",
         "New slot starts empty. Fill it with Copy All Zones.",
         "Slots are added at the end of the list.",
@@ -6430,7 +6430,7 @@ _VULGAR: dict[str, list[str]] = {
     ],
     "sa_copy_all_zones": [
         "Copy every zone mask at once. All of them. One click. Done.",
-        "Clipboard persists when you load a different image. Intentional and useful.",
+        "The all-zones clipboard persists when you load a different image. Intentional and useful.",
         "All zone masks. Even the empty ones. Especially the empty ones.",
         "Pair with Paste All Zones to clone your entire zone layout onto a new canvas.",
         "Separate from the single-zone clipboard and the 15 slots. More is more.",
@@ -6439,17 +6439,17 @@ _VULGAR: dict[str, list[str]] = {
         "Copies all zones. Every last one. The clipboard doesn't discriminate.",
     ],
     "sa_paste_all_zones": [
-        "Paste every zone from the clipboard. All of them. Simultaneously. Chaos managed.",
+        "Paste every zone from the all-zones clipboard. All of them. Simultaneously. Chaos managed.",
         "Masks resize automatically if your current image is a different resolution. You're welcome.",
         "One undo step for all zones. Ctrl+Z undoes everything if you immediately regret it.",
-        "Empty clipboard zones clear the corresponding zones on canvas. As expected. No surprises.",
+        "Empty all-zones clipboard zones clear the corresponding zones on canvas. As expected. No surprises.",
         "Greyed out until you Copy All Zones first. Earn it.",
         "Replaces your current zone work entirely. Make sure you want this.",
         "Best used after Copy All Zones. That's literally what this pair of buttons is for.",
         "All zones replaced in one atomic paste. Beautiful. Terrifying. Both.",
     ],
     "sa_az_slot_combo": [
-        "Pick which all-zones slot to dump your mask snapshot into or pull one out of.",
+        "Pick which all-zones clipboard slot to dump your mask snapshot into or pull one out of.",
         "Multiple slots so you can hoard zone layouts like a digital pack rat. Very on-brand.",
         "Slots survive image switches. Copy, open a new image, paste, profit.",
         "Slot label shows what's in there from last time. If it's empty it says empty.",
@@ -6459,7 +6459,7 @@ _VULGAR: dict[str, list[str]] = {
         "Select here before using Copy All or Paste All. Order of operations matters.",
     ],
     "sa_az_slot_add": [
-        "Add another all-zones slot because apparently the existing ones weren't enough for you.",
+        "Add another all-zones clipboard slot because apparently the existing ones weren't enough for you.",
         "New slot is empty. Fill it with Copy All Zones or leave it sitting there judging you.",
         "There's no limit on slots. Go nuts. Add fifty. We won't stop you.",
         "Slots append to the bottom of the dropdown. Scroll if you've added a stupid number of them.",

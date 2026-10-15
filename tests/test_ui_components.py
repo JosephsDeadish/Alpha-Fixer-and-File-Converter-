@@ -3598,6 +3598,9 @@ class TestTooltipManager(unittest.TestCase):
         for key in ("sa_zone_copy_mask", "sa_zone_paste_mask"):
             for tips in (_NORMAL[key], _DUMBED[key], _VULGAR[key]):
                 self.assertIn("zone clipboard", " ".join(tips).lower())
+        for key in ("sa_copy_all_zones", "sa_paste_all_zones", "sa_az_slot_combo", "sa_az_slot_add"):
+            for tips in (_NORMAL[key], _DUMBED[key], _VULGAR[key]):
+                self.assertIn("all-zones clipboard", " ".join(tips).lower())
         for tips in (_NORMAL["tooltip_mode_combo"], _DUMBED["tooltip_mode_combo"], _VULGAR["tooltip_mode_combo"]):
             self.assertIn("No Filter 🤬", " ".join(tips))
         self.assertIn("No Filter 🤬", " ".join(_VULGAR["settings_general_tab"]))
@@ -8237,7 +8240,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Choose the zone to edit", self._widget._active_zone_combo.toolTip())
         self.assertIn("editable zones", self._widget._btn_import_shared.accessibleDescription().lower())
         self.assertIn("clipboard", self._widget._btn_import_zone_to_clipboard.toolTip().lower())
-        self.assertIn("copy one zone for reuse", self._widget._next_step_lbl.accessibleDescription().lower())
+        self.assertIn("copy one zone to the zone clipboard", self._widget._next_step_lbl.accessibleDescription().lower())
         self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=np.uint8))])
         self.assertIn("shared zone(s) ready", self._widget._import_shared_status.text())
         self.assertIn("Next: open an image, import the shared zones", self._widget._import_shared_status.text())

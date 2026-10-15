@@ -1786,7 +1786,7 @@ class SelectiveAlphaTool(QWidget):
         if has_shared_zones:
             return (
                 "Next step: import the shared zones, refine any zones you need, copy one zone to "
-                "the clipboard if you want reuse, then save when the preview looks right."
+                "the zone clipboard if you want reuse, then save when the preview looks right."
             )
         return "Next step: paint or refine your zones, then save when the preview looks right."
 
@@ -1921,7 +1921,7 @@ class SelectiveAlphaTool(QWidget):
         self._next_step_lbl.setProperty("toolGuidance", True)
         self._next_step_lbl.setAccessibleName("Alpha Painter next step")
         self._next_step_lbl.setAccessibleDescription(
-            "Short action hint that explains whether to open an image, import shared zones, save the current result, or copy one zone for reuse."
+            "Short action hint that explains whether to open an image, import shared zones, save the current result, or copy one zone to the zone clipboard for reuse."
         )
         wf_lay.addWidget(self._next_step_lbl)
 
