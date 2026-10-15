@@ -1774,7 +1774,7 @@ class SelectiveAlphaTool(QWidget):
             if has_shared_zones:
                 return (
                     "Next step: open an image, then import the shared zones, save them to a Full "
-                    "Layout Slot, or copy one zone to the clipboard."
+                    "Layout Slot, or copy one zone to the clipboard for reuse."
                 )
             return "Next step: open an image or copy shared zones from Alpha & RGBA Adjuster to begin editing."
         if result_ready:
@@ -2419,7 +2419,7 @@ class SelectiveAlphaTool(QWidget):
 
         import_note = QLabel(
             "Bring detected zones here from Alpha & RGBA Adjuster, then import them onto the canvas,\n"
-            "save the whole set into a Full Layout Slot, or copy one zone into the zone clipboard."
+            "save the whole set into a Full Layout Slot, or copy one zone to the clipboard for quick reuse."
         )
         import_note.setWordWrap(True)
         import_note.setProperty("toolGuidance", True)
