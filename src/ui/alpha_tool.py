@@ -2099,7 +2099,7 @@ class AlphaFixerTab(QWidget):
                 )
                 act.setToolTip(
                     f"Send Zone {idx + 1} (α={alpha_val}) directly to the Selective Alpha\n"
-                    "single-zone clipboard. The app switches there automatically.\n"
+                    "zone clipboard. The app switches there automatically.\n"
                     "Use 'Paste Mask' on any zone to apply it immediately."
                 )
                 # Capture loop variables explicitly to avoid late-binding closure issues.

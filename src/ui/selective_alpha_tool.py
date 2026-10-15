@@ -2554,7 +2554,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_import_to_az_slot.clicked.connect(self._on_import_to_az_slot)
         iv.addWidget(self._btn_import_to_az_slot)
 
-        # Item 23: copy one shared zone to the single-zone clipboard
+        # Item 23: copy one shared zone to the zone clipboard
         self._btn_import_zone_to_clipboard = QPushButton("📋 Copy One Zone → Clipboard")
         self._btn_import_zone_to_clipboard.setMinimumHeight(26)
         self._btn_import_zone_to_clipboard.setEnabled(False)
@@ -3415,8 +3415,8 @@ class SelectiveAlphaTool(QWidget):
         the Import button.
 
         When exactly one zone is received it is also automatically copied to
-        the single-zone clipboard so the user can paste it directly without
-        any extra clicks (item 23).
+        the zone clipboard so the user can paste it directly without any
+        extra clicks (item 23).
 
         Parameters
         ----------
@@ -3444,7 +3444,7 @@ class SelectiveAlphaTool(QWidget):
         displayed = zones[:_display_max]
         suffix = "…" if count > _display_max else ""
 
-        # Auto-copy to single-zone clipboard when exactly one zone is sent (item 23).
+        # Auto-copy to zone clipboard when exactly one zone is sent (item 23).
         if count == 1:
             alpha_val, bool_mask = zones[0]
             self._mask_clipboard = (bool_mask.astype(np_imp.uint8) * 255)
@@ -3550,7 +3550,7 @@ class SelectiveAlphaTool(QWidget):
         self._refresh_session_status()
 
     def _on_import_zone_to_clipboard(self) -> None:
-        """Copy one zone from shared zones to the single-zone clipboard (item 23).
+        """Copy one zone from shared zones to the zone clipboard (item 23).
 
         If more than one zone was imported, a small picker dialog is shown so
         the user can select which zone to copy.  The mask is placed in
@@ -3589,7 +3589,7 @@ class SelectiveAlphaTool(QWidget):
         self._mask_clipboard = (bool_mask.astype(np_imp.uint8) * 255)
         self._ze_paste_btn.setEnabled(True)
         self._import_shared_status.setText(
-            f"✅ Zone {zone_idx + 1} copied to the single-zone clipboard.\n"
+            f"✅ Zone {zone_idx + 1} copied to the zone clipboard.\n"
             "Next: use 'Paste Zone' on the active zone, or save the full set into a Full Layout Slot first."
         )
         if self._sound is not None:
