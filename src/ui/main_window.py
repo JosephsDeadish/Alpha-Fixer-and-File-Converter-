@@ -1484,7 +1484,7 @@ class MainWindow(QMainWindow):
         btn_settings.setMinimumWidth(88)
         btn_settings.setMaximumWidth(170)
         btn_settings.setMinimumHeight(26)
-        btn_settings.setToolTip("Open Settings — theme backup & recovery, sound, effects (Ctrl+,)")
+        btn_settings.setToolTip("Open Settings — theme backup/recovery, sound, and effects (Ctrl+,)")
         btn_settings.clicked.connect(self._open_settings)
         utility_layout.addWidget(btn_settings)
         self._btn_settings = btn_settings
@@ -1493,7 +1493,7 @@ class MainWindow(QMainWindow):
         btn_help.setMinimumWidth(74)
         btn_help.setMaximumWidth(130)
         btn_help.setMinimumHeight(26)
-        btn_help.setToolTip("Keyboard shortcuts, About, Export/Import settings")
+        btn_help.setToolTip("Keyboard shortcuts, About, and settings import/export help")
         btn_help.clicked.connect(self._show_help_menu)
         utility_layout.addWidget(btn_help)
         self._btn_help = btn_help

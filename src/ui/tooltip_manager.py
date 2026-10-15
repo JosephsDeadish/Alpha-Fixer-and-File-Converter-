@@ -770,7 +770,7 @@ _NORMAL: dict[str, list[str]] = {
         "Search the logs when you need to find that one weird session you half-remember and half-resent.",
     ],
     "settings_theme_tab": [
-        "The Theme tab: choose a preset theme, edit colors, and keep a recovery backup of your setup.",
+        "Theme tab: choose presets, edit colors, and keep a recovery backup of your setup.",
         "Click any color swatch to change that part of the palette. Changes update live.",
         "Export your current theme as a JSON recovery backup or import one to restore a saved look.",
         "Hidden themes appear here once you unlock them.",
@@ -3258,7 +3258,7 @@ _DUMBED: dict[str, list[str]] = {
         "Congratulations, you found the search box. It works exactly like you'd expect.",
     ],
     "settings_theme_tab": [
-        "Theme tab. Choose presets, edit colors, and keep a recovery backup of your look.",
+        "Theme tab: choose presets, edit colors, and keep a recovery backup of your look.",
         "Click any color swatch to update that part of the palette. Changes apply live.",
         "Export your theme as a recovery backup file or import one to restore a saved look.",
         "Unlocked themes appear here once you earn them.",
@@ -3268,7 +3268,7 @@ _DUMBED: dict[str, list[str]] = {
         "Locked themes show a lock icon until they are unlocked by normal use.",
     ],
     "settings_general_tab": [
-        "General tab. Click effects, trails, cursor, font, and tooltip mode live here.",
+        "General tab: click effects, trails, cursor, font, tooltip mode, and live preview helpers.",
         "Most settings apply immediately. No save button needed.",
         "Theme-matched trail, effect, and cursor options automatically match the active theme when it changes.",
         "Tooltip Mode controls how tips are written, including the unfiltered No Filter 🤬 mode.",
@@ -6000,7 +6000,7 @@ _VULGAR: dict[str, list[str]] = {
         "Partial matches work. 'we' finds 'webp'. 'ps2' finds anything with PS2 in the preset name.",
     ],
     "settings_theme_tab": [
-        "Theme tab. Colors, presets, custom schemes, and recovery backup palette tweaks.",
+        "Theme tab: colors, presets, custom schemes, and recovery backup palette tweaks.",
         "Click any color button to change that aspect of the app. Changes apply immediately in the preview.",
         "Unlocked themes show up here with a little 🔓. Everything else stays hidden until earned.",
         "Export saves your theme color JSON as a recovery backup. Import restores a saved look.",
@@ -6012,7 +6012,7 @@ _VULGAR: dict[str, list[str]] = {
         "This tab keeps presets, palette editing, custom backgrounds, and recovery backups in one place.",
     ],
     "settings_general_tab": [
-        "General tab. Effects, trails, cursors, fonts, tooltip mode, and the live preview.",
+        "General tab: effects, trails, cursors, fonts, tooltip mode, and the live preview.",
         "Everything in here applies instantly. No Apply button. No Save. Just real-time changes.",
         "Use-theme checkboxes automatically match the active theme's trail, effect, or cursor.",
         "Tooltip Mode: Normal is helpful. Dumbed Down is snarky. No Filter 🤬 is the fully unfiltered mode.",

@@ -518,7 +518,7 @@ class SettingsDialog(QDialog):
         self._theme_preset_combo.setToolTip(
             "Choose an application theme.\n"
             "Locked entries stay greyed out until they are unlocked; hidden themes show unlock markers.\n"
-            "Use the live preview below to review the layout before you apply it."
+            "Use the live preview below to compare the layout before you apply it."
         )
         self._theme_preset_combo.setAccessibleDescription(self._theme_preset_combo.toolTip())
         self._rebuild_theme_combo()
@@ -541,7 +541,7 @@ class SettingsDialog(QDialog):
         self._btn_import_theme.setMinimumWidth(110)
         self._btn_export_theme.setToolTip(
             "Export the current theme settings to a JSON backup file.\n"
-            "Use this as a recovery copy, or move the theme to another install."
+            "Use this as a recovery copy or move the theme to another install."
         )
         self._btn_import_theme.setToolTip(
             "Import a theme from a JSON backup file and apply it immediately.\n"
@@ -591,7 +591,7 @@ class SettingsDialog(QDialog):
             "Follow active theme background instead of a custom file"
         )
         self._use_theme_bg_check.setToolTip(
-            "Use the active theme's built-in background instead of any custom file below.\n"
+            "Use the active theme's built-in background instead of the custom file below.\n"
             "Uncheck it to return to a custom file or the plain solid colour."
         )
         self._use_theme_bg_check.setAccessibleName("Use theme background instead of custom file")
@@ -644,7 +644,7 @@ class SettingsDialog(QDialog):
         _cbg_file_hl.addWidget(self._custom_bg_path_edit, 1)
         self._custom_bg_browse_btn = QPushButton("Browse…")
         self._custom_bg_browse_btn.setMinimumWidth(90)
-        self._custom_bg_browse_btn.setToolTip("Browse for a background image or video file.")
+        self._custom_bg_browse_btn.setToolTip("Browse for a custom background image, GIF, or video file.")
         self._custom_bg_browse_btn.setAccessibleName("Browse custom background file")
         self._custom_bg_browse_btn.setAccessibleDescription(
             "Opens a file picker to choose a custom background image or video."
@@ -670,7 +670,7 @@ class SettingsDialog(QDialog):
         self._custom_bg_recent_combo.setMinimumWidth(220)
         self._custom_bg_recent_combo.setToolTip(
             "Choose from recently used background files.\n"
-            "Selecting an entry will fill the background path field."
+            "Selecting an entry fills the background path field."
         )
         self._custom_bg_recent_combo.setAccessibleName("Recent background files")
         self._custom_bg_recent_combo.setAccessibleDescription(self._custom_bg_recent_combo.toolTip())
