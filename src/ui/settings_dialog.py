@@ -482,8 +482,8 @@ class SettingsDialog(QDialog):
         ev.addWidget(effects_intro)
 
         # ---- Preset GroupBox ----
-        grp_preset_select = QGroupBox("Theme Presets & Backup")
-        ps_vl = QVBoxLayout(grp_preset_select)
+        self._grp_preset_select = QGroupBox("Active Theme Preset, Backup & Recovery")
+        ps_vl = QVBoxLayout(self._grp_preset_select)
         ps_vl.setSpacing(4)
         ps_vl.setContentsMargins(6, 4, 6, 4)
 
@@ -494,7 +494,7 @@ class SettingsDialog(QDialog):
         self._theme_search = QLineEdit()
         filter_label.setBuddy(self._theme_search)
         self._theme_search.setAccessibleName("Filter themes")
-        self._theme_search.setPlaceholderText("Type to filter theme names…")
+        self._theme_search.setPlaceholderText("Filter theme names…")
         self._theme_search.setClearButtonEnabled(True)
         self._theme_search.setToolTip(
             "Type part of a theme name to filter the list below.\n"
@@ -517,7 +517,7 @@ class SettingsDialog(QDialog):
         self._theme_preset_combo.setMinimumWidth(200)
         self._theme_preset_combo.setToolTip(
             "Choose a visual theme for the application.\n"
-            "Hover over each preset to preview its style, and watch for unlock markers on hidden themes."
+            "Hover over each preset to preview its style, watch for unlock markers on hidden themes, and use the live preview below to check the layout."
         )
         self._theme_preset_combo.setAccessibleDescription(self._theme_preset_combo.toolTip())
         self._rebuild_theme_combo()
@@ -562,12 +562,12 @@ class SettingsDialog(QDialog):
         psl.setColumnStretch(2, 1)
         psl.setColumnStretch(3, 1)
         ps_vl.addLayout(psl)
-        tv.addWidget(grp_preset_select)
+        tv.addWidget(self._grp_preset_select)
 
         # ---- Custom Background GroupBox (item 81) ----
-        grp_custom_bg = QGroupBox("Custom Background")
-        grp_custom_bg.setAcceptDrops(True)
-        custom_bg_layout = QVBoxLayout(grp_custom_bg)
+        self._grp_custom_bg = QGroupBox("Custom Background & Live Preview")
+        self._grp_custom_bg.setAcceptDrops(True)
+        custom_bg_layout = QVBoxLayout(self._grp_custom_bg)
         custom_bg_layout.setSpacing(6)
         self._custom_bg_check = QCheckBox("Enable custom background (image / GIF / video)")
         self._custom_bg_check.setToolTip(
@@ -584,7 +584,7 @@ class SettingsDialog(QDialog):
         _cbg_vl.setContentsMargins(16, 0, 0, 0)
         _cbg_vl.setSpacing(4)
         self._use_theme_bg_check = QCheckBox(
-            "Use theme background  (override disabled — theme controls background)"
+            "Use theme background instead of a custom file"
         )
         self._use_theme_bg_check.setToolTip(
             "When enabled the active theme's built-in background is used,\n"
@@ -599,6 +599,10 @@ class SettingsDialog(QDialog):
         self._custom_bg_theme_info_lbl.setProperty("settingsHint", True)
         self._custom_bg_theme_info_lbl.setWordWrap(True)
         self._custom_bg_theme_info_lbl.setVisible(False)
+        self._custom_bg_theme_info_lbl.setAccessibleName("Theme background override notice")
+        self._custom_bg_theme_info_lbl.setAccessibleDescription(
+            "Explains that the active theme's built-in background is overriding the custom file selection."
+        )
         _cbg_vl.addWidget(self._custom_bg_theme_info_lbl)
         self._custom_bg_status_lbl = QLabel("")
         self._custom_bg_status_lbl.setProperty("settingsHint", True)
@@ -606,6 +610,9 @@ class SettingsDialog(QDialog):
         self._custom_bg_status_lbl.setWordWrap(True)
         self._custom_bg_status_lbl.setVisible(False)
         self._custom_bg_status_lbl.setAccessibleName("Custom background status")
+        self._custom_bg_status_lbl.setAccessibleDescription(
+            "Shows whether the selected custom background file can be used and previews it when possible."
+        )
         _cbg_vl.addWidget(self._custom_bg_status_lbl)
         # File picker row (hidden when use-theme is on)
         self._custom_bg_file_row = QWidget()
@@ -622,13 +629,18 @@ class SettingsDialog(QDialog):
             "You can also drag a local file from Explorer/Finder onto this field.\n"
             "Use the clear button to remove the path."
         )
-        self._custom_bg_path_edit.setAccessibleDescription(self._custom_bg_path_edit.toolTip())
+        self._custom_bg_path_edit.setAccessibleDescription(
+            "Path to the custom background file that will be previewed live."
+        )
         self._custom_bg_path_edit.setReadOnly(False)
         _cbg_file_hl.addWidget(self._custom_bg_path_edit, 1)
         self._custom_bg_browse_btn = QPushButton("Browse…")
         self._custom_bg_browse_btn.setMinimumWidth(90)
         self._custom_bg_browse_btn.setToolTip("Browse for a background image or video file.")
-        self._custom_bg_browse_btn.setAccessibleDescription(self._custom_bg_browse_btn.toolTip())
+        self._custom_bg_browse_btn.setAccessibleName("Browse custom background file")
+        self._custom_bg_browse_btn.setAccessibleDescription(
+            "Opens a file picker to choose a custom background image or video."
+        )
         _cbg_file_hl.addWidget(self._custom_bg_browse_btn)
         _cbg_vl.addWidget(self._custom_bg_file_row)
         self._custom_bg_preview = _BackgroundPreviewLabel()
@@ -637,6 +649,10 @@ class SettingsDialog(QDialog):
         self._custom_bg_preview.setMinimumSize(220, 124)
         self._custom_bg_preview.setWordWrap(True)
         self._custom_bg_preview.setVisible(False)
+        self._custom_bg_preview.setAccessibleName("Custom background live preview")
+        self._custom_bg_preview.setAccessibleDescription(
+            "Shows a live preview of the selected background image, GIF, or video when one is available."
+        )
         _cbg_vl.addWidget(self._custom_bg_preview)
         self._custom_bg_recent_row = QWidget()
         _cbg_recent_hl = QHBoxLayout(self._custom_bg_recent_row)
@@ -999,9 +1015,9 @@ class SettingsDialog(QDialog):
                 self._on_custom_bg_changed()
 
         self._custom_bg_browse_btn.clicked.connect(_browse_bg_file)
-        self._custom_bg_group = grp_custom_bg
-        grp_custom_bg.installEventFilter(self)
-        tv.addWidget(grp_custom_bg)
+        self._custom_bg_group = self._grp_custom_bg
+        self._grp_custom_bg.installEventFilter(self)
+        tv.addWidget(self._grp_custom_bg)
 
         grp_colors = QGroupBox("Theme Colors")
         color_grid = QGridLayout(grp_colors)
@@ -2790,6 +2806,7 @@ class SettingsDialog(QDialog):
         self._btn_reset.setToolTip(
             "⚠ Reset all settings, unlock flags, and history to factory defaults.\n"
             "This clears custom themes and saved history from this install.\n"
+            "Use Export Theme Backup first if you want a recovery copy.\n"
             "This cannot be undone. Restart afterward to fully apply the reset."
         )
         self._btn_reset.setAccessibleName("Reset all settings")
