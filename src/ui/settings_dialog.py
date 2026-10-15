@@ -540,19 +540,19 @@ class SettingsDialog(QDialog):
         self._btn_import_theme.setMinimumWidth(110)
         self._btn_export_theme.setToolTip(
             "Export the current theme settings to a JSON backup file.\n"
-            "Use this to keep a recovery copy or move the theme to another install."
+            "Use this to keep a recovery copy, restore it later, or move the theme to another install."
         )
         self._btn_import_theme.setToolTip(
             "Import a theme from a JSON backup file and apply it immediately.\n"
-            "Use this to restore a saved look or bring a theme in from another install."
+            "Use this to restore a saved look or bring a backup in from another install."
         )
         self._btn_export_theme.setAccessibleName("Export theme backup")
         self._btn_export_theme.setAccessibleDescription(
-            "Exports the current theme settings to a JSON backup file for safekeeping or transfer."
+            "Exports the current theme settings to a JSON backup file for safekeeping, recovery, or transfer."
         )
         self._btn_import_theme.setAccessibleName("Import theme backup")
         self._btn_import_theme.setAccessibleDescription(
-            "Imports a JSON theme backup and applies it immediately."
+            "Imports a JSON theme backup and applies it immediately so you can recover a saved look."
         )
         psl.addWidget(self._btn_save_theme, 1, 0)
         psl.addWidget(self._btn_delete_theme, 1, 1)
@@ -2400,7 +2400,7 @@ class SettingsDialog(QDialog):
         self._scale_preview_frame.setObjectName("scalePreviewFrame")
         self._scale_preview_frame.setAccessibleName("UI scale live preview")
         self._scale_preview_frame.setAccessibleDescription(
-            "Shows how button height, spacing, border radius, and padding change live."
+            "Shows how button height, spacing, border radius, and padding change live as you edit the layout controls."
         )
         scale_preview_layout = QVBoxLayout(self._scale_preview_frame)
         scale_preview_layout.setContentsMargins(8, 8, 8, 8)
@@ -2428,7 +2428,7 @@ class SettingsDialog(QDialog):
         sample_row.addWidget(self._scale_preview_combo, 1)
         scale_preview_layout.addLayout(sample_row)
         self._scale_preview_detail = QLabel(
-            "Button height, spacing, border radius, and padding all update live."
+            "Button height, spacing, border radius, and padding all update live as you change the controls."
         )
         self._scale_preview_detail.setWordWrap(True)
         self._scale_preview_detail.setAccessibleDescription(

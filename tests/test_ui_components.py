@@ -3598,6 +3598,12 @@ class TestTooltipManager(unittest.TestCase):
         for tips in (_NORMAL["tooltip_mode_combo"], _DUMBED["tooltip_mode_combo"], _VULGAR["tooltip_mode_combo"]):
             self.assertIn("No Filter 🤬", " ".join(tips))
         self.assertIn("No Filter 🤬", " ".join(_VULGAR["settings_general_tab"]))
+        self.assertIn("backup", " ".join(_NORMAL["settings_theme_tab"]).lower())
+        self.assertIn("backup", " ".join(_DUMBED["settings_theme_tab"]).lower())
+        self.assertIn("backup", " ".join(_VULGAR["settings_theme_tab"]).lower())
+        self.assertIn("live preview", " ".join(_NORMAL["settings_general_tab"]).lower())
+        self.assertIn("live preview", " ".join(_DUMBED["settings_general_tab"]).lower())
+        self.assertIn("live preview", " ".join(_VULGAR["settings_general_tab"]).lower())
 
     def test_alpha_painter_tool_tips_use_brush_erase_move_language(self):
         from src.ui.tooltip_manager import _DUMBED, _NORMAL, _VULGAR
@@ -8919,15 +8925,17 @@ class TestDialogAccessibility(unittest.TestCase):
         self.assertIn("appearance", settings._btn_reset_unlocks.toolTip())
         self.assertIn("Export theme backup", settings._btn_export_theme.accessibleName())
         self.assertIn("JSON backup file", settings._btn_export_theme.toolTip())
+        self.assertIn("recovery", settings._btn_export_theme.accessibleDescription().lower())
         self.assertIn("Import theme backup", settings._btn_import_theme.accessibleName())
-        self.assertIn("restore a saved look", settings._btn_import_theme.toolTip())
+        self.assertIn("backup", settings._btn_import_theme.toolTip().lower())
+        self.assertIn("recover a saved look", settings._btn_import_theme.accessibleDescription().lower())
         self.assertEqual("UI scale live preview", settings._scale_preview_frame.accessibleName())
-        self.assertIn("button height, spacing, border radius, and padding", settings._scale_preview_frame.accessibleDescription())
+        self.assertIn("change live as you edit the layout controls", settings._scale_preview_frame.accessibleDescription().lower())
         self.assertEqual("Live preview heading", settings._scale_preview_title.accessibleName())
         self.assertIn("current UI scale", settings._scale_preview_sample_label.accessibleDescription())
         self.assertEqual("Scale preview sample button", settings._scale_preview_button.accessibleName())
         self.assertEqual("Scale preview sample combo box", settings._scale_preview_combo.accessibleName())
-        self.assertIn("live preview reflects", settings._scale_preview_detail.accessibleDescription())
+        self.assertIn("change the controls", settings._scale_preview_detail.text().lower())
         self.assertEqual("Save custom theme", settings._btn_save_theme.accessibleName())
         self.assertEqual("Delete custom theme", settings._btn_delete_theme.accessibleName())
         self.assertIn("theme names", settings._theme_search.placeholderText())
