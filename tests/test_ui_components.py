@@ -3611,7 +3611,7 @@ class TestTooltipManager(unittest.TestCase):
                 with self.subTest(key=key, mode=mode):
                     text = " ".join(mode[key]).lower()
                     self.assertIn("zone", text)
-                    self.assertIn("clipboard", text)
+                    self.assertIn("zone clipboard", text)
                     self.assertNotIn("copy mask", text)
                     self.assertNotIn("paste mask", text)
 
