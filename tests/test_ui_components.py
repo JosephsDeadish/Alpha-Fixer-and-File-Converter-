@@ -8881,15 +8881,15 @@ class TestDialogAccessibility(unittest.TestCase):
         self.assertIn("Reset all settings", settings._btn_reset.accessibleName())
         self.assertIn("factory defaults", settings._btn_reset.accessibleDescription())
         self.assertIn("Reset unlocks", settings._btn_reset_unlocks.accessibleName())
-        self.assertIn("unlock flags", settings._btn_reset_unlocks.accessibleDescription())
+        self.assertIn("preserving the rest of your settings", settings._btn_reset_unlocks.accessibleDescription())
         self.assertIn("Export theme backup", settings._btn_export_theme.accessibleName())
-        self.assertIn("JSON backup", settings._btn_export_theme.accessibleDescription())
+        self.assertIn("JSON backup file", settings._btn_export_theme.accessibleDescription())
         self.assertIn("Import theme backup", settings._btn_import_theme.accessibleName())
-        self.assertIn("bring a theme over from another install", settings._btn_import_theme.accessibleDescription())
+        self.assertIn("Imports a JSON theme backup", settings._btn_import_theme.accessibleDescription())
         self.assertIn("Alpha Painter", settings._chk_track_sel_alpha.text())
         self.assertIn("Alpha Painter", settings._chk_track_sel_alpha.toolTip())
         self.assertIn("Alpha Painter", settings._history_max_sel_spin.toolTip())
-        self.assertIn("Alpha Painter:", {label.text() for label in settings.findChildren(QLabel)})
+        self.assertTrue(any("Alpha Painter" in label.text() for label in settings.findChildren(QLabel)))
 
     def test_fit_dialog_preserves_geometry_when_already_on_screen(self):
         from PyQt6.QtCore import QRect

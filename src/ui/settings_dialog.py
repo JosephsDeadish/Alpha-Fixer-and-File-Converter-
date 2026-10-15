@@ -539,9 +539,13 @@ class SettingsDialog(QDialog):
             "Use this to restore a saved look or bring a theme over from another install."
         )
         self._btn_export_theme.setAccessibleName("Export theme backup")
-        self._btn_export_theme.setAccessibleDescription(self._btn_export_theme.toolTip())
+        self._btn_export_theme.setAccessibleDescription(
+            "Exports the current theme settings to a JSON backup file for safekeeping or transfer."
+        )
         self._btn_import_theme.setAccessibleName("Import theme backup")
-        self._btn_import_theme.setAccessibleDescription(self._btn_import_theme.toolTip())
+        self._btn_import_theme.setAccessibleDescription(
+            "Imports a JSON theme backup and applies it immediately."
+        )
         psl.addWidget(self._btn_save_theme, 1, 0)
         psl.addWidget(self._btn_delete_theme, 1, 1)
         psl.addWidget(self._btn_export_theme, 1, 2)
@@ -2767,7 +2771,9 @@ class SettingsDialog(QDialog):
             "This cannot be undone. Restart afterward to fully apply the reset."
         )
         self._btn_reset.setAccessibleName("Reset all settings")
-        self._btn_reset.setAccessibleDescription(self._btn_reset.toolTip())
+        self._btn_reset.setAccessibleDescription(
+            "Resets all settings, unlock flags, and history to factory defaults."
+        )
         btn_row.addWidget(self._btn_reset)
         self._btn_reset_unlocks = QPushButton("Reset Unlocks & Clicks…")
         self._btn_reset_unlocks.setToolTip(
@@ -2776,7 +2782,9 @@ class SettingsDialog(QDialog):
             "Useful for re-testing hidden theme unlocks without losing your setup."
         )
         self._btn_reset_unlocks.setAccessibleName("Reset unlocks and clicks")
-        self._btn_reset_unlocks.setAccessibleDescription(self._btn_reset_unlocks.toolTip())
+        self._btn_reset_unlocks.setAccessibleDescription(
+            "Resets unlock flags and click count while preserving the rest of your settings."
+        )
         btn_row.addWidget(self._btn_reset_unlocks)
         btn_row.addStretch(1)
         self._btn_close = QPushButton("Close")
