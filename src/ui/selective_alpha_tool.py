@@ -1787,7 +1787,7 @@ class SelectiveAlphaTool(QWidget):
     def _shared_zone_import_instructions() -> str:
         return (
             "In Alpha & RGBA Adjuster: turn on 'Highlight Alpha Values', right-click the preview, "
-            "then choose 'Copy shared zones → Alpha Painter tool' to send the shared zones here."
+            "then choose 'Copy shared zones → Alpha Painter tool' to send the shared zones into Alpha Painter."
         )
 
     @classmethod
@@ -2496,7 +2496,7 @@ class SelectiveAlphaTool(QWidget):
         )
         self._btn_import_shared.setAccessibleName("Import shared zones to canvas")
         self._btn_import_shared.setAccessibleDescription(
-            "Imports shared zones from Alpha & RGBA Adjuster into the Alpha Painter canvas and turns them into editable zones."
+            "Imports shared zones from Alpha & RGBA Adjuster into the Alpha Painter canvas and turns them into editable zones you can refine or save."
         )
         self._btn_import_shared.clicked.connect(self._on_import_shared_zones)
         iv.addWidget(self._btn_import_shared)
