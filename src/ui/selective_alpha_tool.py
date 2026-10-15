@@ -1879,9 +1879,9 @@ class SelectiveAlphaTool(QWidget):
         # ── Workflow group: Open → Paint → Save ───────────────────────────
         # All primary actions are grouped here at the top so the workflow
         # is immediately obvious.
-        wf_box = QGroupBox("Workflow: Open, Paint, Save")
+        wf_box = QGroupBox("Workflow: Open → Paint → Save")
         wf_lay = QVBoxLayout(wf_box)
-        wf_lay.setSpacing(4)
+        wf_lay.setSpacing(3)
 
         # Row 1: Open image
         self._btn_open = QPushButton("\U0001f4c2  Open Image\u2026")
@@ -2431,7 +2431,7 @@ class SelectiveAlphaTool(QWidget):
         # painting canvas with a single button click.
         import_box = QGroupBox("Import Shared Zones from Alpha & RGBA Adjuster")
         iv = QVBoxLayout(import_box)
-        iv.setSpacing(4)
+        iv.setSpacing(3)
         iv.setContentsMargins(4, 4, 4, 4)
 
         import_note = QLabel(
@@ -2897,7 +2897,7 @@ class SelectiveAlphaTool(QWidget):
                 "eraser": "eraser",
                 "transform": "move",
             }
-            extras.append(f"tool {tool_names.get(self._canvas._tool, self._canvas._tool)}")
+            extras.append(f"{tool_names.get(self._canvas._tool, self._canvas._tool)} tool")
         if self._shared_zones:
             extras.append(f"{len(self._shared_zones)} shared zone{'s' if len(self._shared_zones) != 1 else ''} ready")
         if self._mask_clipboard is not None:

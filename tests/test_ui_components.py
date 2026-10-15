@@ -8102,6 +8102,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.addCleanup(self._widget._result_img.close)
         self._widget._refresh_session_status()
         summary = self._widget.get_status_bar_text()
+        self.assertIn("brush tool", summary)
         self.assertIn("sample.png", summary)
         self.assertIn("shared zone", summary)
         self.assertIn("zone clipboard ready", summary)
