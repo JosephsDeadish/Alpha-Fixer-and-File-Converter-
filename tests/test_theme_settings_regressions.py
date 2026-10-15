@@ -208,11 +208,11 @@ def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
 def test_history_tracking_controls_have_screen_reader_descriptions(dialog):
     widget, _manager = dialog
     controls = [
-        (widget._chk_track_converter, "Track Converter history", "File Converter batches are saved to history."),
-        (widget._chk_track_alpha, "Track Alpha and RGBA Adjuster history", "Alpha & RGBA Adjuster batches are saved to history."),
-        (widget._chk_track_sel_alpha, "Track Alpha Painter history", "Alpha Painter saves are recorded in history."),
-        (widget._chk_track_gif, "Track GIF Builder history", "GIF Builder exports are saved to history."),
-        (widget._chk_track_video, "Track Video Builder history", "Video Builder exports are saved to history."),
+        (widget._chk_track_converter, "Save Converter history", "Save File Converter batches to history when enabled."),
+        (widget._chk_track_alpha, "Save Alpha and RGBA Adjuster history", "Save Alpha & RGBA Adjuster batches to history when enabled."),
+        (widget._chk_track_sel_alpha, "Save Alpha Painter history", "Save Alpha Painter runs to history when enabled."),
+        (widget._chk_track_gif, "Save GIF Builder history", "Save GIF Builder exports to history when enabled."),
+        (widget._chk_track_video, "Save Video Builder history", "Save Video Builder exports to history when enabled."),
     ]
     for control, name, tip in controls:
         assert control.accessibleName() == name
@@ -1015,7 +1015,7 @@ def test_settings_guidance_follows_live_theme_colors_and_scaled_fonts(dialog, ap
     widget, manager = dialog
     hints = [label for label in widget.findChildren(QLabel) if label.property("settingsHint")]
     guides = [label for label in widget.findChildren(QLabel) if label.property("settingsGuide")]
-    assert len(hints) == 17
+    assert len(hints) == 18
     assert len(guides) == 2
     assert any("Effects controls optional visual effects" in label.text() for label in guides)
     widget.show()

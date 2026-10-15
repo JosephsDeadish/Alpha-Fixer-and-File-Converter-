@@ -2326,16 +2326,24 @@ class SettingsDialog(QDialog):
         gv.setSpacing(6)
 
         general_intro = QLabel(
-            "Quick guide: Theme changes colors and visuals, General handles layout and tooltips, "
+            "Quick guide: Theme handles colors and visuals, General handles layout, scaling, tooltip wording, and history, "
             "Sound controls clicks and ambience, and Effects controls optional visual effects. "
             "Most changes apply immediately."
         )
         general_intro.setWordWrap(True)
         general_intro.setProperty("settingsGuide", True)
+        general_intro.setAccessibleName("Settings overview")
+        general_intro.setAccessibleDescription(
+            "Summarizes which settings live on each tab and notes that most changes apply immediately."
+        )
         gv.addWidget(general_intro)
 
         # ---- Tooltip Wording & Style GroupBox ----
         self._grp_misc = QGroupBox("Tooltip Wording & Style")
+        self._grp_misc.setAccessibleName("Tooltip wording and style settings")
+        self._grp_misc.setAccessibleDescription(
+            "Adjust tooltip font size, wording mode, and popup box style."
+        )
         misc_gl = QGridLayout(self._grp_misc)
         misc_gl.setColumnStretch(1, 1)
         misc_gl.setHorizontalSpacing(10)
@@ -2414,6 +2422,10 @@ class SettingsDialog(QDialog):
 
         # ---- UI Scaling GroupBox ----
         grp_scale = QGroupBox("UI Scaling")
+        grp_scale.setAccessibleName("Layout and scaling settings")
+        grp_scale.setAccessibleDescription(
+            "Adjust UI scale, button height, spacing, border radius, and panel padding."
+        )
         scale_gl = QGridLayout(grp_scale)
         scale_gl.setColumnStretch(1, 1)
         scale_gl.setHorizontalSpacing(10)
@@ -2437,6 +2449,10 @@ class SettingsDialog(QDialog):
         )
         scale_note.setWordWrap(True)
         scale_note.setProperty("settingsHint", True)
+        scale_note.setAccessibleName("UI scaling guidance")
+        scale_note.setAccessibleDescription(
+            "Explains that UI scale affects text and controls while tooltip size is controlled separately."
+        )
         scale_gl.addWidget(scale_note, 1, 0, 1, 2)
 
         self._scale_preview_frame = QFrame()
@@ -2634,13 +2650,17 @@ class SettingsDialog(QDialog):
 
         # ---- History GroupBox (items 8/9) ----
         grp_history = QGroupBox("📋  History")
+        grp_history.setAccessibleName("History settings")
+        grp_history.setAccessibleDescription(
+            "Set history limits and choose which tools or builders save history entries."
+        )
         hist_gl = QGridLayout(grp_history)
         hist_gl.setColumnStretch(1, 1)
         hist_gl.setHorizontalSpacing(10)
         hist_gl.setVerticalSpacing(6)
 
         # Default max entries
-        hist_gl.addWidget(QLabel("Default max entries per tool/builder:"), 0, 0)
+        hist_gl.addWidget(QLabel("Default history limit per tool or builder:"), 0, 0)
         self._history_max_spin = QSpinBox()
         self._history_max_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self._history_max_spin.setRange(10, 5000)
@@ -2652,14 +2672,18 @@ class SettingsDialog(QDialog):
             "Default maximum number of history entries kept per tool or builder.\n"
             "Non-zero per-tool limits below override this value.\n"
             "Oldest entries are automatically removed when the limit is reached.\n"
-            "Default: 50.  Maximum: 5000."
+            "Default: 50. Maximum: 5000."
         )
         hist_gl.addWidget(self._history_max_spin, 0, 1, Qt.AlignmentFlag.AlignLeft)
 
         # Per-tool max entries
-        per_lbl = QLabel("Per-tool / per-builder limits (0 uses the default above):")
+        per_lbl = QLabel("Per-tool / per-builder overrides (0 keeps the default above):")
         per_lbl.setProperty("settingsHint", True)
         per_lbl.setWordWrap(True)
+        per_lbl.setAccessibleName("History limit overrides guidance")
+        per_lbl.setAccessibleDescription(
+            "Explains that zero keeps the shared default history limit."
+        )
         hist_gl.addWidget(per_lbl, 1, 0, 1, 2)
 
         hist_gl.addWidget(QLabel("  Converter:"), 2, 0)
@@ -2670,7 +2694,7 @@ class SettingsDialog(QDialog):
         self._history_max_conv_spin.setSuffix("  entries")
         self._history_max_conv_spin.setMaximumWidth(130)
         self._history_max_conv_spin.setToolTip(
-            "Maximum history entries for the File Converter (0 uses the default above)."
+            "Maximum history entries for the File Converter (0 keeps the default above)."
         )
         hist_gl.addWidget(self._history_max_conv_spin, 2, 1, Qt.AlignmentFlag.AlignLeft)
 
@@ -2682,7 +2706,7 @@ class SettingsDialog(QDialog):
         self._history_max_alpha_spin.setSuffix("  entries")
         self._history_max_alpha_spin.setMaximumWidth(130)
         self._history_max_alpha_spin.setToolTip(
-            "Maximum history entries for the Alpha & RGBA Adjuster (0 uses the default above)."
+            "Maximum history entries for the Alpha & RGBA Adjuster (0 keeps the default above)."
         )
         hist_gl.addWidget(self._history_max_alpha_spin, 3, 1, Qt.AlignmentFlag.AlignLeft)
 
@@ -2694,7 +2718,7 @@ class SettingsDialog(QDialog):
         self._history_max_sel_spin.setSuffix("  entries")
         self._history_max_sel_spin.setMaximumWidth(130)
         self._history_max_sel_spin.setToolTip(
-            "Maximum history entries for Alpha Painter (0 uses the default above)."
+            "Maximum history entries for Alpha Painter (0 keeps the default above)."
         )
         hist_gl.addWidget(self._history_max_sel_spin, 4, 1, Qt.AlignmentFlag.AlignLeft)
 
@@ -2706,7 +2730,7 @@ class SettingsDialog(QDialog):
         self._history_max_gif_spin.setSuffix("  entries")
         self._history_max_gif_spin.setMaximumWidth(130)
         self._history_max_gif_spin.setToolTip(
-            "Maximum history entries for the GIF Builder (0 uses the default above)."
+            "Maximum history entries for the GIF Builder (0 keeps the default above)."
         )
         hist_gl.addWidget(self._history_max_gif_spin, 5, 1, Qt.AlignmentFlag.AlignLeft)
 
@@ -2718,22 +2742,26 @@ class SettingsDialog(QDialog):
         self._history_max_video_spin.setSuffix("  entries")
         self._history_max_video_spin.setMaximumWidth(130)
         self._history_max_video_spin.setToolTip(
-            "Maximum history entries for the Video Builder (0 uses the default above)."
+            "Maximum history entries for the Video Builder (0 keeps the default above)."
         )
         hist_gl.addWidget(self._history_max_video_spin, 6, 1, Qt.AlignmentFlag.AlignLeft)
 
         # Track history checkboxes
-        track_lbl = QLabel("Track history for these tools and builders:")
+        track_lbl = QLabel("Save history for these tools and builders:")
         track_lbl.setProperty("settingsHint", True)
         track_lbl.setWordWrap(True)
+        track_lbl.setAccessibleName("History tracking options")
+        track_lbl.setAccessibleDescription(
+            "Introduces the switches that decide which tools and builders save history entries."
+        )
         hist_gl.addWidget(track_lbl, 7, 0, 1, 2)
 
         self._chk_track_converter = QCheckBox("Converter")
         self._chk_track_converter.setChecked(True)
         self._chk_track_converter.setToolTip(
-            "When checked, File Converter batches are saved to history."
+            "Save File Converter batches to history when enabled."
         )
-        self._chk_track_converter.setAccessibleName("Track Converter history")
+        self._chk_track_converter.setAccessibleName("Save Converter history")
         self._chk_track_converter.setAccessibleDescription(
             self._chk_track_converter.toolTip()
         )
@@ -2742,18 +2770,18 @@ class SettingsDialog(QDialog):
         self._chk_track_alpha = QCheckBox("Alpha & RGBA Adjuster")
         self._chk_track_alpha.setChecked(True)
         self._chk_track_alpha.setToolTip(
-            "When checked, Alpha & RGBA Adjuster batches are saved to history."
+            "Save Alpha & RGBA Adjuster batches to history when enabled."
         )
-        self._chk_track_alpha.setAccessibleName("Track Alpha and RGBA Adjuster history")
+        self._chk_track_alpha.setAccessibleName("Save Alpha and RGBA Adjuster history")
         self._chk_track_alpha.setAccessibleDescription(self._chk_track_alpha.toolTip())
         hist_gl.addWidget(self._chk_track_alpha, 9, 0)
 
         self._chk_track_sel_alpha = QCheckBox("Alpha Painter")
         self._chk_track_sel_alpha.setChecked(True)
         self._chk_track_sel_alpha.setToolTip(
-            "When checked, Alpha Painter saves are recorded in history."
+            "Save Alpha Painter runs to history when enabled."
         )
-        self._chk_track_sel_alpha.setAccessibleName("Track Alpha Painter history")
+        self._chk_track_sel_alpha.setAccessibleName("Save Alpha Painter history")
         self._chk_track_sel_alpha.setAccessibleDescription(
             self._chk_track_sel_alpha.toolTip()
         )
@@ -2762,27 +2790,31 @@ class SettingsDialog(QDialog):
         self._chk_track_gif = QCheckBox("GIF Builder")
         self._chk_track_gif.setChecked(True)
         self._chk_track_gif.setToolTip(
-            "When checked, GIF Builder exports are saved to history."
+            "Save GIF Builder exports to history when enabled."
         )
-        self._chk_track_gif.setAccessibleName("Track GIF Builder history")
+        self._chk_track_gif.setAccessibleName("Save GIF Builder history")
         self._chk_track_gif.setAccessibleDescription(self._chk_track_gif.toolTip())
         hist_gl.addWidget(self._chk_track_gif, 8, 1)
 
         self._chk_track_video = QCheckBox("Video Builder")
         self._chk_track_video.setChecked(True)
         self._chk_track_video.setToolTip(
-            "When checked, Video Builder exports are saved to history."
+            "Save Video Builder exports to history when enabled."
         )
-        self._chk_track_video.setAccessibleName("Track Video Builder history")
+        self._chk_track_video.setAccessibleName("Save Video Builder history")
         self._chk_track_video.setAccessibleDescription(self._chk_track_video.toolTip())
         hist_gl.addWidget(self._chk_track_video, 9, 1)
 
         hist_note = QLabel(
-            "ℹ  Existing history entries are not trimmed immediately — updated limits "
-            "only apply to new entries going forward, and disabling tracking does not delete entries already saved."
+            "ℹ  Existing history entries are not trimmed immediately. Updated limits only apply to new entries, "
+            "and turning tracking off does not delete entries already saved."
         )
         hist_note.setWordWrap(True)
         hist_note.setProperty("settingsHint", True)
+        hist_note.setAccessibleName("History retention note")
+        hist_note.setAccessibleDescription(
+            "Explains that history limits only affect new entries and that disabling tracking does not erase saved history."
+        )
         hist_gl.addWidget(hist_note, 11, 0, 1, 2)
 
         gv.addWidget(grp_history)
