@@ -1584,6 +1584,8 @@ class _ZoneRow(QWidget):
             f"Toggle visibility of the {color_name} overlay in the canvas.\n"
             "Hidden zones keep their painted zones — they are just not shown."
         )
+        self._vis_btn.setAccessibleName(f"Toggle {color_name} zone visibility")
+        self._vis_btn.setAccessibleDescription(self._vis_btn.toolTip())
         self._vis_btn.clicked.connect(self._on_vis_toggled)
         top.addWidget(self._vis_btn)
 
@@ -1593,6 +1595,8 @@ class _ZoneRow(QWidget):
         self._swatch.setToolTip(
             f"Click to choose a custom overlay colour for {color_name}."
         )
+        self._swatch.setAccessibleName(f"{color_name} zone colour swatch")
+        self._swatch.setAccessibleDescription(self._swatch.toolTip())
         self._swatch.setFlat(True)
         self._update_swatch_style()
         self._swatch.clicked.connect(self._on_pick_color)

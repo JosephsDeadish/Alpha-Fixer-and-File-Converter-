@@ -483,7 +483,7 @@ class SettingsDialog(QDialog):
 
         # ---- Preset GroupBox ----
         self._grp_preset_select = QGroupBox("Theme Presets, Backup, and Recovery")
-        self._grp_preset_select.setAccessibleName("Theme preset and recovery tools")
+        self._grp_preset_select.setAccessibleName("Theme preset, backup, and recovery tools")
         self._grp_preset_select.setAccessibleDescription(
             "Search, choose, save, export, and import themes and preferences from one place. "
             "Export and import buttons create and restore JSON recovery backups without touching history or unlock progress."
@@ -2856,7 +2856,7 @@ class SettingsDialog(QDialog):
         effects_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         effects_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         tabs.addTab(effects_scroll, "✨ Effects")
-        tabs.setTabToolTip(0, "Theme presets, palette editing, custom backgrounds, and backup / recovery tools.")
+        tabs.setTabToolTip(0, "Theme presets, palette editing, custom backgrounds, and backup and recovery tools.")
         tabs.setTabToolTip(1, "Layout, scaling, tooltip wording, and history controls with live preview.")
         tabs.setTabToolTip(2, "Sound toggles, profiles, and event volumes.")
         tabs.setTabToolTip(3, "Optional click, background, cursor, and button effects.")

@@ -190,7 +190,7 @@ def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
     widget, _manager = dialog
     tab_bar = widget.findChild(QTabBar)
     assert tab_bar is not None
-    assert widget._grp_preset_select.accessibleName() == "Theme preset and recovery tools"
+    assert widget._grp_preset_select.accessibleName() == "Theme preset, backup, and recovery tools"
     assert "json recovery backups" in widget._grp_preset_select.accessibleDescription().lower()
     assert "history and unlock progress" in widget._preset_backup_note.text().lower()
     assert "preview updates when a valid file is chosen" in widget._custom_bg_check.toolTip().lower()
@@ -202,7 +202,7 @@ def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
     assert "live preview:" in widget._scale_preview_detail.text().lower()
     assert "preview the current ui scale" in widget._scale_preview_button.accessibleDescription().lower()
     assert "preview the current ui scale" in widget._scale_preview_combo.accessibleDescription().lower()
-    assert "backup / recovery tools" in tab_bar.tabToolTip(0).lower()
+    assert "backup and recovery tools" in tab_bar.tabToolTip(0).lower()
 
 
 def test_history_tracking_controls_have_screen_reader_descriptions(dialog):

@@ -8185,6 +8185,26 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Paste active zone", self._widget._ze_paste_btn.accessibleName())
         self.assertIn("Tool: Brush", self._widget._status_lbl.text())
 
+    def test_selective_alpha_zone_row_icon_controls_are_labeled(self):
+        from src.ui.selective_alpha_tool import ZONE_NAMES, _ZoneRow
+
+        row = _ZoneRow(0)
+        try:
+            self.assertEqual(
+                f"Toggle {ZONE_NAMES[0]} zone visibility",
+                row._vis_btn.accessibleName(),
+            )
+            self.assertIn("toggle visibility", row._vis_btn.accessibleDescription().lower())
+            self.assertEqual(
+                f"{ZONE_NAMES[0]} zone colour swatch",
+                row._swatch.accessibleName(),
+            )
+            self.assertIn("choose a custom overlay colour", row._swatch.accessibleDescription().lower())
+        finally:
+            row.close()
+            row.deleteLater()
+            self._app.processEvents()
+
     def test_selective_alpha_slot_labels_explain_next_actions(self):
         self.assertIn("Empty", self._widget._slot_info_lbl.text())
         self.assertIn("save the active zone here", self._widget._slot_info_lbl.text())
