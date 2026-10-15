@@ -8975,7 +8975,7 @@ class TestDialogAccessibility(unittest.TestCase):
         self.assertIn("current UI scale", settings._scale_preview_sample_label.accessibleDescription())
         self.assertEqual("Scale preview sample button", settings._scale_preview_button.accessibleName())
         self.assertEqual("Scale preview sample combo box", settings._scale_preview_combo.accessibleName())
-        self.assertIn("change the controls", settings._scale_preview_detail.text().lower())
+        self.assertIn("preview update immediately", settings._scale_preview_detail.text().lower())
         self.assertIn("Save theme preset", settings._btn_save_theme.accessibleName())
         self.assertEqual("Delete theme preset", settings._btn_delete_theme.accessibleName())
         self.assertIn("theme names", settings._theme_search.placeholderText())

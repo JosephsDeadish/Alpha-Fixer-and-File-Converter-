@@ -199,7 +199,7 @@ def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
     assert widget._scale_preview_title.accessibleDescription() == "Heading for the UI scale live preview area."
     assert widget._scale_preview_sample_label.accessibleName() == "UI scale preview sample label"
     assert widget._scale_preview_detail.accessibleName() == "UI scale preview details"
-    assert "update immediately" in widget._scale_preview_detail.text().lower()
+    assert "live preview:" in widget._scale_preview_detail.text().lower()
     assert "preview the current ui scale" in widget._scale_preview_button.accessibleDescription().lower()
     assert "preview the current ui scale" in widget._scale_preview_combo.accessibleDescription().lower()
     assert "backup / recovery tools" in tab_bar.tabToolTip(0).lower()
