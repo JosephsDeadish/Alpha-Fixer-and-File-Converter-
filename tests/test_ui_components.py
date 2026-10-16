@@ -8338,7 +8338,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Import shared zones", self._widget._btn_import_shared.accessibleName())
         self.assertIn("Import the shared zones", self._widget._btn_import_shared.toolTip())
         self.assertIn("editable zones", self._widget._btn_import_shared.accessibleDescription().lower())
-        self.assertIn("copy the shared zones into Alpha Painter", SelectiveAlphaTool._shared_zone_import_instructions())
+        self.assertIn("send the shared zones into Alpha Painter", SelectiveAlphaTool._shared_zone_import_instructions())
 
         self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=bool))])
         text = self._widget._import_shared_status.text()

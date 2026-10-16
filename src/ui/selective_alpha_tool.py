@@ -93,7 +93,7 @@ def _np_to_qimage(arr: np.ndarray) -> QImage:
 
 def _selective_alpha_capability_summary() -> str:
     return (
-        "Ready: paint zones, import shared zones, undo/redo, save layouts, and preview/export tools are available."
+        "Ready: paint zones, import shared zones, use the zone clipboard and saved layouts, and preview/export tools are available."
     )
 
 
@@ -108,7 +108,7 @@ def _selective_alpha_capability_details() -> str:
             "",
             "Alpha Painter tools available here:",
             f"• Paint, flood-fill, move, and transform {SELECTIVE_ALPHA_UI_ZONE_COUNT} independent alpha zones.",
-            "• Copy zones from the Alpha and RGBA Adjuster, the zone clipboard, or saved full-layout slots.",
+            "• Import shared zones from Alpha and RGBA Adjuster, then save them to a full-layout slot or the zone clipboard.",
             "• Preview overlays, alpha labels, and the saved result before exporting the edited image.",
         ]
     )
@@ -1784,31 +1784,27 @@ class SelectiveAlphaTool(QWidget):
         if not src_path:
             if has_shared_zones:
                 return (
-                    "Next step: open an image first, then import shared zones from Alpha and RGBA Adjuster, save "
-                    "them to a full zone layout slot, or copy one zone to the zone clipboard for reuse."
+                    "Next step: open an image first, then import shared zones, save them to a full zone layout slot, or copy one zone to the zone clipboard."
                 )
             return "Next step: open an image or import shared zones from Alpha and RGBA Adjuster to start from an existing layout."
         if result_ready:
             return "Next step: save the current result now, or keep refining the zones and save again when it looks right."
         if has_shared_zones:
             return (
-                "Next step: import the shared zones, refine any zones you want to change, copy one zone to the "
-                "zone clipboard if you want reuse, then save when the preview looks right."
+                "Next step: import the shared zones, refine any zones you want to change, copy one zone to the zone clipboard if you want reuse, then save when the preview looks right."
             )
         return "Next step: paint or refine your zones, then save when the preview looks right."
 
     @staticmethod
     def _shared_zone_import_instructions() -> str:
         return (
-            "In Alpha and RGBA Adjuster: enable 'Highlight Alpha Values', right-click the preview area, "
-            "then choose 'Copy shared zones → Alpha Painter tool' to copy the shared zones into Alpha Painter."
+            "In Alpha and RGBA Adjuster: enable 'Highlight Alpha Values', right-click the preview area, then choose 'Copy shared zones → Alpha Painter tool' to send the shared zones into Alpha Painter."
         )
 
     @classmethod
     def _empty_single_zone_slot_text(cls) -> str:
         return (
-            "Empty — save the active zone here, or bring in one shared zone and use "
-            "'Copy One Zone → Zone Clipboard' before pasting."
+            "Empty — save the active zone here, or bring in one shared zone and use 'Copy One Zone → Zone Clipboard' before pasting."
         )
 
     @classmethod
@@ -1893,7 +1889,7 @@ class SelectiveAlphaTool(QWidget):
         # ── Workflow group: Open → Paint → Save ───────────────────────────
         # All primary actions are grouped here at the top so the workflow
         # is immediately obvious.
-        wf_box = QGroupBox("Workflow: Open → Import → Paint → Save")
+        wf_box = QGroupBox("Workflow: Open → Import Shared Zones → Paint → Save")
         wf_box.setAccessibleName("Alpha Painter workflow")
         wf_box.setAccessibleDescription(
             "Keeps the open, import, paint, save, and shared-zone actions together so the main workflow is easy to scan."
@@ -2243,10 +2239,10 @@ class SelectiveAlphaTool(QWidget):
         self._ze_paste_btn = QPushButton("📌  Paste Zone from Clipboard")
         self._ze_paste_btn.setAccessibleName("Paste active zone from clipboard")
         self._ze_copy_btn.setAccessibleDescription(
-            "Copies the active zone so it can be pasted into another slot or image."
+            "Copies the active zone into the zone clipboard so it can be pasted into another zone."
         )
         self._ze_paste_btn.setAccessibleDescription(
-            "Pastes the copied zone into the active slot or image."
+            "Pastes the zone clipboard into the active zone."
         )
         self._ze_paste_btn.setEnabled(False)
         ze_row3.addWidget(self._ze_copy_btn)

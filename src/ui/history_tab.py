@@ -659,8 +659,8 @@ class HistoryTab(QWidget):
         self._sel_tree = _make_tree(
             ["Time", "Zone / Mode", "Files", "✔ OK", "✘ Err", "File names"],
             col_tips=[
-                "When the selective-alpha batch was started.",
-                "Zone / mode used for this batch.",
+                "When the Alpha Painter batch was started.",
+                "Alpha Painter mode or zone set used for this batch.",
                 "Total number of files processed.",
                 "Files processed successfully.",
                 "Files that encountered errors.",
@@ -678,7 +678,7 @@ class HistoryTab(QWidget):
         self._sel_summary.setWordWrap(True)
         self._sel_summary.setAccessibleName("Alpha Painter history summary")
         self._sel_summary.setAccessibleDescription(
-            "Summarizes the number of Alpha Painter history entries and whether they are newest first."
+            "Summarizes the number of Alpha Painter history entries and whether the newest entries are shown first."
         )
         sel_layout.addWidget(self._sel_summary)
         self._sub_tabs.addTab(sel_widget, "🎭  Alpha Painter")

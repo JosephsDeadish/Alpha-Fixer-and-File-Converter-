@@ -2422,11 +2422,11 @@ class SettingsDialog(QDialog):
                 self._tooltip_mode_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._tooltip_mode_combo.setAccessibleName("Tooltip wording mode")
         self._tooltip_mode_combo.setAccessibleDescription(
-            "Choose how tooltip text is written. No Filter 🤬 is the fully unfiltered mode. Use Tooltip Box Style to change the tooltip box appearance."
+            "Choose how tooltip text is written. No Filter 🤬 is the fully unfiltered option. Use Tooltip Box Style to change the tooltip box appearance."
         )
         self._tooltip_mode_combo.setToolTip(
             "Controls how tooltips appear throughout the app.\n"
-            "Tooltip Wording changes the text; No Filter 🤬 is the fully unfiltered mode.\n"
+            "Tooltip Wording changes the text; No Filter 🤬 is the fully unfiltered option.\n"
             "Tooltip Box Style changes the popup appearance."
         )
         self._tooltip_mode_combo.setMaximumWidth(220)
@@ -2458,7 +2458,7 @@ class SettingsDialog(QDialog):
         self._tooltip_style_combo.setMaximumWidth(220)
         misc_gl.addWidget(self._tooltip_style_combo, 2, 1, Qt.AlignmentFlag.AlignLeft)
         tooltip_note = QLabel(
-            "ℹ  Tooltip Wording changes the text; No Filter 🤬 is the fully unfiltered mode. Tooltip Box Style changes the popup appearance."
+            "ℹ  Tooltip Wording changes the text; No Filter 🤬 is the fully unfiltered option. Tooltip Box Style changes the popup appearance."
         )
         tooltip_note.setWordWrap(True)
         tooltip_note.setProperty("settingsHint", True)

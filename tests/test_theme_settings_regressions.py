@@ -175,8 +175,8 @@ def test_tooltip_settings_controls_use_clearer_labels(dialog):
     assert widget._tooltip_mode_combo.accessibleName() in {"Tooltip wording mode", "Tooltip Wording"}
     assert widget._tooltip_style_combo.accessibleName() in {"Tooltip box style", "Tooltip Box Style"}
     assert "No Filter 🤬" in widget._tooltip_mode_combo.accessibleDescription()
-    assert "unfiltered mode" in widget._tooltip_mode_combo.accessibleDescription().lower()
-    assert "No Filter 🤬 is the fully unfiltered mode" in widget._tooltip_mode_combo.toolTip()
+    assert "unfiltered option" in widget._tooltip_mode_combo.accessibleDescription().lower()
+    assert "No Filter 🤬 is the fully unfiltered option" in widget._tooltip_mode_combo.toolTip()
     for mode, snippet in {
         "Normal": "straightforward guidance",
         "Off": "across the app",
