@@ -8208,6 +8208,13 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("saves the result to disk", self._widget._btn_save.accessibleDescription().lower())
         self.assertIn("Clear all zones", self._widget._btn_clear_all.accessibleName())
         self.assertIn("starts over", self._widget._btn_clear_all.accessibleDescription().lower())
+        from PyQt6.QtWidgets import QPushButton
+
+        zoom_buttons = {button.accessibleName(): button for button in self._widget._zoom_overlay.findChildren(QPushButton)}
+        self.assertIn("Zoom out", zoom_buttons)
+        self.assertIn("fit to window", zoom_buttons["Fit Painter canvas to window"].accessibleDescription().lower())
+        self.assertIn("ctrl+scroll", zoom_buttons["Zoom out"].accessibleDescription().lower())
+        self.assertIn("ctrl+scroll", zoom_buttons["Zoom in"].accessibleDescription().lower())
         labels = self._widget.findChildren(QLabel)
         self.assertIn("Overlay opacity label", {label.accessibleName() for label in labels})
         self.assertIn("Active zone selector", self._widget._active_zone_combo.accessibleName())
