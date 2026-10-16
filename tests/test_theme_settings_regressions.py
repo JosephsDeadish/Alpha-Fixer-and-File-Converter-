@@ -176,7 +176,7 @@ def test_tooltip_settings_controls_use_clearer_labels(dialog):
     assert widget._tooltip_style_combo.accessibleName() in {"Tooltip box style", "Tooltip Box Style"}
     assert "No Filter 🤬" in widget._tooltip_mode_combo.accessibleDescription()
     assert "unfiltered mode" in widget._tooltip_mode_combo.accessibleDescription().lower()
-    assert "No Filter 🤬 is the unfiltered mode" in widget._tooltip_mode_combo.toolTip()
+    assert "No Filter 🤬 is the fully unfiltered mode" in widget._tooltip_mode_combo.toolTip()
     assert "tooltip boxes" in widget._tooltip_style_combo.toolTip().lower()
     assert "compare layouts before you apply one" in widget._theme_preset_combo.toolTip().lower()
     assert widget._btn_save_theme.accessibleName() == "Save theme preset"
