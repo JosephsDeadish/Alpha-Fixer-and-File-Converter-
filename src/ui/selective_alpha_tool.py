@@ -1781,10 +1781,10 @@ class SelectiveAlphaTool(QWidget):
         if not src_path:
             if has_shared_zones:
                 return (
-                    "Next step: open an image, then import the shared zones, save them to a full-layout "
-                    "slot, or copy one zone to the zone clipboard for reuse."
+                    "Next step: open an image, then import shared zones from Alpha & RGBA Adjuster, save "
+                    "them to a full-layout slot, or copy one zone to the zone clipboard for reuse."
                 )
-            return "Next step: open an image or copy shared zones from Alpha & RGBA Adjuster to begin editing."
+            return "Next step: open an image or import shared zones from Alpha & RGBA Adjuster to begin editing."
         if result_ready:
             return "Next step: save the current result, or keep refining the zones and save again when it looks right."
         if has_shared_zones:
@@ -1798,7 +1798,7 @@ class SelectiveAlphaTool(QWidget):
     def _shared_zone_import_instructions() -> str:
         return (
             "In Alpha & RGBA Adjuster: turn on 'Highlight Alpha Values', right-click the preview, "
-            "then choose 'Copy shared zones → Alpha Painter tool' so Alpha Painter can load the shared zones here."
+            "then choose 'Copy shared zones → Alpha Painter tool' to send the shared zones here."
         )
 
     @classmethod
@@ -1893,7 +1893,7 @@ class SelectiveAlphaTool(QWidget):
         wf_box = QGroupBox("Workflow: Open → Paint → Save")
         wf_box.setAccessibleName("Alpha Painter workflow")
         wf_box.setAccessibleDescription(
-            "Keeps the open, paint, and save steps together so the main workflow is easy to scan."
+            "Keeps the open, paint, save, and shared-zone actions together so the main workflow is easy to scan."
         )
         wf_lay = QVBoxLayout(wf_box)
         wf_lay.setContentsMargins(6, 4, 6, 4)
@@ -1902,7 +1902,7 @@ class SelectiveAlphaTool(QWidget):
         # Row 1: Open image
         self._btn_open = QPushButton("\U0001f4c2  Open Image\u2026")
         self._btn_open.setMinimumHeight(26)
-        self._btn_open.setToolTip("Open an image to edit  (Ctrl+O)")
+        self._btn_open.setToolTip("Open an image in Alpha Painter (Ctrl+O).")
         self._btn_open.setAccessibleName("Open image for Alpha Painter")
         self._btn_open.setAccessibleDescription(
             "Opens an image so you can paint alpha zones on it."
@@ -1919,7 +1919,7 @@ class SelectiveAlphaTool(QWidget):
         )
         wf_lay.addWidget(self._session_status_lbl)
         self._next_step_lbl = QLabel(
-            "Next step: open an image, or copy zones from Alpha & RGBA Adjuster to begin editing."
+            "Next step: open an image or import shared zones from Alpha & RGBA Adjuster to begin editing."
         )
         self._next_step_lbl.setWordWrap(True)
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -2592,7 +2592,7 @@ class SelectiveAlphaTool(QWidget):
         import_note.setToolTip(self._shared_zone_import_instructions())
         import_note.setAccessibleName("Shared zone import guidance")
         import_note.setAccessibleDescription(
-            "Explains how to import shared zones, save them to a full-layout slot, or copy one zone to the zone clipboard."
+            "Explains how to import shared zones, save them to a full-layout slot, or copy one zone to the zone clipboard after importing."
         )
         iv.addWidget(import_note)
 
@@ -2603,7 +2603,7 @@ class SelectiveAlphaTool(QWidget):
         self._import_shared_status.setProperty("toolGuidance", True)
         self._import_shared_status.setAccessibleName("Shared zone import status")
         self._import_shared_status.setAccessibleDescription(
-            "Explains whether shared zones are ready and which follow-up action to take next: import them, save them to a full-layout slot, or copy one zone to the clipboard."
+            "Explains whether shared zones are ready and which follow-up action to take next after importing: import them, save them to a full-layout slot, or copy one zone to the zone clipboard."
         )
         iv.addWidget(self._import_shared_status)
 

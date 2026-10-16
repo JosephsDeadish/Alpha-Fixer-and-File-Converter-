@@ -8135,7 +8135,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Tool status:", self._widget._session_status_lbl.text())
         self.assertIn("paint zones", self._widget._capability_lbl.text())
         self.assertIn("Alpha Painter ready", self._widget.get_status_bar_text())
-        self.assertIn("Alpha & RGBA Adjuster", self._widget._next_step_lbl.text())
+        self.assertIn("import shared zones", self._widget._next_step_lbl.text())
         self.assertEqual("Alpha Painter capability summary", self._widget._capability_lbl.accessibleName())
         self.assertEqual("Alpha Painter canvas status", self._widget._status_lbl.accessibleName())
         self.assertIn("open an image", self._widget._next_step_lbl.accessibleDescription())
@@ -8159,6 +8159,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("save the current result", self._widget._next_step_lbl.text())
         self.assertIn("save again when it looks right", self._widget._next_step_lbl.text())
         self.assertIn("turn on 'Highlight Alpha Values'", self._widget._import_shared_status.text())
+        self.assertIn("after importing", self._widget._import_shared_status.accessibleDescription())
 
     def test_selective_alpha_tool_names_are_more_descriptive(self):
         from PyQt6.QtWidgets import QLabel
