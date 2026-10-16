@@ -177,6 +177,14 @@ def test_tooltip_settings_controls_use_clearer_labels(dialog):
     assert "No Filter 🤬" in widget._tooltip_mode_combo.accessibleDescription()
     assert "unfiltered mode" in widget._tooltip_mode_combo.accessibleDescription().lower()
     assert "No Filter 🤬 is the fully unfiltered mode" in widget._tooltip_mode_combo.toolTip()
+    for mode, snippet in {
+        "Normal": "straightforward guidance",
+        "Off": "across the app",
+        "Dumbed Down": "snarkier tooltips",
+        "No Filter 🤬": "fully unfiltered mode",
+    }.items():
+        mode_index = widget._tooltip_mode_combo.findText(mode)
+        assert snippet in widget._tooltip_mode_combo.itemData(mode_index, Qt.ItemDataRole.ToolTipRole)
     assert "tooltip boxes" in widget._tooltip_style_combo.toolTip().lower()
     assert "compare layouts before you apply one" in widget._theme_preset_combo.toolTip().lower()
     assert widget._btn_save_theme.accessibleName() == "Save theme preset"

@@ -7050,6 +7050,13 @@ _MODE_TIPS = {
 
 TOOLTIP_MODES = ["Normal", "Off", "Dumbed Down", "No Filter 🤬"]
 
+TOOLTIP_MODE_ITEM_TIPS = {
+    "Normal": "Clean, detailed tooltips with straightforward guidance.",
+    "Off": "Turns tooltip popups off across the app.",
+    "Dumbed Down": "Shorter, snarkier tooltips that still explain the control.",
+    "No Filter 🤬": "The fully unfiltered mode: profane, joke-heavy tooltips that still describe the control accurately.",
+}
+
 _TOOLTIP_MODE_ALIASES = {
     "No Filter": "No Filter 🤬",
 }

@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .theme_engine import DEFAULT_THEME, PRESET_THEMES, HIDDEN_THEMES, THEME_DESCRIPTIONS, THEME_EFFECTS
-from .tooltip_manager import TOOLTIP_MODES, normalize_tooltip_mode
+from .tooltip_manager import TOOLTIP_MODES, TOOLTIP_MODE_ITEM_TIPS, normalize_tooltip_mode
 from ..core.settings_manager import (
     DEFAULT_CUSTOM_EMOJI,
     get_ui_scale_factor,
@@ -2362,21 +2362,15 @@ class SettingsDialog(QDialog):
         misc_gl.addWidget(self._font_size_spin, 0, 1, Qt.AlignmentFlag.AlignLeft)
         misc_gl.addWidget(QLabel("Tooltip Wording:"), 1, 0)
         self._tooltip_mode_combo = QComboBox()
-        _TOOLTIP_MODE_TIPS = {
-            "Normal":       "Clean, detailed tooltips with straightforward guidance.",
-            "Off":          "Turns tooltip popups off everywhere in the app.",
-            "Dumbed Down":  "Shorter, snarkier tooltips that still explain the control.",
-            "No Filter 🤬": "Profane, joke-heavy tooltips from the fully unfiltered mode that still describe the control accurately.",
-        }
         for mode in TOOLTIP_MODES:
             self._tooltip_mode_combo.addItem(mode)
             idx = self._tooltip_mode_combo.count() - 1
-            tip = _TOOLTIP_MODE_TIPS.get(mode, "")
+            tip = TOOLTIP_MODE_ITEM_TIPS.get(mode, "")
             if tip:
                 self._tooltip_mode_combo.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
         self._tooltip_mode_combo.setAccessibleName("Tooltip wording mode")
         self._tooltip_mode_combo.setAccessibleDescription(
-            "Choose how tooltip text is written. No Filter 🤬 is the fully unfiltered mode. Use Tooltip Box Style to change the popup appearance."
+            "Choose how tooltip text is written. No Filter 🤬 is the fully unfiltered mode. Use Tooltip Box Style to change the tooltip box appearance."
         )
         self._tooltip_mode_combo.setToolTip(
             "Controls how tooltips appear throughout the app.\n"
