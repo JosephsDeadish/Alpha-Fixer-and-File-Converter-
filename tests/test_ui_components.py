@@ -3597,6 +3597,10 @@ class TestTooltipManager(unittest.TestCase):
         self.assertIn("fucking", vulgar_style)
         self.assertIn("straightforward", " ".join(_NORMAL["tooltip_mode_combo"]).lower())
         self.assertIn("snarkier", " ".join(_DUMBED["tooltip_mode_combo"]).lower())
+        self.assertIn("colour-coded zones", " ".join(_NORMAL["selective_alpha_tab"]).lower())
+        self.assertIn("colour-coded zones", " ".join(_DUMBED["selective_alpha_tab"]).lower())
+        self.assertIn("something to work on", " ".join(_DUMBED["sa_open_btn"]).lower())
+        self.assertIn("checked the preview", " ".join(_NORMAL["sa_save_btn"]).lower())
         for tips in (_NORMAL["tooltip_mode_combo"], _DUMBED["tooltip_mode_combo"], _VULGAR["tooltip_mode_combo"]):
             self.assertIn("unfiltered", " ".join(tips).lower())
         self.assertIn("fully unfiltered mode", " ".join(_VULGAR["tooltip_mode_combo"]).lower())
@@ -8141,7 +8145,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
 
     def test_selective_alpha_status_bar_text_tracks_loaded_image_and_shared_state(self):
         self.assertIn("Tool status:", self._widget._session_status_lbl.text())
-        self.assertIn("paint zones", self._widget._capability_lbl.text())
+        self.assertIn("copy or reuse the zone clipboard", self._widget._capability_lbl.text())
         self.assertIn("Alpha Painter ready", self._widget.get_status_bar_text())
         self.assertIn("import shared zones", self._widget._next_step_lbl.text())
         self.assertEqual("Alpha Painter capability summary", self._widget._capability_lbl.accessibleName())
@@ -8165,9 +8169,10 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("sample.png", self._widget._session_status_lbl.text())
         self.assertIn("Next:", self._widget._session_status_lbl.text())
         self.assertIn("save the current result", self._widget._next_step_lbl.text())
-        self.assertIn("save again when it looks right", self._widget._next_step_lbl.text())
+        self.assertIn("once you are satisfied", self._widget._next_step_lbl.text())
         self.assertIn("enable 'Highlight Alpha Values'", self._widget._import_shared_status.text())
-        self.assertIn("after importing", self._widget._import_shared_status.accessibleDescription())
+        self.assertIn("bring them onto the canvas", self._widget._import_shared_status.accessibleDescription())
+        self.assertIn("highlighted zones", self._widget._import_shared_status.toolTip())
 
     def test_selective_alpha_tool_names_are_more_descriptive(self):
         from PyQt6.QtWidgets import QGroupBox, QLabel

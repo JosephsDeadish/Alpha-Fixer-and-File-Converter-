@@ -1843,7 +1843,7 @@ _NORMAL: dict[str, list[str]] = {
     ],
     # ---------------------------------------------------------------- Alpha Painter tab
     "selective_alpha_tab": [
-        "Alpha Painter lets you paint coloured zones on one image and give each zone its own alpha value.",
+        "Alpha Painter lets you paint colour-coded zones on one image and give each zone its own alpha value.",
         "Each visible zone has its own overlay colour and alpha level.",
         "Brush, line, rectangle, ellipse, polygon, fill, and erase tools are available.",
         "Paint regions, adjust their alpha values, and save the result when it looks right.",
@@ -1870,7 +1870,7 @@ _NORMAL: dict[str, list[str]] = {
         "No image? No painting. Pick a file first, then start carving up the canvas.",
     ],
     "sa_save_btn": [
-        "Save the current Alpha Painter result.",
+        "Save the current Alpha Painter result after you've checked the preview.",
         "Only available after a result preview has been created.",
         "Output is saved as PNG to preserve the alpha channel in full quality.",
         "The default filename appends '_alpha_painter' to the original name.",
@@ -4084,7 +4084,7 @@ _DUMBED: dict[str, list[str]] = {
     ],
     # ---------------------------------------------------------------- Alpha Painter tab
     "selective_alpha_tab": [
-        "This is Alpha Painter. Draw zones on the image and give each zone its own transparency level.",
+        "This is Alpha Painter. Draw colour-coded zones on the image and give each zone its own transparency level.",
         "The visible coloured zones can be painted and adjusted independently.",
         "Open an image, paint the zones you want, then save the result when it looks right.",
         "The coloured overlays are previews so you can see where each zone will affect transparency.",
@@ -4094,7 +4094,7 @@ _DUMBED: dict[str, list[str]] = {
         "Each zone gets its own alpha level for precise control.",
     ],
     "sa_open_btn": [
-        "Click to open an image. You know what Open means, right?",
+        "Click to open an image so Alpha Painter has something to work on.",
         "Opens a file. The image appears on the canvas. Revolutionary.",
         "Supported: PNG, JPG, BMP, TIFF, WEBP, TGA, GIF, ICO. Basically everything.",
         "Opening a new image clears all your zones. Just a heads-up before you click.",
@@ -4104,7 +4104,7 @@ _DUMBED: dict[str, list[str]] = {
         "The image loads to the canvas. Zone painting can then begin. One step at a time.",
     ],
     "sa_save_btn": [
-        "Saves the current Alpha Painter result.",
+        "Saves the current Alpha Painter result once the preview looks right.",
         "The button stays disabled until there is a result ready to export.",
         "Output is PNG so the alpha channel is preserved.",
         "The suggested filename adds '_alpha_painter' to the original name.",
@@ -6312,7 +6312,7 @@ _VULGAR: dict[str, list[str]] = {
         "You can use different zones for background, foreground, and any other areas you want to separate.",
     ],
     "sa_open_btn": [
-        "Open an image. Load the damn thing onto the canvas so you can start painting zones.",
+        "Open an image. Give Alpha Painter something to chew on before you start painting zones.",
         "PNG, JPG, BMP, TGA, WEBP, GIF, ICO — basically any format you have lying around.",
         "Opening a new image nukes all your existing zones. Just so you know before you click.",
         "RGBA internal treatment. Alpha channel handled whether or not the source image had one.",
@@ -6322,7 +6322,7 @@ _VULGAR: dict[str, list[str]] = {
         "It opens a file. Into the canvas. For painting zones onto. This shouldn't need explaining.",
     ],
     "sa_save_btn": [
-        "Save the processed image. Grey until you actually click Apply, you impatient person.",
+        "Save the processed image once Apply has turned it from grey to ready, you impatient person.",
         "Apply first. Then Save. Two buttons. Two steps. This is not difficult.",
         "PNG output. Because PNG keeps alpha. We respect alpha here.",
         "Default name has '_alpha_painter' appended. Rename it if you hate it.",
