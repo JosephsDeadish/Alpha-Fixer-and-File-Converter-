@@ -2155,7 +2155,7 @@ class SelectiveAlphaTool(QWidget):
         )
         self._active_zone_combo.setAccessibleName("Active zone selector")
         self._active_zone_combo.setAccessibleDescription(
-            "Chooses which zone the drawing tools will edit. Brush, erase, move, and shape tools all follow this choice."
+            "Chooses which zone the drawing tools will edit, copy, paste, rename, or clear."
         )
         self._active_zone_combo.currentIndexChanged.connect(
             lambda idx: self._on_zone_action(idx)
@@ -2294,6 +2294,13 @@ class SelectiveAlphaTool(QWidget):
         self._slot_combo = QComboBox()
         slot_label.setBuddy(self._slot_combo)
         self._slot_combo.setAccessibleName("Single-zone slot selector")
+        self._slot_combo.setAccessibleDescription(
+            "Chooses which single-zone slot will store, paste, rename, or clear one painted zone."
+        )
+        self._slot_combo.setToolTip(
+            "Choose the single-zone slot used to save or restore one painted zone.\n"
+            "This keeps a reusable zone ready for later use."
+        )
         self._slot_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -2415,6 +2422,13 @@ class SelectiveAlphaTool(QWidget):
         self._az_slot_combo = QComboBox()
         layout_slot_label.setBuddy(self._az_slot_combo)
         self._az_slot_combo.setAccessibleName("Full zone layout slot")
+        self._az_slot_combo.setAccessibleDescription(
+            "Chooses which full zone layout slot will store, paste, rename, or clear every painted zone together."
+        )
+        self._az_slot_combo.setToolTip(
+            "Choose the full zone layout slot used to save or restore every painted zone.\n"
+            "This keeps a complete layout ready for reuse on another image."
+        )
         self._az_slot_combo.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
