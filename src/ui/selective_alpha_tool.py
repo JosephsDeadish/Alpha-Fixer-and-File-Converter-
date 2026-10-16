@@ -1585,7 +1585,7 @@ class _ZoneRow(QWidget):
         self._vis_btn.setFixedSize(28, 24)
         self._vis_btn.setToolTip(
             f"Toggle visibility of the {color_name} overlay in the canvas.\n"
-            "Hidden zones keep their painted zones — they are just not shown."
+            "Hidden zones keep their painted shape; they are just not shown."
         )
         self._vis_btn.setAccessibleName(f"Toggle {color_name} zone visibility")
         self._vis_btn.setAccessibleDescription(self._vis_btn.toolTip())
@@ -1611,6 +1611,10 @@ class _ZoneRow(QWidget):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
         name_lbl.setWordWrap(True)
+        name_lbl.setAccessibleName(f"{color_name} zone name")
+        name_lbl.setAccessibleDescription(
+            f"Displays the editable name for the {color_name} zone."
+        )
         top.addWidget(name_lbl)
 
         # Alpha label + spinbox
@@ -1636,7 +1640,11 @@ class _ZoneRow(QWidget):
         bot.setSpacing(4)
         self._clear_btn = QPushButton("🗑  Clear")
         self._clear_btn.setMinimumHeight(26)
-        self._clear_btn.setToolTip(f"Erase all painted pixels in {color_name}")
+        self._clear_btn.setToolTip(f"Erase all painted pixels in {color_name}.")
+        self._clear_btn.setAccessibleName(f"Clear {color_name} zone")
+        self._clear_btn.setAccessibleDescription(
+            f"Erases all painted pixels in the {color_name} zone only."
+        )
         self._clear_btn.clicked.connect(self._on_clear)
         bot.addWidget(self._clear_btn)
 
@@ -3019,16 +3027,16 @@ class SelectiveAlphaTool(QWidget):
     @staticmethod
     def _tool_tooltip(key: str) -> str:
         tips = {
-            "freehand":  "Brush: drag to paint the active zone. Release for one undo step.  [B]",
-            "line":      "Line: drag a straight zone stroke from start to finish.  [L]",
-            "rect":      "Rectangle: drag corner-to-corner to fill a boxy zone.  [R]",
-            "ellipse":   "Ellipse: drag the bounding box to fill an oval zone.  [X]",
-            "fill":      "Fill: click to flood-fill a region until image edges stop it.  [F]",
+            "freehand":  "Brush: drag to paint the active zone. Release to commit one undo step.  [B]",
+            "line":      "Line: drag from start to finish to paint a straight zone stroke.  [L]",
+            "rect":      "Rectangle: drag corner-to-corner to fill a rectangular zone.  [R]",
+            "ellipse":   "Ellipse: drag the bounding box to paint an oval zone.  [X]",
+            "fill":      "Fill: click to flood-fill the selected region for the active zone.  [F]",
             "polygon":   "Polygon: click vertices; double-click to close and fill.\n"
                          "Press Esc to cancel.  [P]",
-            "eraser":    "Erase: drag to remove painted zone coverage from every zone.\n"
-                         "Hold & drag to clean up overlaps or mistakes.  [E]",
-            "transform": "Move: drag the zone under the cursor to move it.\n"
+            "eraser":    "Erase: drag to remove painted zone coverage from the active area.\n"
+                         "Hold and drag to clean up overlaps or mistakes.  [E]",
+            "transform": "Move: drag the painted zone to reposition it.\n"
                          "Shift+drag rotates.  Ctrl+drag scales.  [T]\n"
                          "One undo entry is created per drag gesture.",
         }
