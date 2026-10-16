@@ -5160,7 +5160,7 @@ _VULGAR: dict[str, list[str]] = {
         "Pick your background vibe. Is today a sakura-petals day or a ghost-wisps day? Only you know. Choose accordingly.",
     ],
     "tooltip_mode_combo": [
-        "You're using No Filter 🤬 mode. This is the fully unfiltered mode — nothing gets sugar-coated.",
+        "You're using No Filter 🤬 mode — the fully unfiltered mode — nothing gets sugar-coated.",
         "Off turns all this off. Boring, but fair.",
         "Normal is the polite version with clean, useful text.",
         "Dumbed Down is for shorter snarky hints.",
@@ -7054,7 +7054,7 @@ TOOLTIP_MODE_ITEM_TIPS = {
     "Normal": "Clean, detailed tooltips with straightforward guidance.",
     "Off": "Turns tooltip popups off across the app.",
     "Dumbed Down": "Shorter, snarkier tooltips that still explain the control.",
-    "No Filter 🤬": "The fully unfiltered mode: profane, joke-heavy tooltips that still describe the control accurately.",
+    "No Filter 🤬": "The fully unfiltered No Filter 🤬 mode: profane, joke-heavy tooltips that still describe the control accurately.",
 }
 
 _TOOLTIP_MODE_ALIASES = {

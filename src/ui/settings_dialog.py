@@ -503,7 +503,7 @@ class SettingsDialog(QDialog):
         self._theme_search.setClearButtonEnabled(True)
         self._theme_search.setToolTip(
             "Type part of a theme name to filter the preset list below.\n"
-            "Press Enter to focus the first match; filtering never changes the active theme."
+            "Press Enter to focus the first match; filtering only changes the list view, not the active theme."
         )
         self._theme_search.setAccessibleDescription(self._theme_search.toolTip())
         self._theme_search.installEventFilter(self)
@@ -572,7 +572,8 @@ class SettingsDialog(QDialog):
         ps_vl.addLayout(psl)
         self._preset_backup_note = QLabel(
             "Backups save theme, layout, shortcut, and other preferences. "
-            "Use export or import to keep a recovery copy; history and unlock progress stay in the app."
+            "Use export or import to keep a recovery copy for reinstalling, moving to another install, or undoing a bad change. "
+            "History and unlock progress stay in the app."
         )
         self._preset_backup_note.setWordWrap(True)
         self._preset_backup_note.setProperty("settingsHint", True)
@@ -601,7 +602,7 @@ class SettingsDialog(QDialog):
         )
         self._custom_bg_check.setAccessibleName("Enable custom background media")
         self._custom_bg_check.setAccessibleDescription(
-            "Turns on a custom image, GIF, or video background instead of the solid theme colour. You can also drag a local file into the path field below."
+            "Turns on a custom image, animated image, GIF, or video background instead of the solid theme colour. You can also drag a local file into the path field below."
         )
         custom_bg_layout.addWidget(self._custom_bg_check)
         # Sub-container: hidden when custom bg is disabled
@@ -669,7 +670,7 @@ class SettingsDialog(QDialog):
         self._custom_bg_browse_btn.setToolTip("Browse for a custom background image, GIF, or video file.")
         self._custom_bg_browse_btn.setAccessibleName("Browse custom background file")
         self._custom_bg_browse_btn.setAccessibleDescription(
-            "Opens a file picker to choose a custom background image or video."
+            "Opens a file picker to choose a custom background image, animated image, GIF, or video."
         )
         _cbg_file_hl.addWidget(self._custom_bg_browse_btn)
         _cbg_vl.addWidget(self._custom_bg_file_row)
@@ -2476,7 +2477,7 @@ class SettingsDialog(QDialog):
         self._scale_preview_frame.setObjectName("scalePreviewFrame")
         self._scale_preview_frame.setAccessibleName("UI scale live preview")
         self._scale_preview_frame.setAccessibleDescription(
-            "Shows how button height, spacing, border radius, and padding change live as you edit the layout controls."
+            "Shows how button height, spacing, border radius, and padding change live as you adjust the layout controls."
         )
         scale_preview_layout = QVBoxLayout(self._scale_preview_frame)
         scale_preview_layout.setContentsMargins(8, 8, 8, 8)
@@ -2485,7 +2486,7 @@ class SettingsDialog(QDialog):
         self._scale_preview_title.setWordWrap(True)
         self._scale_preview_title.setAccessibleName("Live preview heading")
         self._scale_preview_title.setAccessibleDescription(
-            "Heading for the UI scale live preview area."
+            "Heading for the live preview area that shows the current UI scale."
         )
         scale_preview_layout.addWidget(self._scale_preview_title)
         self._scale_preview_sample_label = QLabel("Sample label follows the current UI scale.")

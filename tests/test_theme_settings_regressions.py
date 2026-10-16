@@ -181,7 +181,7 @@ def test_tooltip_settings_controls_use_clearer_labels(dialog):
         "Normal": "straightforward guidance",
         "Off": "across the app",
         "Dumbed Down": "snarkier tooltips",
-        "No Filter 🤬": "fully unfiltered mode",
+        "No Filter 🤬": "fully unfiltered No Filter 🤬 mode",
     }.items():
         mode_index = widget._tooltip_mode_combo.findText(mode)
         assert snippet in widget._tooltip_mode_combo.itemData(mode_index, Qt.ItemDataRole.ToolTipRole)
@@ -205,9 +205,12 @@ def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
     assert widget._grp_custom_bg.accessibleName() == "Custom background and live preview settings"
     assert "live preview" in widget._grp_custom_bg.accessibleDescription().lower()
     assert "preview updates when a valid file is chosen" in widget._custom_bg_check.toolTip().lower()
+    assert "animated image" in widget._custom_bg_check.accessibleDescription().lower()
     assert "return to a custom file" in widget._use_theme_bg_check.toolTip().lower()
+    assert "animated image" in widget._custom_bg_browse_btn.accessibleDescription().lower()
     assert "live preview" in widget._custom_bg_preview.accessibleDescription().lower()
-    assert widget._scale_preview_title.accessibleDescription() == "Heading for the UI scale live preview area."
+    assert widget._theme_search.toolTip().endswith("not the active theme.")
+    assert widget._scale_preview_title.accessibleDescription() == "Heading for the live preview area that shows the current UI scale."
     assert widget._scale_preview_sample_label.accessibleName() == "UI scale preview sample label"
     assert widget._scale_preview_detail.accessibleName() == "UI scale preview details"
     assert "live preview:" in widget._scale_preview_detail.text().lower()

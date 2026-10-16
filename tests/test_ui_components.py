@@ -8163,7 +8163,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Next:", self._widget._session_status_lbl.text())
         self.assertIn("save the current result", self._widget._next_step_lbl.text())
         self.assertIn("save again when it looks right", self._widget._next_step_lbl.text())
-        self.assertIn("turn on 'Highlight Alpha Values'", self._widget._import_shared_status.text())
+        self.assertIn("enable 'Highlight Alpha Values'", self._widget._import_shared_status.text())
         self.assertIn("after importing", self._widget._import_shared_status.accessibleDescription())
 
     def test_selective_alpha_tool_names_are_more_descriptive(self):
@@ -8333,12 +8333,12 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("copy one zone to the zone clipboard", self._widget._next_step_lbl.accessibleDescription().lower())
         self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=np.uint8))])
         self.assertIn("shared zone(s) ready", self._widget._import_shared_status.text())
-        self.assertIn("Next: open an image, import the shared zones", self._widget._import_shared_status.text())
+        self.assertIn("Next: open an image first, import the shared zones", self._widget._import_shared_status.text())
         self.assertIn("Import Shared Zones to Canvas", self._widget._btn_import_shared.text())
         self.assertIn("Import shared zones", self._widget._btn_import_shared.accessibleName())
         self.assertIn("Import the shared zones", self._widget._btn_import_shared.toolTip())
         self.assertIn("editable zones", self._widget._btn_import_shared.accessibleDescription().lower())
-        self.assertIn("Copy shared zones → Alpha Painter tool", SelectiveAlphaTool._shared_zone_import_instructions())
+        self.assertIn("copy the shared zones into Alpha Painter", SelectiveAlphaTool._shared_zone_import_instructions())
 
         self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=bool))])
         text = self._widget._import_shared_status.text()
