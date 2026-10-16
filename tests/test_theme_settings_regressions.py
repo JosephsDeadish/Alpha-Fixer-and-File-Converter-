@@ -186,14 +186,16 @@ def test_tooltip_settings_controls_use_clearer_labels(dialog):
         mode_index = widget._tooltip_mode_combo.findText(mode)
         assert snippet in widget._tooltip_mode_combo.itemData(mode_index, Qt.ItemDataRole.ToolTipRole)
     assert "tooltip boxes" in widget._tooltip_style_combo.toolTip().lower()
-    assert "compare layouts before you apply one" in widget._theme_preset_combo.toolTip().lower()
+    assert "compare layouts before applying a preset" in widget._theme_preset_combo.toolTip().lower()
     assert widget._btn_save_theme.text() == "Save Theme Preset…"
     assert widget._btn_delete_theme.text() == "Delete Theme Preset"
     assert widget._btn_export_theme.text() == "Export Preferences Backup…"
     assert widget._btn_import_theme.text() == "Import Preferences Backup…"
     assert widget._btn_export_theme.accessibleName() == "Export preferences backup"
     assert widget._btn_import_theme.accessibleName() == "Import preferences backup"
-    assert "preferences to a json recovery backup" in widget._btn_export_theme.toolTip().lower()
+    assert "move your look, layout, and other saved preferences" in widget._btn_export_theme.toolTip().lower()
+    assert "apply them immediately" in widget._btn_import_theme.toolTip().lower()
+    assert "restart the app afterward" in widget._btn_reset.accessibleDescription().lower()
 
 
 def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
@@ -219,8 +221,11 @@ def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
     assert "live preview:" in widget._scale_preview_detail.text().lower()
     assert "preview the current ui scale" in widget._scale_preview_button.accessibleDescription().lower()
     assert "preview the current ui scale" in widget._scale_preview_combo.accessibleDescription().lower()
-    assert "backup and recovery tools" in widget._settings_tabs.tabToolTip(0).lower()
+    assert "backups, recovery, and reset tools" in widget._settings_tabs.tabToolTip(0).lower()
     assert "toggles and previews update live" in widget._live_settings_note.text().lower()
+    assert "reset buttons below require a restart afterward" in widget._preset_backup_note.text().lower()
+    assert "reload the app" in widget._btn_reset.toolTip().lower()
+    assert "re-testing hidden theme unlocks" in widget._btn_reset_unlocks.toolTip().lower()
     assert "reveals the manual particle style picker" in widget._click_effects_theme_check.accessibleDescription().lower()
     assert "manual trail controls disabled" in widget._use_theme_trail_check.accessibleDescription().lower()
     assert "theme sound profile" in widget._sound_check.accessibleDescription().lower()

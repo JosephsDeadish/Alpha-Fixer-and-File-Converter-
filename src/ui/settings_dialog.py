@@ -486,8 +486,8 @@ class SettingsDialog(QDialog):
         self._grp_preset_select = QGroupBox("Theme Presets, Backup, and Recovery")
         self._grp_preset_select.setAccessibleName("Theme preset, backup, and recovery tools")
         self._grp_preset_select.setAccessibleDescription(
-            "Search, choose, save, export, and import themes and preferences backups from one place. "
-            f"Export and import buttons create and restore JSON recovery backups. {_SETTINGS_BACKUP_SCOPE_NOTE}"
+            "Search, choose, save, export, and import theme presets and preferences backups from one place. "
+            f"Export and import buttons create and restore JSON recovery backups without changing the active theme first. {_SETTINGS_BACKUP_SCOPE_NOTE}"
         )
         ps_vl = QVBoxLayout(self._grp_preset_select)
         ps_vl.setSpacing(4)
@@ -524,7 +524,7 @@ class SettingsDialog(QDialog):
         self._theme_preset_combo.setToolTip(
             "Choose an application theme.\n"
             "Locked entries stay greyed out until they are unlocked; hidden themes show unlock markers.\n"
-            "Use the live preview below to compare layouts before you apply one."
+            "Use the live preview pane below to compare layouts before applying a preset."
         )
         self._theme_preset_combo.setAccessibleDescription(self._theme_preset_combo.toolTip())
         self._rebuild_theme_combo()
@@ -547,12 +547,12 @@ class SettingsDialog(QDialog):
         self._btn_import_theme.setMinimumWidth(110)
         self._btn_export_theme.setToolTip(
             "Export the current preferences to a JSON recovery backup.\n"
-            "Use this as a recovery copy or move your look, layout, and other saved preferences to another install.\n"
+            "Use it to restore this install or move your look, layout, and other saved preferences to another install.\n"
             f"{_SETTINGS_BACKUP_SCOPE_NOTE}"
         )
         self._btn_import_theme.setToolTip(
             "Import preferences from a JSON recovery backup and apply them immediately.\n"
-            "Use this to restore a saved look or bring preferences in from another install.\n"
+            "Use it to restore a saved look or bring preferences in from another install.\n"
             f"{_SETTINGS_BACKUP_SCOPE_NOTE}"
         )
         self._btn_export_theme.setAccessibleName("Export preferences backup")
@@ -574,6 +574,7 @@ class SettingsDialog(QDialog):
         self._preset_backup_note = QLabel(
             "Backups save theme, layout, shortcut, sound, and other preferences. "
             "Use export or import to keep a recovery copy before a big change, reinstalling, or moving to another install. "
+            "Export and import apply immediately; the reset buttons below require a restart afterward. "
             f"{_SETTINGS_BACKUP_SCOPE_NOTE}"
         )
         self._preset_backup_note.setWordWrap(True)
@@ -2903,7 +2904,7 @@ class SettingsDialog(QDialog):
         effects_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         effects_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         tabs.addTab(effects_scroll, "✨ Effects")
-        tabs.setTabToolTip(0, "Theme presets, palette editing, custom backgrounds, and preferences backup and recovery tools.")
+        tabs.setTabToolTip(0, "Theme presets, palette editing, custom backgrounds, backups, recovery, and reset tools.")
         tabs.setTabToolTip(1, "Layout, scaling, tooltip wording, history controls, and live preview.")
         tabs.setTabToolTip(2, "Sound toggles, profiles, and event volumes.")
         tabs.setTabToolTip(3, "Optional click, background, cursor, and button effects.")
@@ -2938,11 +2939,11 @@ class SettingsDialog(QDialog):
             "⚠ Reset all preferences, unlock flags, and history to factory defaults.\n"
             "This clears custom themes and saved history from this install.\n"
             "Export a preferences backup first if you want a recovery copy.\n"
-            "This cannot be undone. Restart afterward to fully apply the reset."
+            "This cannot be undone. Restart afterward to fully apply the reset and reload the app."
         )
         self._btn_reset.setAccessibleName("Reset all preferences")
         self._btn_reset.setAccessibleDescription(
-            "Resets all preferences, unlock flags, custom themes, and history to factory defaults after you save a preferences backup you want to keep."
+            "Resets all preferences, unlock flags, custom themes, and history to factory defaults after you save a preferences backup you want to keep. Restart the app afterward to fully reload the reset state."
         )
         btn_row.addWidget(self._btn_reset)
         self._btn_reset_unlocks = QPushButton("Reset Unlocks & Clicks…")
