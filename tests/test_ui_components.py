@@ -8174,6 +8174,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("save the current result", self._widget._next_step_lbl.text())
         self.assertIn("once you're satisfied", self._widget._next_step_lbl.text())
         self.assertIn("copy one zone to the zone clipboard", self._widget._next_step_lbl.text())
+        self.assertIn("clipboard state", self._widget._session_status_lbl.accessibleDescription())
         self.assertIn("enable 'Highlight Alpha Values'", self._widget._import_shared_status.text())
         self.assertIn("bring them onto the canvas", self._widget._import_shared_status.accessibleDescription())
         self.assertIn("highlighted zones", self._widget._import_shared_status.toolTip())
@@ -8192,6 +8193,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         )
         self.assertEqual("Workflow: Open → Import → Paint → Save", workflow_box.title())
         self.assertEqual("Import Shared Zones", import_box.title())
+        self.assertIn("clipboard", workflow_box.toolTip().lower())
         self.assertIn("bring them onto the canvas", import_box.accessibleDescription())
         label_by_name = {label.accessibleName(): label for label in labels}
         self.assertIn("Brush", self._widget._tool_btns["freehand"].text())
@@ -8279,6 +8281,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
             self._app.processEvents()
 
     def test_selective_alpha_slot_labels_explain_next_actions(self):
+        from PyQt6.QtWidgets import QPushButton
         from src.ui.selective_alpha_tool import SelectiveAlphaTool
 
         self.assertIn("Empty", self._widget._slot_info_lbl.text())
@@ -8291,6 +8294,9 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Delete single-zone slot", self._widget._btn_slot_del.accessibleName())
         self.assertIn("Rename single-zone slot", self._widget._btn_slot_rename.accessibleName())
         self.assertIn("Clear single-zone slot", self._widget._btn_slot_clear.accessibleName())
+        zone_button_texts = {btn.text() for btn in self._widget.findChildren(QPushButton)}
+        self.assertIn("📋  Copy Zone to Clipboard", zone_button_texts)
+        self.assertIn("📌  Paste Zone from Clipboard", zone_button_texts)
         self.assertIn("painted zone stored in it will be lost", self._widget._btn_slot_del.toolTip())
         self.assertIn("Save the active zone into the selected slot", self._widget._btn_slot_save.toolTip())
         self.assertIn("Paste the zone stored in the selected slot", self._widget._btn_slot_paste.toolTip())
@@ -8340,7 +8346,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("clipboard", import_note.text().lower())
         self.assertIn("full zone layout slot", import_note.accessibleDescription())
         self.assertEqual("Alpha Painter shared zone import", import_box.accessibleName())
-        self.assertIn("save the layout", import_box.accessibleDescription().lower())
+        self.assertIn("save them", import_box.accessibleDescription().lower())
         self.assertIn("edit them on the canvas", import_box.accessibleDescription().lower())
         self.assertIn("copy one zone", import_box.accessibleDescription().lower())
         self.assertIn("Import the shared zones", self._widget._btn_import_shared.toolTip())
