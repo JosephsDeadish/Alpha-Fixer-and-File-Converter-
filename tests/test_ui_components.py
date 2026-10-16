@@ -3595,6 +3595,8 @@ class TestTooltipManager(unittest.TestCase):
         self.assertIn("fully unfiltered mode", vulgar_mode)
         self.assertIn("nothing gets sugar-coated", vulgar_mode)
         self.assertIn("fucking", vulgar_style)
+        self.assertIn("straightforward", " ".join(_NORMAL["tooltip_mode_combo"]).lower())
+        self.assertIn("snarkier", " ".join(_DUMBED["tooltip_mode_combo"]).lower())
         for tips in (_NORMAL["tooltip_mode_combo"], _DUMBED["tooltip_mode_combo"], _VULGAR["tooltip_mode_combo"]):
             self.assertIn("unfiltered", " ".join(tips).lower())
         self.assertIn("fully unfiltered mode", " ".join(_VULGAR["tooltip_mode_combo"]).lower())
@@ -3611,6 +3613,7 @@ class TestTooltipManager(unittest.TestCase):
         for tips in (_NORMAL["tooltip_mode_combo"], _DUMBED["tooltip_mode_combo"], _VULGAR["tooltip_mode_combo"]):
             self.assertIn("No Filter 🤬", " ".join(tips))
         self.assertIn("No Filter 🤬", " ".join(_VULGAR["settings_general_tab"]))
+        self.assertIn("stays fully unfiltered", " ".join(_NORMAL["settings_general_tab"]).lower())
         self.assertIn("backup", " ".join(_NORMAL["settings_theme_tab"]).lower())
         self.assertIn("backup", " ".join(_DUMBED["settings_theme_tab"]).lower())
         self.assertIn("backup", " ".join(_VULGAR["settings_theme_tab"]).lower())
@@ -8333,12 +8336,12 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("copy one zone to the zone clipboard", self._widget._next_step_lbl.accessibleDescription().lower())
         self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=np.uint8))])
         self.assertIn("shared zone(s) ready", self._widget._import_shared_status.text())
-        self.assertIn("Next: open an image first, import the shared zones", self._widget._import_shared_status.text())
+        self.assertIn("Next: open an image, then import the shared zones", self._widget._import_shared_status.text())
         self.assertIn("Import Shared Zones to Canvas", self._widget._btn_import_shared.text())
         self.assertIn("Import shared zones", self._widget._btn_import_shared.accessibleName())
         self.assertIn("Import the shared zones", self._widget._btn_import_shared.toolTip())
         self.assertIn("editable zones", self._widget._btn_import_shared.accessibleDescription().lower())
-        self.assertIn("send the shared zones into Alpha Painter", SelectiveAlphaTool._shared_zone_import_instructions())
+        self.assertIn("send those shared zones into Alpha Painter", SelectiveAlphaTool._shared_zone_import_instructions())
 
         self._widget.receive_shared_zones([(64, np.ones((2, 2), dtype=bool))])
         text = self._widget._import_shared_status.text()

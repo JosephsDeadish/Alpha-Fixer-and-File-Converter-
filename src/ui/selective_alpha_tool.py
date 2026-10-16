@@ -3557,7 +3557,7 @@ class SelectiveAlphaTool(QWidget):
 
         next_actions = "Next: import the shared zones, save them to the full zone layout slot, or copy one zone to the zone clipboard."
         if count == 1:
-            next_actions = "Next: open an image first, import the shared zones, or press Paste Zone to apply the pre-loaded zone clipboard copy."
+            next_actions = "Next: open an image, then import the shared zones, or press Paste Zone to apply the pre-loaded zone clipboard copy."
         self._import_shared_status.setText(
             f"✅ {count} shared zone(s) ready"
             f" (α: {', '.join(str(v) for v, _ in displayed)}{suffix})"

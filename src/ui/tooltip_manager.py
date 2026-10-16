@@ -468,7 +468,7 @@ _NORMAL: dict[str, list[str]] = {
     ],
     "tooltip_mode_combo": [
         "Controls the tooltip writing style used across the app.",
-        "Normal: clean, detailed help text.",
+        "Normal: straightforward, detailed help text that stays matched to the control.",
         "Off: disables tooltip popups.",
         "Dumbed Down: shorter, snarkier help with the same basic guidance.",
         "No Filter 🤬: the fully unfiltered mode — profane, joke-heavy help that still explains the control.",
