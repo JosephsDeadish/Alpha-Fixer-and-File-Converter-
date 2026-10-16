@@ -1782,7 +1782,7 @@ class SelectiveAlphaTool(QWidget):
             if has_shared_zones:
                 return (
                     "Next step: open an image, then import shared zones from Alpha & RGBA Adjuster, save "
-                    "them to a full-layout slot, or copy one zone to the zone clipboard for reuse."
+                    "them to a full zone layout slot, or copy one zone to the zone clipboard for reuse."
                 )
             return "Next step: open an image or import shared zones from Alpha & RGBA Adjuster to begin editing."
         if result_ready:
@@ -2386,7 +2386,7 @@ class SelectiveAlphaTool(QWidget):
 
         # ── Copy / Paste all zones ──────────────────────────────────────────
         all_zones_box = QGroupBox("📋 Full Layout Slots")
-        all_zones_box.setAccessibleName("Alpha Painter full-layout slots")
+        all_zones_box.setAccessibleName("Alpha Painter full zone layout slots")
         all_zones_box.setAccessibleDescription(
             "Stores complete zone layouts so every painted zone can be copied and restored together."
         )
@@ -2403,7 +2403,7 @@ class SelectiveAlphaTool(QWidget):
         _az_hint.setWordWrap(True)
         _az_hint.setAccessibleName("Full zone layout guidance")
         _az_hint.setAccessibleDescription(
-            "Explains how full-layout slots store and restore every painted zone together."
+            "Explains how full zone layout slots store and restore every painted zone together."
         )
         azv.addWidget(_az_hint)
 
@@ -2542,27 +2542,27 @@ class SelectiveAlphaTool(QWidget):
                 )
             elif control is self._btn_az_slot_add:
                 control.setAccessibleDescription(
-                    "Adds an empty full-layout slot for storing all painted zones together."
+                    "Adds an empty full zone layout slot for storing all painted zones together."
                 )
             elif control is self._btn_az_slot_del:
                 control.setAccessibleDescription(
-                    "Deletes the selected full-layout slot and the whole zone layout stored inside it."
+                    "Deletes the selected full zone layout slot and the whole zone layout stored inside it."
                 )
             elif control is self._btn_copy_all_zones:
                 control.setAccessibleDescription(
-                    "Saves every painted zone into the selected full-layout slot."
+                    "Saves every painted zone into the selected full zone layout slot."
                 )
             elif control is self._btn_paste_all_zones:
                 control.setAccessibleDescription(
-                    "Restores every painted zone from the selected full-layout slot back onto the canvas."
+                    "Restores every painted zone from the selected full zone layout slot back onto the canvas."
                 )
             elif control is self._btn_az_slot_rename:
                 control.setAccessibleDescription(
-                    "Lets you change the selected full-layout slot name."
+                    "Lets you change the selected full zone layout slot name."
                 )
             elif control is self._btn_az_slot_clear:
                 control.setAccessibleDescription(
-                    "Removes the stored layout from the selected full-layout slot without deleting the slot."
+                    "Removes the stored layout from the selected full zone layout slot without deleting the slot."
                 )
             else:
                 control.setAccessibleDescription(control.toolTip())
@@ -2585,14 +2585,14 @@ class SelectiveAlphaTool(QWidget):
 
         import_note = QLabel(
             "Import shared zones from Alpha & RGBA Adjuster, then bring them onto the canvas,\n"
-            "save the whole set into a full-layout slot, or copy one zone to the zone clipboard for quick reuse."
+            "save the whole set into a full zone layout slot, or copy one zone to the zone clipboard for quick reuse."
         )
         import_note.setWordWrap(True)
         import_note.setProperty("toolGuidance", True)
         import_note.setToolTip(self._shared_zone_import_instructions())
         import_note.setAccessibleName("Shared zone import guidance")
         import_note.setAccessibleDescription(
-            "Explains how to import shared zones, save them to a full-layout slot, or copy one zone to the zone clipboard after importing."
+            "Explains how to import shared zones, save them to a full zone layout slot, or copy one zone to the zone clipboard after importing."
         )
         iv.addWidget(import_note)
 
@@ -2603,7 +2603,7 @@ class SelectiveAlphaTool(QWidget):
         self._import_shared_status.setProperty("toolGuidance", True)
         self._import_shared_status.setAccessibleName("Shared zone import status")
         self._import_shared_status.setAccessibleDescription(
-            "Explains whether shared zones are ready and which follow-up action to take next after importing: import them, save them to a full-layout slot, or copy one zone to the zone clipboard."
+            "Explains whether shared zones are ready and which follow-up action to take next after importing: import them, save them to a full zone layout slot, or copy one zone to the zone clipboard."
         )
         iv.addWidget(self._import_shared_status)
 
@@ -2621,16 +2621,16 @@ class SelectiveAlphaTool(QWidget):
         iv.addWidget(self._btn_import_shared)
 
         # Item 22: save ALL shared zones into the current full-layout slot
-        self._btn_import_to_az_slot = QPushButton("💾 Save Shared Zones → Full Layout Slot")
+        self._btn_import_to_az_slot = QPushButton("💾 Save Shared Zones → Full Zone Layout Slot")
         self._btn_import_to_az_slot.setMinimumHeight(26)
         self._btn_import_to_az_slot.setEnabled(False)
         self._btn_import_to_az_slot.setToolTip(
-            "Save every shared zone into the selected Full Layout Slot.\n\n"
+            "Save every shared zone into the selected full zone layout slot.\n\n"
             "Use this when you want to reuse the whole zone layout on another image later."
         )
-        self._btn_import_to_az_slot.setAccessibleName("Save shared zones to full layout slot")
+        self._btn_import_to_az_slot.setAccessibleName("Save shared zones to full zone layout slot")
         self._btn_import_to_az_slot.setAccessibleDescription(
-            "Saves every shared zone into the selected full-layout slot so the layout can be reused later."
+            "Saves every shared zone into the selected full zone layout slot so the layout can be reused later."
         )
         self._btn_import_to_az_slot.clicked.connect(self._on_import_to_az_slot)
         iv.addWidget(self._btn_import_to_az_slot)
@@ -3055,7 +3055,7 @@ class SelectiveAlphaTool(QWidget):
             extras.append("zone clipboard ready")
         filled_slots = sum(1 for slot in self._az_slots if slot)
         if filled_slots:
-            extras.append(f"{filled_slots} full-layout slot{'s' if filled_slots != 1 else ''} saved")
+            extras.append(f"{filled_slots} full zone layout slot{'s' if filled_slots != 1 else ''} saved")
         if self._result_img is not None:
             extras.append("result ready to save")
         return summary + ("  •  " + "  •  ".join(extras) if extras else "")
@@ -3536,7 +3536,7 @@ class SelectiveAlphaTool(QWidget):
         else:
             clipboard_note = ""
 
-        next_actions = "Next: import the shared zones, save them to the full-layout slot, or copy one zone to the zone clipboard."
+        next_actions = "Next: import the shared zones, save them to the full zone layout slot, or copy one zone to the zone clipboard."
         if count == 1:
             next_actions = "Next: open an image, import the shared zones, or press Paste Zone to apply the pre-loaded zone clipboard copy."
         self._import_shared_status.setText(
