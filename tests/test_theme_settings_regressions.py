@@ -187,20 +187,24 @@ def test_tooltip_settings_controls_use_clearer_labels(dialog):
         assert snippet in widget._tooltip_mode_combo.itemData(mode_index, Qt.ItemDataRole.ToolTipRole)
     assert "tooltip boxes" in widget._tooltip_style_combo.toolTip().lower()
     assert "compare layouts before you apply one" in widget._theme_preset_combo.toolTip().lower()
-    assert widget._btn_save_theme.accessibleName() == "Save theme preset"
-    assert widget._btn_delete_theme.accessibleName() == "Delete theme preset"
-    assert widget._btn_export_theme.accessibleName() == "Export preferences backup"
-    assert widget._btn_import_theme.accessibleName() == "Import preferences backup"
-    assert "preferences to a json recovery backup" in widget._btn_export_theme.toolTip().lower()
+    assert widget._btn_save_theme.text() == "Save Theme Preset…"
+    assert widget._btn_delete_theme.text() == "Delete Theme Preset"
+    assert widget._btn_export_theme.text() == "Export Settings Backup…"
+    assert widget._btn_import_theme.text() == "Import Settings Backup…"
+    assert widget._btn_export_theme.accessibleName() == "Export settings backup"
+    assert widget._btn_import_theme.accessibleName() == "Import settings backup"
+    assert "settings to a json recovery backup" in widget._btn_export_theme.toolTip().lower()
 
 
 def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
     widget, _manager = dialog
     tab_bar = widget.findChild(QTabBar)
     assert tab_bar is not None
+    assert widget._grp_preset_select.title() == "Theme Presets, Settings Backup, and Recovery"
     assert widget._grp_preset_select.accessibleName() == "Theme preset, backup, and recovery tools"
     assert "json recovery backups" in widget._grp_preset_select.accessibleDescription().lower()
-    assert "recovery copy" in widget._preset_backup_note.text().lower()
+    assert "theme, layout, shortcut, sound" in widget._preset_backup_note.text().lower()
+    assert "before a big change" in widget._preset_backup_note.text().lower()
     assert "history and unlock progress" in widget._preset_backup_note.text().lower()
     assert widget._grp_custom_bg.accessibleName() == "Custom background and live preview settings"
     assert "live preview" in widget._grp_custom_bg.accessibleDescription().lower()
@@ -217,6 +221,10 @@ def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
     assert "preview the current ui scale" in widget._scale_preview_button.accessibleDescription().lower()
     assert "preview the current ui scale" in widget._scale_preview_combo.accessibleDescription().lower()
     assert "backup and recovery tools" in tab_bar.tabToolTip(0).lower()
+    assert "toggles and previews update live" in widget._live_settings_note.text().lower()
+    assert "reveals the manual particle style picker" in widget._click_effects_theme_check.accessibleDescription().lower()
+    assert "manual trail controls disabled" in widget._use_theme_trail_check.accessibleDescription().lower()
+    assert "theme sound profile" in widget._sound_check.accessibleDescription().lower()
 
 
 def test_settings_theme_and_reset_tab_order_follows_discovery(dialog, app):

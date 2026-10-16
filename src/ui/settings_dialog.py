@@ -451,7 +451,7 @@ class SettingsDialog(QDialog):
         )
         self._live_settings_note = QLabel(
             "Changes save automatically and apply immediately unless a control says otherwise. "
-            "Close keeps your changes; there is no Apply or Cancel step."
+            "Close keeps your changes; there is no Apply or Cancel step, so toggles and previews update live."
         )
         self._live_settings_note.setWordWrap(True)
         layout.addWidget(self._live_settings_note)
@@ -482,10 +482,10 @@ class SettingsDialog(QDialog):
         ev.addWidget(effects_intro)
 
         # ---- Preset GroupBox ----
-        self._grp_preset_select = QGroupBox("Theme Presets, Backup, and Recovery")
+        self._grp_preset_select = QGroupBox("Theme Presets, Settings Backup, and Recovery")
         self._grp_preset_select.setAccessibleName("Theme preset, backup, and recovery tools")
         self._grp_preset_select.setAccessibleDescription(
-            "Search, choose, save, export, and import themes and preferences from one place. "
+            "Search, choose, save, export, and import themes and settings from one place. "
             "Export and import buttons create and restore JSON recovery backups without touching history or unlock progress."
         )
         ps_vl = QVBoxLayout(self._grp_preset_select)
@@ -528,10 +528,10 @@ class SettingsDialog(QDialog):
         self._theme_preset_combo.setAccessibleDescription(self._theme_preset_combo.toolTip())
         self._rebuild_theme_combo()
         psl.addWidget(self._theme_preset_combo, 0, 1, 1, 3)
-        self._btn_save_theme = QPushButton("Save Preset…")
-        self._btn_delete_theme = QPushButton("Delete Preset")
-        self._btn_export_theme = QPushButton("Export Preferences Backup…")
-        self._btn_import_theme = QPushButton("Import Preferences Backup…")
+        self._btn_save_theme = QPushButton("Save Theme Preset…")
+        self._btn_delete_theme = QPushButton("Delete Theme Preset")
+        self._btn_export_theme = QPushButton("Export Settings Backup…")
+        self._btn_import_theme = QPushButton("Import Settings Backup…")
         self._btn_save_theme.setAccessibleName("Save theme preset")
         self._btn_save_theme.setAccessibleDescription(
             "Saves the current appearance settings as a custom theme preset for later reuse."
@@ -545,22 +545,22 @@ class SettingsDialog(QDialog):
         self._btn_export_theme.setMinimumWidth(110)
         self._btn_import_theme.setMinimumWidth(110)
         self._btn_export_theme.setToolTip(
-            "Export the current preferences to a JSON recovery backup.\n"
-            "Use this as a recovery copy or move your look and other saved preferences to another install.\n"
+            "Export the current settings to a JSON recovery backup.\n"
+            "Use this as a recovery copy or move your look, layout, and other saved preferences to another install.\n"
             "History and unlock progress stay in the app."
         )
         self._btn_import_theme.setToolTip(
-            "Import preferences from a JSON recovery backup and apply them immediately.\n"
+            "Import settings from a JSON recovery backup and apply them immediately.\n"
             "Use this to restore a saved look or bring preferences in from another install.\n"
             "History and unlock progress stay in the app."
         )
-        self._btn_export_theme.setAccessibleName("Export preferences backup")
+        self._btn_export_theme.setAccessibleName("Export settings backup")
         self._btn_export_theme.setAccessibleDescription(
-            "Exports the current preferences to a JSON recovery backup for safekeeping, recovery, or transfer. History and unlock progress are not part of the backup."
+            "Exports the current settings to a JSON recovery backup for safekeeping, recovery, or transfer. History and unlock progress are not part of the backup."
         )
-        self._btn_import_theme.setAccessibleName("Import preferences backup")
+        self._btn_import_theme.setAccessibleName("Import settings backup")
         self._btn_import_theme.setAccessibleDescription(
-            "Imports a JSON recovery backup and applies it immediately so you can recover saved preferences or transfer them from another install. History and unlock progress are not part of the backup."
+            "Imports a JSON recovery backup and applies it immediately so you can recover saved settings or transfer them from another install. History and unlock progress are not part of the backup."
         )
         psl.addWidget(self._btn_save_theme, 1, 0)
         psl.addWidget(self._btn_delete_theme, 1, 1)
@@ -571,8 +571,8 @@ class SettingsDialog(QDialog):
         psl.setColumnStretch(3, 1)
         ps_vl.addLayout(psl)
         self._preset_backup_note = QLabel(
-            "Backups save theme, layout, shortcut, and other preferences. "
-            "Use export or import to keep a recovery copy for reinstalling, moving to another install, or undoing a bad change. "
+            "Backups save theme, layout, shortcut, sound, and other settings. "
+            "Use export or import to keep a recovery copy before a big change, reinstalling, or moving to another install. "
             "History and unlock progress stay in the app."
         )
         self._preset_backup_note.setWordWrap(True)
@@ -599,6 +599,9 @@ class SettingsDialog(QDialog):
             "animated GIF, or video file instead of the solid theme colour.\n"
             "Supported: the app's image formats plus the video formats supported by Video Builder.\n"
             "Drag a file into the path field below or browse for one; the preview updates when a valid file is chosen."
+        )
+        self._custom_bg_check.setAccessibleDescription(
+            "Turns on a custom image, animated image, GIF, or video background and reveals the file picker, recent-file list, and live preview."
         )
         self._custom_bg_check.setAccessibleName("Enable custom background media")
         self._custom_bg_check.setAccessibleDescription(
@@ -1131,8 +1134,9 @@ class SettingsDialog(QDialog):
         self._click_effects_theme_check.setToolTip(
             "Show the click-effect controls and let you pick a particle style for the active theme."
         )
+        self._click_effects_theme_check.setAccessibleName("Enable click effects")
         self._click_effects_theme_check.setAccessibleDescription(
-            "Enables click effects so you can choose a manual particle style or follow the current theme."
+            "Enables click effects and reveals the manual particle style picker plus the theme-matching toggle."
         )
         effect_layout.addWidget(self._click_effects_theme_check)
         # Sub-container: hidden until click effects are enabled
@@ -1148,7 +1152,7 @@ class SettingsDialog(QDialog):
             "The manual effect picker stays visible but is disabled until you turn this off."
         )
         self._use_theme_effect_check.setAccessibleDescription(
-            "Automatically matches the active theme's click effect and disables the manual effect picker."
+            "Automatically matches the active theme's click effect and keeps the manual effect picker disabled until unchecked."
         )
         _ce_sub_vl.addWidget(self._use_theme_effect_check)
         # Info label shown when "Use theme effect" is ON (replaces manual combo, item 4)
@@ -1361,6 +1365,9 @@ class SettingsDialog(QDialog):
             "Blood: blood drips from the cursor while held.\n"
             "Shake: the window shakes with increasing intensity while held."
         )
+        self._hold_effects_check.setAccessibleDescription(
+            "Enables hold-click effects and reveals the hold-key selector and theme-matching toggle."
+        )
         hold_layout.addWidget(self._hold_effects_check)
         self._hold_effect_sub = QWidget()
         _hold_sub_vl = QVBoxLayout(self._hold_effect_sub)
@@ -1370,6 +1377,9 @@ class SettingsDialog(QDialog):
             "Use theme hold effect (auto-selects the hold effect to match the active theme)"
         )
         _hold_sub_vl.addWidget(self._use_theme_hold_check)
+        self._use_theme_hold_check.setAccessibleDescription(
+            "Automatically matches the active theme's hold effect and keeps the manual hold selector disabled until unchecked."
+        )
         self._hold_inner_widget = QWidget()
         hold_inner = QHBoxLayout(self._hold_inner_widget)
         hold_inner.setContentsMargins(0, 0, 0, 0)
@@ -1637,6 +1647,9 @@ class SettingsDialog(QDialog):
             "floating overlay banner above the main window.\n"
             "A short status-bar summary is still shown separately so notifications do not compete with the tab row."
         )
+        self._notif_overlay_check.setAccessibleDescription(
+            "Shows achievement and unlock notifications as a floating overlay and reveals the theme-style toggle."
+        )
         self._notif_overlay_check.setChecked(True)
         notif_layout.addWidget(self._notif_overlay_check)
         # Sub-container: hidden when notifications are disabled
@@ -1684,6 +1697,9 @@ class SettingsDialog(QDialog):
         trail_gl.setHorizontalSpacing(10)
         trail_gl.setVerticalSpacing(6)
         self._trail_check = QCheckBox("Enable mouse trail")
+        self._trail_check.setAccessibleDescription(
+            "Enables the mouse trail controls and reveals the manual colour, style, and preview options."
+        )
         trail_gl.addWidget(self._trail_check, 0, 0, 1, 2)
         # Sub-container: hidden until trail is enabled
         self._trail_sub = QWidget()
@@ -1695,6 +1711,9 @@ class SettingsDialog(QDialog):
             "When enabled the trail color and style are chosen automatically to match\n"
             "the active theme effect.  Fairy Garden gets sparkle fairy dust (✨💫⭐),\n"
             "Ocean/Mermaid get wave emoji (🫧💧🌊), Ice/Sparkle get crystal emoji (✦❄✧)."
+        )
+        self._use_theme_trail_check.setAccessibleDescription(
+            "Automatically matches the active theme's trail colour and style and keeps the manual trail controls disabled until unchecked."
         )
         _trail_sub_vl.addWidget(self._use_theme_trail_check)
         # Info label shown when "Use theme trail" is ON (replaces manual color/style, item 4)
@@ -1934,6 +1953,9 @@ class SettingsDialog(QDialog):
             "Master switch — enables all application sounds.\n"
             "Off by default. Individual events can still be muted below."
         )
+        self._sound_check.setAccessibleDescription(
+            "Enables application sounds and reveals the theme sound profile, volume, and event sound controls."
+        )
         sound_gl.addWidget(self._sound_check, 0, 0, 1, 2)
 
         # Sub-controls container — shown only when sounds are enabled (item 68).
@@ -2123,6 +2145,9 @@ class SettingsDialog(QDialog):
             "when clicked — a subtle slide, bounce, shake, or particle burst.\n"
             "Enabled by default. Disable to improve performance on slow systems."
         )
+        self._button_anim_check.setAccessibleDescription(
+            "Enables button press animations and reveals the manual animation picker plus the theme-matching toggle."
+        )
         btn_anim_gl.addWidget(self._button_anim_check, 0, 0, 1, 2)
         # Container for sub-options — hidden until button animation is enabled
         self._btn_anim_sub = QWidget()
@@ -2230,6 +2255,9 @@ class SettingsDialog(QDialog):
             "When enabled: the banner emoji in the header animates continuously\n"
             "and the theme SVG badge in the tab bar plays its built-in animation.\n"
             "When disabled: both are rendered statically, saving CPU/GPU resources."
+        )
+        self._animated_banner_check.setAccessibleDescription(
+            "Enables the animated banner and reveals the banner animation picker plus the theme-matching toggle."
         )
         banner_gl.addWidget(self._animated_banner_check, 0, 0, 1, 2)
 
@@ -2874,8 +2902,8 @@ class SettingsDialog(QDialog):
         effects_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         effects_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         tabs.addTab(effects_scroll, "✨ Effects")
-        tabs.setTabToolTip(0, "Theme presets, palette editing, custom backgrounds, and backup and recovery tools.")
-        tabs.setTabToolTip(1, "Layout, scaling, tooltip wording, and history controls with live preview.")
+        tabs.setTabToolTip(0, "Theme presets, palette editing, custom backgrounds, and settings backup and recovery tools.")
+        tabs.setTabToolTip(1, "Layout, scaling, tooltip wording, history controls, and live preview.")
         tabs.setTabToolTip(2, "Sound toggles, profiles, and event volumes.")
         tabs.setTabToolTip(3, "Optional click, background, cursor, and button effects.")
 
@@ -2908,12 +2936,12 @@ class SettingsDialog(QDialog):
         self._btn_reset.setToolTip(
             "⚠ Reset all settings, unlock flags, and history to factory defaults.\n"
             "This clears custom themes and saved history from this install.\n"
-            "Export a theme backup first if you want a recovery copy.\n"
+            "Export a settings backup first if you want a recovery copy.\n"
             "This cannot be undone. Restart afterward to fully apply the reset."
         )
         self._btn_reset.setAccessibleName("Reset all settings")
         self._btn_reset.setAccessibleDescription(
-            "Resets all settings, unlock flags, custom themes, and history to factory defaults after you save any recovery copy you need."
+            "Resets all settings, unlock flags, custom themes, and history to factory defaults after you save a settings backup you want to keep."
         )
         btn_row.addWidget(self._btn_reset)
         self._btn_reset_unlocks = QPushButton("Reset Unlocks & Clicks…")
