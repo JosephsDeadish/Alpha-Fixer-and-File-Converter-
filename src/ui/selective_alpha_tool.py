@@ -2433,7 +2433,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_az_slot_add = QPushButton("＋ Add Slot")
         self._btn_az_slot_add.setMinimumHeight(26)
         self._btn_az_slot_add.setToolTip(
-            "Add a new empty full-layout slot to the list."
+            "Add a new empty full zone layout slot to the list."
         )
         self._btn_az_slot_add.clicked.connect(self._on_az_slot_add)
         az_slot_btn_row.addWidget(self._btn_az_slot_add)
@@ -2441,7 +2441,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_az_slot_del = QPushButton("✕ Delete Slot")
         self._btn_az_slot_del.setMinimumHeight(26)
         self._btn_az_slot_del.setToolTip(
-            "Delete the currently selected full-layout slot from the list.\n"
+            "Delete the currently selected full zone layout slot from the list.\n"
             "Any saved zone layout stored in it will be lost."
         )
         self._btn_az_slot_del.clicked.connect(self._on_az_slot_del)
@@ -2453,7 +2453,7 @@ class SelectiveAlphaTool(QWidget):
         self._az_slot_info_lbl.setWordWrap(True)
         self._az_slot_info_lbl.setAccessibleName("Full zone layout slot status")
         self._az_slot_info_lbl.setAccessibleDescription(
-            "Shows the selected full-layout slot's stored zone summary and whether it is empty or ready to restore."
+            "Shows the selected full zone layout slot's stored zone summary and whether it is empty or ready to restore."
         )
         azv.addWidget(self._az_slot_info_lbl)
 
