@@ -8158,6 +8158,12 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
                     for tip in tips:
                         with self.subTest(key=key, tip=tip):
                             self.assertNotRegex(tip, r"\b40\b")
+        self.assertIn("One painted zone at a time", _NORMAL["sa_zone_copy_mask"][0])
+        self.assertTrue(_DUMBED["sa_zone_copy_mask"][0].startswith("Copy this zone."))
+        self.assertIn("no fluff", _VULGAR["sa_zone_copy_mask"][0].lower())
+        self.assertIn("Copy a zone first to enable Paste", _NORMAL["sa_zone_paste_mask"][0])
+        self.assertIn("replaces what was here", _DUMBED["sa_zone_paste_mask"][0].lower())
+        self.assertIn("no fluff", _VULGAR["sa_zone_paste_mask"][0].lower())
 
     def test_saved_mask_slots_grow_to_configured_limit(self):
         self.assertEqual(self._widget._slot_combo.count(), self._widget._MASK_SLOT_INIT)

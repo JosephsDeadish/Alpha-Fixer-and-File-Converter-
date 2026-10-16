@@ -2456,7 +2456,7 @@ _NORMAL: dict[str, list[str]] = {
         "Use to preview the image under a zone without deleting the zone. Very handy.",
     ],
     "sa_zone_copy_mask": [
-        "Copy this zone's painted area into the zone clipboard so it can be pasted into another zone.",
+        "Copy this zone's painted area into the zone clipboard so it can be pasted into another zone. One painted zone at a time.",
         "Once copied, Paste Zone becomes available on the other zones.",
         "The zone clipboard stores the exact pixels painted in this zone.",
         "Use Copy + Paste to duplicate the painted area from one zone into another zone without repainting it.",
@@ -2467,7 +2467,7 @@ _NORMAL: dict[str, list[str]] = {
         "Copy now, paste later. The zone clipboard keeps the last zone you copied.",
     ],
     "sa_zone_paste_mask": [
-        "Paste the zone clipboard into this zone, replacing the current paint.",
+        "Paste the zone clipboard into this zone, replacing the current paint. Copy a zone first to enable Paste.",
         "Copy a zone first to enable this button.",
         "The paste is undoable with the Undo drawing button.",
         "Pasting replaces all existing paint in this zone with the clipboard contents.",
@@ -4600,7 +4600,7 @@ _DUMBED: dict[str, list[str]] = {
         "Use to preview the image under a zone without deleting the zone. Very handy.",
     ],
     "sa_zone_copy_mask": [
-        "Copies this zone's painted shape into the zone clipboard so it can be pasted into another zone. Like Ctrl+C for paint zones.",
+        "Copy this zone. Paste it into another one later. One clipboard, one zone.",
         "After copying, every zone's Paste button becomes available.",
         "Copy once, paste anywhere. Efficient.",
         "One zone clipboard. If you copy again you replace the first copy.",
@@ -4610,7 +4610,7 @@ _DUMBED: dict[str, list[str]] = {
         "One zone clipboard. One copied zone. Use it wisely.",
     ],
     "sa_zone_paste_mask": [
-        "Pastes the zone clipboard into this zone. Replaces whatever was here.",
+        "Paste the clipboard into this zone. It replaces what was here.",
         "Need to copy first. Copy button. Same zone row. You've got this.",
         "It's undoable. Undo drawing button covers it.",
         "Replaces the whole zone. Doesn't merge. Replaces.",
@@ -6818,7 +6818,7 @@ _VULGAR: dict[str, list[str]] = {
         "Toggle visibility per-zone. See exactly how each zone sits against the source image without the blob in the way.",
     ],
     "sa_zone_copy_mask": [
-        "Copies this zone's area to the zone clipboard so it can be pasted into another zone. One painted zone at a time.",
+        "Copy this zone's painted area into the clipboard. No filter, no fluff.",
         "After copying, Paste Zone lights up on the other zones.",
         "One zone clipboard slot. Copy again and you replace the previous copy.",
         "Use this to apply the same painted pattern to multiple zones without repainting.",
@@ -6828,7 +6828,7 @@ _VULGAR: dict[str, list[str]] = {
         "Same painted area, different zone, different alpha value. That's the killer use case for Copy/Paste Zone.",
     ],
     "sa_zone_paste_mask": [
-        "Pastes the zone clipboard into this zone. Replaces everything here.",
+        "Paste the clipboard into this zone, replacing everything here. No filter, no fluff.",
         "Need to copy first. If Paste is greyed out, you haven't copied anything yet.",
         "Paste is undoable with the Undo drawing button.",
         "Full replacement. Not a merge. Everything in this zone gets replaced.",
