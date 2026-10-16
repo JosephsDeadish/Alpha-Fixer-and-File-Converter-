@@ -1484,7 +1484,13 @@ class MainWindow(QMainWindow):
         btn_settings.setMinimumWidth(88)
         btn_settings.setMaximumWidth(170)
         btn_settings.setMinimumHeight(26)
-        btn_settings.setToolTip("Open Settings — theme backup/recovery, sound, and effects (Ctrl+,)")
+        btn_settings.setToolTip(
+            "Open Settings — theme, backup/recovery, sound, and visual effects (Ctrl+,)"
+        )
+        btn_settings.setAccessibleName("Open settings")
+        btn_settings.setAccessibleDescription(
+            "Opens the Settings dialog for theme, backup and recovery, sound, and visual effects."
+        )
         btn_settings.clicked.connect(self._open_settings)
         utility_layout.addWidget(btn_settings)
         self._btn_settings = btn_settings
@@ -1493,7 +1499,13 @@ class MainWindow(QMainWindow):
         btn_help.setMinimumWidth(74)
         btn_help.setMaximumWidth(130)
         btn_help.setMinimumHeight(26)
-        btn_help.setToolTip("Keyboard shortcuts, About, and settings import/export help")
+        btn_help.setToolTip(
+            "Open the Help menu for the tutorial, shortcuts, About, and settings backup guidance"
+        )
+        btn_help.setAccessibleName("Open help menu")
+        btn_help.setAccessibleDescription(
+            "Opens the Help menu with the tutorial, shortcut list, About dialog, and settings backup actions."
+        )
         btn_help.clicked.connect(self._show_help_menu)
         utility_layout.addWidget(btn_help)
         self._btn_help = btn_help
@@ -1505,9 +1517,10 @@ class MainWindow(QMainWindow):
         btn_patreon.setStyleSheet(
             "QPushButton { padding-left: 4px; padding-right: 6px; }"
         )
-        btn_patreon.setToolTip(
-            "Support development on Patreon!\n"
-            "patreon.com/c/DeadOnTheInside"
+        btn_patreon.setToolTip("Open Patreon to support development.\npatreon.com/c/DeadOnTheInside")
+        btn_patreon.setAccessibleName("Open Patreon page")
+        btn_patreon.setAccessibleDescription(
+            "Opens the Patreon page so you can support development."
         )
         btn_patreon.clicked.connect(self._open_patreon)
         utility_layout.addWidget(btn_patreon)
@@ -4020,7 +4033,7 @@ class MainWindow(QMainWindow):
 
     def _export_settings(self):
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export Settings", "alpha_fixer_settings.json",
+            self, "Export Settings Backup", "alpha_fixer_settings.json",
             "JSON Files (*.json);;All Files (*)",
         )
         if not path:
@@ -4034,14 +4047,14 @@ class MainWindow(QMainWindow):
         try:
             with staged_output_path(path, preserve_existing_mode=True) as staged_path:
                 self._settings.export_settings(staged_path)
-            QMessageBox.information(self, "Export Settings",
+            QMessageBox.information(self, "Export Settings Backup",
                                     f"Settings exported to:\n{path}")
         except Exception as exc:
             QMessageBox.critical(self, "Export Failed", str(exc))
 
     def _import_settings(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Import Settings", "",
+            self, "Import Settings Backup", "",
             "JSON Files (*.json);;All Files (*)",
         )
         if not path:
@@ -4050,7 +4063,7 @@ class MainWindow(QMainWindow):
             keys = self._settings.import_settings(path)
             self._on_settings_changed()
             QMessageBox.information(
-                self, "Import Settings",
+                self, "Import Settings Backup",
                 f"Imported {len(keys)} settings from:\n{path}\n\n"
                 "Restart the app to fully apply all changes.",
             )
@@ -4584,34 +4597,37 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         menu.setToolTipsVisible(True)
         act_tutorial = menu.addAction("📚  Tutorial  (how to use this app)")
-        act_tutorial.setToolTip("Open the interactive step-by-step tutorial.")
+        act_tutorial.setToolTip("Open the interactive step-by-step tutorial for this app.")
+        act_tutorial.setStatusTip("Open the interactive tutorial.")
         act_tutorial.triggered.connect(self._show_tutorial)
         menu.addSeparator()
         act_shortcuts = menu.addAction("⌨  Keyboard Shortcuts  (F1)")
-        act_shortcuts.setToolTip("View all keyboard shortcuts for every tool (also F1).")
-        act_shortcuts.setStatusTip("View keyboard shortcuts for all tools.")
+        act_shortcuts.setToolTip(
+            "View all keyboard shortcuts for every tool and builder, including F1."
+        )
+        act_shortcuts.setStatusTip("View keyboard shortcuts for all tools and builders.")
         act_shortcuts.triggered.connect(self._show_shortcuts)
         act_about = menu.addAction("ℹ  About")
-        act_about.setToolTip("Show the About dialog with app version and feature list.")
-        act_about.setStatusTip("About this application – version and features.")
+        act_about.setToolTip("Show the About dialog with the app version and feature list.")
+        act_about.setStatusTip("Show version and feature information.")
         act_about.triggered.connect(self._show_about)
         menu.addSeparator()
         act_patreon = menu.addAction("❤  Support on Patreon…")
-        act_patreon.setToolTip("Open the Patreon page to support development.")
-        act_patreon.setStatusTip("Support the developer on Patreon.")
+        act_patreon.setToolTip("Open Patreon to support development.")
+        act_patreon.setStatusTip("Open the Patreon support page.")
         act_patreon.triggered.connect(self._open_patreon)
         menu.addSeparator()
-        act_export = menu.addAction("📤  Export Settings…")
+        act_export = menu.addAction("📤  Export Settings Backup…")
         act_export.setToolTip(
-            "Save all current settings to a JSON file for backup or transfer."
+            "Save all current settings to a JSON recovery backup for safekeeping or transfer."
         )
-        act_export.setStatusTip("Export all settings to a JSON backup file.")
+        act_export.setStatusTip("Export all settings to a JSON recovery backup.")
         act_export.triggered.connect(self._export_settings)
-        act_import = menu.addAction("📥  Import Settings…")
+        act_import = menu.addAction("📥  Import Settings Backup…")
         act_import.setToolTip(
-            "Restore settings from a previously exported JSON file."
+            "Restore settings from a previously exported JSON recovery backup."
         )
-        act_import.setStatusTip("Import settings from a JSON backup file.")
+        act_import.setStatusTip("Import settings from a JSON recovery backup.")
         act_import.triggered.connect(self._import_settings)
         # Show the menu just below the Help button
         btn = self._btn_help
@@ -4643,6 +4659,9 @@ class MainWindow(QMainWindow):
         )
         menu.addSeparator()
         act_settings = menu.addAction("⚙  Settings")
+        act_settings.setToolTip(
+            "Open Settings — theme, backup/recovery, sound, and visual effects."
+        )
         act_settings.triggered.connect(self._open_settings)
         chosen = menu.exec(event.globalPos())
         if chosen is act_gif:
