@@ -8155,6 +8155,9 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self._widget._shared_zones = [(64, np.zeros((2, 2), dtype=np.uint8))]
         self._widget._mask_clipboard = np.zeros((2, 2), dtype=np.uint8)
         self._widget._az_slots[0] = [np.zeros((2, 2), dtype=np.uint8)]
+        self._widget._refresh_session_status()
+        self.assertIn("copy one zone to the zone clipboard", self._widget._next_step_lbl.text())
+        self.assertIn("save them to a full zone layout slot", self._widget._next_step_lbl.text())
         self._widget._result_img = Image.new("RGBA", (2, 2))
         self.addCleanup(self._widget._result_img.close)
         self._widget._refresh_session_status()
@@ -8169,7 +8172,8 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("sample.png", self._widget._session_status_lbl.text())
         self.assertIn("Next:", self._widget._session_status_lbl.text())
         self.assertIn("save the current result", self._widget._next_step_lbl.text())
-        self.assertIn("once you are satisfied", self._widget._next_step_lbl.text())
+        self.assertIn("once you're satisfied", self._widget._next_step_lbl.text())
+        self.assertIn("copy one zone to the zone clipboard", self._widget._next_step_lbl.text())
         self.assertIn("enable 'Highlight Alpha Values'", self._widget._import_shared_status.text())
         self.assertIn("bring them onto the canvas", self._widget._import_shared_status.accessibleDescription())
         self.assertIn("highlighted zones", self._widget._import_shared_status.toolTip())
@@ -8182,7 +8186,13 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
             box for box in self._widget.findChildren(QGroupBox)
             if box.accessibleName() == "Alpha Painter workflow"
         )
-        self.assertIn("Import", workflow_box.title())
+        import_box = next(
+            box for box in self._widget.findChildren(QGroupBox)
+            if box.accessibleName() == "Alpha Painter shared zone import"
+        )
+        self.assertEqual("Workflow: Open → Import → Paint → Save", workflow_box.title())
+        self.assertEqual("Import Shared Zones", import_box.title())
+        self.assertIn("bring them onto the canvas", import_box.accessibleDescription())
         label_by_name = {label.accessibleName(): label for label in labels}
         self.assertIn("Brush", self._widget._tool_btns["freehand"].text())
         self.assertIn("Erase", self._widget._tool_btns["eraser"].text())
