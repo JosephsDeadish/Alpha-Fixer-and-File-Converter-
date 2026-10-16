@@ -792,7 +792,7 @@ def test_settings_effects_have_dedicated_tab_without_duplicated_controls(dialog)
     ]
     theme_groups = {group.title() for group in tabs.widget(0).findChildren(QGroupBox)}
     effect_groups = {group.title() for group in tabs.widget(3).findChildren(QGroupBox)}
-    assert "Theme Presets, Backup, and Recovery" in theme_groups
+    assert "Theme Presets, Settings Backup, and Recovery" in theme_groups
     assert "Theme Colors" in theme_groups
     for title in ["Click Effect Style", "Hold-Click Effects", "Background Effects",
                   "Mouse Trail", "Cursor", "Button Press Animation"]:

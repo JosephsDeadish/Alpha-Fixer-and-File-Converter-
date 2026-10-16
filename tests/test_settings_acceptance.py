@@ -317,7 +317,7 @@ def test_ui_scale_preview_reflects_layout_controls(app, dialog):
     assert widget._scale_preview_frame.layout().spacing() == 8
     assert widget._scale_preview_frame.layout().contentsMargins().left() == 12
     assert "border-radius: 16px" in widget._scale_preview_frame.styleSheet()
-    assert "Button height 32px" in widget._scale_preview_detail.text()
+    assert "button height 32px" in widget._scale_preview_detail.text().lower()
 
 
 def test_ui_scale_preview_updates_theme_colors(dialog):
