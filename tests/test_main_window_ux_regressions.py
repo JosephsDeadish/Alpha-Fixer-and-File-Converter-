@@ -101,8 +101,8 @@ def test_help_menu_actions_use_backup_language(window):
         "⌨  Keyboard Shortcuts  (F1)",
         "ℹ  About",
         "❤  Support on Patreon…",
-        "📤  Export Settings Backup…",
-        "📥  Import Settings Backup…",
+        "📤  Export Preferences Backup…",
+        "📥  Import Preferences Backup…",
     ]
     assert actions[0].toolTip().endswith("tutorial for this app.")
     assert actions[1].statusTip() == "View keyboard shortcuts for all tools and builders."

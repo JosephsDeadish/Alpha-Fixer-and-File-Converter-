@@ -125,9 +125,9 @@ def test_gif_column_help_matches_optimize_and_loop_fields(history):
 
 
 def test_alpha_history_search_copy_uses_consistent_wording(history):
-    assert history._alpha_search.accessibleName() == "Filter Alpha and RGBA Adjuster history"
-    assert "Alpha and RGBA Adjuster" in history._sub_tabs.tabToolTip(1)
-    assert "Alpha and RGBA Adjuster" in history._capability_lbl.toolTip()
+    assert history._alpha_search.accessibleName() == "Filter Alpha & RGBA Adjuster history"
+    assert "Alpha & RGBA Adjuster" in history._sub_tabs.tabToolTip(1)
+    assert "Alpha & RGBA Adjuster" in history._capability_lbl.toolTip()
 
 
 def test_history_overview_labels_have_screen_reader_copy(history):

@@ -512,7 +512,7 @@ _NORMAL: dict[str, list[str]] = {
         "Open Help for shortcuts, About, and settings export/import.",
         "Click to see all keyboard shortcuts (F1 for quick access).",
         "Also has About info and Export/Import Settings options.",
-        "Keyboard shortcuts, about the app, and settings backup — all here.",
+        "Keyboard shortcuts, about the app, and preferences backup — all here.",
         "F1 opens the shortcuts dialog directly.",
         "Export Settings saves a full INI backup so you can restore if something goes wrong.",
         "Import Settings restores from a previously exported INI — useful when moving to a new machine.",

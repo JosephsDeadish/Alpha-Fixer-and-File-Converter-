@@ -189,11 +189,11 @@ def test_tooltip_settings_controls_use_clearer_labels(dialog):
     assert "compare layouts before you apply one" in widget._theme_preset_combo.toolTip().lower()
     assert widget._btn_save_theme.text() == "Save Theme Preset…"
     assert widget._btn_delete_theme.text() == "Delete Theme Preset"
-    assert widget._btn_export_theme.text() == "Export Settings Backup…"
-    assert widget._btn_import_theme.text() == "Import Settings Backup…"
-    assert widget._btn_export_theme.accessibleName() == "Export settings backup"
-    assert widget._btn_import_theme.accessibleName() == "Import settings backup"
-    assert "settings to a json recovery backup" in widget._btn_export_theme.toolTip().lower()
+    assert widget._btn_export_theme.text() == "Export Preferences Backup…"
+    assert widget._btn_import_theme.text() == "Import Preferences Backup…"
+    assert widget._btn_export_theme.accessibleName() == "Export preferences backup"
+    assert widget._btn_import_theme.accessibleName() == "Import preferences backup"
+    assert "preferences to a json recovery backup" in widget._btn_export_theme.toolTip().lower()
 
 
 def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
@@ -252,7 +252,7 @@ def test_history_tracking_controls_have_screen_reader_descriptions(dialog):
     widget, _manager = dialog
     controls = [
         (widget._chk_track_converter, "Save Converter history", "Save File Converter batches to history when enabled."),
-        (widget._chk_track_alpha, "Save Alpha and RGBA Adjuster history", "Save Alpha and RGBA Adjuster batches to history when enabled."),
+        (widget._chk_track_alpha, "Save Alpha & RGBA Adjuster history", "Save Alpha & RGBA Adjuster batches to history when enabled."),
         (widget._chk_track_sel_alpha, "Save Alpha Painter history", "Save Alpha Painter runs to history when enabled."),
         (widget._chk_track_gif, "Save GIF Builder history", "Save GIF Builder exports to history when enabled."),
         (widget._chk_track_video, "Save Video Builder history", "Save Video Builder exports to history when enabled."),
@@ -260,9 +260,9 @@ def test_history_tracking_controls_have_screen_reader_descriptions(dialog):
     for control, name, tip in controls:
         assert control.accessibleName() == name
         assert tip in control.accessibleDescription()
-    assert widget._chk_track_alpha.text() == "Alpha and RGBA Adjuster"
-    assert "Alpha and RGBA Adjuster" in widget._history_max_alpha_spin.toolTip()
-    assert widget._history_max_alpha_spin.toolTip().startswith("Maximum history entries for the Alpha and RGBA Adjuster")
+    assert widget._chk_track_alpha.text() == "Alpha & RGBA Adjuster"
+    assert "Alpha & RGBA Adjuster" in widget._history_max_alpha_spin.toolTip()
+    assert widget._history_max_alpha_spin.toolTip().startswith("Maximum history entries for the Alpha & RGBA Adjuster")
 
 
 def test_malformed_saved_theme_settings_emit_warning_and_fall_back(dialog, caplog):

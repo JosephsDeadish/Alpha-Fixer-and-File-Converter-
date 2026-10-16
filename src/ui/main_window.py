@@ -1500,11 +1500,11 @@ class MainWindow(QMainWindow):
         btn_help.setMaximumWidth(130)
         btn_help.setMinimumHeight(26)
         btn_help.setToolTip(
-            "Open the Help menu for the tutorial, shortcuts, About, and settings backup guidance"
+            "Open the Help menu for the tutorial, shortcuts, About, and preferences backup guidance"
         )
         btn_help.setAccessibleName("Open help menu")
         btn_help.setAccessibleDescription(
-            "Opens the Help menu with the tutorial, shortcut list, About dialog, and settings backup actions."
+            "Opens the Help menu with the tutorial, shortcut list, About dialog, and preferences backup actions."
         )
         btn_help.clicked.connect(self._show_help_menu)
         utility_layout.addWidget(btn_help)
@@ -4033,7 +4033,7 @@ class MainWindow(QMainWindow):
 
     def _export_settings(self):
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export Settings Backup", "alpha_fixer_settings.json",
+            self, "Export Preferences Backup", "alpha_fixer_settings.json",
             "JSON Files (*.json);;All Files (*)",
         )
         if not path:
@@ -4047,14 +4047,14 @@ class MainWindow(QMainWindow):
         try:
             with staged_output_path(path, preserve_existing_mode=True) as staged_path:
                 self._settings.export_settings(staged_path)
-            QMessageBox.information(self, "Export Settings Backup",
-                                    f"Settings exported to:\n{path}")
+            QMessageBox.information(self, "Export Preferences Backup",
+                                    f"Preferences exported to:\n{path}")
         except Exception as exc:
             QMessageBox.critical(self, "Export Failed", str(exc))
 
     def _import_settings(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Import Settings Backup", "",
+            self, "Import Preferences Backup", "",
             "JSON Files (*.json);;All Files (*)",
         )
         if not path:
@@ -4063,8 +4063,8 @@ class MainWindow(QMainWindow):
             keys = self._settings.import_settings(path)
             self._on_settings_changed()
             QMessageBox.information(
-                self, "Import Settings Backup",
-                f"Imported {len(keys)} settings from:\n{path}\n\n"
+                self, "Import Preferences Backup",
+                f"Imported {len(keys)} preferences from:\n{path}\n\n"
                 "Restart the app to fully apply all changes.",
             )
         except Exception as exc:
@@ -4617,17 +4617,17 @@ class MainWindow(QMainWindow):
         act_patreon.setStatusTip("Open the Patreon support page.")
         act_patreon.triggered.connect(self._open_patreon)
         menu.addSeparator()
-        act_export = menu.addAction("📤  Export Settings Backup…")
+        act_export = menu.addAction("📤  Export Preferences Backup…")
         act_export.setToolTip(
-            "Save all current settings to a JSON recovery backup for safekeeping or transfer."
+            "Save all current preferences to a JSON recovery backup for safekeeping or transfer."
         )
-        act_export.setStatusTip("Export all settings to a JSON recovery backup.")
+        act_export.setStatusTip("Export all preferences to a JSON recovery backup.")
         act_export.triggered.connect(self._export_settings)
-        act_import = menu.addAction("📥  Import Settings Backup…")
+        act_import = menu.addAction("📥  Import Preferences Backup…")
         act_import.setToolTip(
-            "Restore settings from a previously exported JSON recovery backup."
+            "Restore preferences from a previously exported JSON recovery backup."
         )
-        act_import.setStatusTip("Import settings from a JSON recovery backup.")
+        act_import.setStatusTip("Import preferences from a JSON recovery backup.")
         act_import.triggered.connect(self._import_settings)
         # Show the menu just below the Help button
         btn = self._btn_help
