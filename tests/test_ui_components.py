@@ -8188,6 +8188,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
             "single-zone slots store one painted zone",
             label_by_name["Single-zone slot guidance"].accessibleDescription(),
         )
+        self.assertIn("Full zone layout slot label", {label.accessibleName() for label in labels})
         self.assertIn("single-zone slot", self._widget._btn_slot_add.accessibleDescription())
         self.assertIn("full zone layout slot", self._widget._btn_az_slot_add.accessibleDescription())
         self.assertIn("full zone layout slot", self._widget._btn_az_slot_add.toolTip().lower())
@@ -8215,6 +8216,8 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("opens a colour picker", self._widget._ze_swatch_btn.accessibleDescription().lower())
         self.assertIn("Copy active zone", self._widget._ze_copy_btn.accessibleName())
         self.assertIn("Paste active zone", self._widget._ze_paste_btn.accessibleName())
+        self.assertEqual("Canvas cursor position", self._widget._coord_lbl.accessibleName())
+        self.assertIn("image pixel coordinates", self._widget._coord_lbl.accessibleDescription().lower())
         self.assertIn("Brush size label", {label.accessibleName() for label in labels})
         self.assertIn("Eraser size label", {label.accessibleName() for label in labels})
         self.assertIn("Active zone label", {label.accessibleName() for label in labels})

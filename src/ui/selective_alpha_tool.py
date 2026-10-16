@@ -2418,6 +2418,8 @@ class SelectiveAlphaTool(QWidget):
         az_sel_row2 = QHBoxLayout()
         az_sel_row2.setSpacing(4)
         layout_slot_label = QLabel("Slot:")
+        layout_slot_label.setAccessibleName("Full zone layout slot label")
+        layout_slot_label.setAccessibleDescription("Label for the full zone layout slot selector.")
         az_sel_row2.addWidget(layout_slot_label)
         self._az_slot_combo = QComboBox()
         layout_slot_label.setBuddy(self._az_slot_combo)
@@ -2766,6 +2768,10 @@ class SelectiveAlphaTool(QWidget):
         self._coord_lbl.setProperty("toolGuidance", True)
         self._coord_lbl.setContentsMargins(6, 2, 6, 2)
         self._coord_lbl.setToolTip("Cursor position in image pixel coordinates (x, y).")
+        self._coord_lbl.setAccessibleName("Canvas cursor position")
+        self._coord_lbl.setAccessibleDescription(
+            "Shows the current cursor position in image pixel coordinates."
+        )
         self._coord_lbl.setMinimumWidth(80)
         self._coord_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         status_row.addWidget(self._coord_lbl)
