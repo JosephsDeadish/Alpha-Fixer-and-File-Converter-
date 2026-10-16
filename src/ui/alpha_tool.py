@@ -68,7 +68,7 @@ def _alpha_next_step_text(has_files: bool, preview_path: str, helper_text: str) 
         return "Next step: add image files to preview or process, then choose a preset or manual adjustments."
     if preview_path:
         if "atlas" in helper_text.lower() or "heat-map" in helper_text.lower():
-            return "Next step: review the preview helpers, fine-tune the adjustments, then process the batch or send zones to Selective Alpha."
+            return "Next step: review the preview helpers, fine-tune the adjustments, then process the batch or send zones to Alpha Painter."
         return "Next step: review the before/after preview, fine-tune the adjustments, then process the batch when ready."
     return "Next step: select a queued image to inspect the preview, then adjust settings or run the batch."
 
@@ -2086,24 +2086,24 @@ class AlphaFixerTab(QWidget):
         else:
             total_px = w * h
             copy_all = menu.addAction(
-                f"📋 Copy all {len(zones)} detected zone(s) → Selective Alpha tool"
+                f"📋 Copy all {len(zones)} detected zone(s) → Alpha Painter"
             )
             copy_all.setToolTip(
-                "Sends all detected alpha-value zones to the Selective Alpha tool.\n"
-                "The app switches to the Selective Alpha tab automatically.\n"
-                "Use 'Import Zones to Canvas' or 'Save All Zones → AZ Slot' there."
+                "Sends all detected alpha-value zones to Alpha Painter.\n"
+                "The app switches to the Alpha Painter tab automatically.\n"
+                "Use 'Import Shared Zones to Canvas' or 'Save Shared Zones → Full Zone Layout Slot' there."
             )
             copy_all.triggered.connect(lambda: self.zone_masks_shared.emit(zones))
 
             menu.addSeparator()
-            menu.addAction("Copy single zone → Selective Alpha clipboard:").setEnabled(False)
+            menu.addAction("Copy single zone → Alpha Painter clipboard:").setEnabled(False)
             for idx, (alpha_val, bool_mask) in enumerate(zones):
                 pct = round(bool_mask.sum() / max(total_px, 1) * 100, 1)
                 act = menu.addAction(
                     f"   📋 Zone {idx + 1}:  α = {alpha_val}  ({pct}% of pixels)"
                 )
                 act.setToolTip(
-                    f"Send Zone {idx + 1} (α={alpha_val}) directly to the Selective Alpha\n"
+                    f"Send Zone {idx + 1} (α={alpha_val}) directly to the Alpha Painter\n"
                     "zone clipboard. The app switches there automatically.\n"
                     "Use 'Paste Mask' on any zone to apply it immediately."
                 )
