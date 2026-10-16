@@ -8167,9 +8167,14 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("after importing", self._widget._import_shared_status.accessibleDescription())
 
     def test_selective_alpha_tool_names_are_more_descriptive(self):
-        from PyQt6.QtWidgets import QLabel
+        from PyQt6.QtWidgets import QGroupBox, QLabel
 
         labels = self._widget.findChildren(QLabel)
+        workflow_box = next(
+            box for box in self._widget.findChildren(QGroupBox)
+            if box.accessibleName() == "Alpha Painter workflow"
+        )
+        self.assertIn("Import", workflow_box.title())
         label_by_name = {label.accessibleName(): label for label in labels}
         self.assertIn("Brush", self._widget._tool_btns["freehand"].text())
         self.assertIn("Erase", self._widget._tool_btns["eraser"].text())

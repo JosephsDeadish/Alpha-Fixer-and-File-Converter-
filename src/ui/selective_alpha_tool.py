@@ -1893,10 +1893,10 @@ class SelectiveAlphaTool(QWidget):
         # ── Workflow group: Open → Paint → Save ───────────────────────────
         # All primary actions are grouped here at the top so the workflow
         # is immediately obvious.
-        wf_box = QGroupBox("Workflow: Open → Paint → Save")
+        wf_box = QGroupBox("Workflow: Open → Import → Paint → Save")
         wf_box.setAccessibleName("Alpha Painter workflow")
         wf_box.setAccessibleDescription(
-            "Keeps the open, paint, save, and shared-zone actions together so the main workflow is easy to scan."
+            "Keeps the open, import, paint, save, and shared-zone actions together so the main workflow is easy to scan."
         )
         wf_lay = QVBoxLayout(wf_box)
         wf_lay.setContentsMargins(6, 4, 6, 4)
