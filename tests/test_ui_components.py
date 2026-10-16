@@ -407,6 +407,24 @@ class TestConverterTab(unittest.TestCase):
         self.assertFalse(self._widget._capability_lbl.isHidden())
         self.assertTrue(self._widget._capability_lbl.wordWrap())
 
+    def test_converter_preview_panels_use_full_labels(self):
+        from PyQt6.QtGui import QImage
+
+        source = QImage(2, 2, QImage.Format.Format_RGBA8888)
+        output = QImage(2, 2, QImage.Format.Format_RGBA8888)
+        source.fill(0)
+        output.fill(0)
+        self._widget._on_preview_ready(
+            source,
+            output,
+            "sample.png\n640 × 480  ·  RGBA\n12 KB",
+            "640 × 480  ·  RGB\nPreview as PNG\n8 KB",
+        )
+        self.assertIn("<b>Source</b>", self._widget._source_info_lbl.text())
+        self.assertIn("<b>Output</b>", self._widget._output_info_lbl.text())
+        self._widget._on_preview_failed("preview renderer failed")
+        self.assertIn("<b>Output</b>", self._widget._output_info_lbl.text())
+
     def test_build_failure_report_text_groups_repeated_failures(self):
         self._widget._last_run_format = "DDS"
         self._widget._last_run_files = ["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"]
@@ -7320,7 +7338,7 @@ class TestBuilderHistoryPolish(unittest.TestCase):
             summary = widget.get_status_bar_text()
             self.assertIn("preview sample.png", summary)
             self.assertIn("animated source", summary)
-            widget._output_info_lbl.setText("<b>OUT</b><br>Preview<br><b>unavailable</b>")
+            widget._output_info_lbl.setText("<b>Output</b><br>Preview<br><b>unavailable</b>")
             self.assertIn("preview unavailable", widget.get_status_bar_text())
             widget._refresh_session_status()
             self.assertIn("Tool status:", widget._session_status_lbl.text())

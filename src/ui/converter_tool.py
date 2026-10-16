@@ -1477,12 +1477,12 @@ class ConverterTab(QWidget):
                           else f"{_sz / 1024 ** 2:.1f} MB")
                 )
                 self._source_info_lbl.setText(
-                    f"<b>SRC</b><br>size<br><b>{_w} × {_h}</b><br>"
+                    f"<b>Source</b><br>size<br><b>{_w} × {_h}</b><br>"
                     f"mode<br><b>GIF · {_n} frames</b><br>"
                     f"<b>{_sz_str}</b>"
                 )
             except Exception:
-                self._source_info_lbl.setText("<b>SRC</b><br>GIF animation")
+                self._source_info_lbl.setText("<b>Source</b><br>GIF animation")
         else:
             self._before_is_animated = False
             self._compare.set_loading()
@@ -1561,8 +1561,8 @@ class ConverterTab(QWidget):
 
         # src_meta: filename \n dims·mode \n filesize  → skip the filename line.
         # out_meta: dims·mode \n fmt \n estsize        → all lines are data.
-        self._source_info_lbl.setText(_info_text("SRC", src_meta, skip_first=True))
-        self._output_info_lbl.setText(_info_text("OUT", out_meta, skip_first=False))
+        self._source_info_lbl.setText(_info_text("Source", src_meta, skip_first=True))
+        self._output_info_lbl.setText(_info_text("Output", out_meta, skip_first=False))
         self.queue_status_changed.emit(self.get_queue_status_text())
 
     @pyqtSlot(str)
@@ -1572,7 +1572,7 @@ class ConverterTab(QWidget):
         self._source_info_lbl.setText("")
         err_snippet = err.strip()[:40] if err.strip() else "unknown error"
         self._output_info_lbl.setText(
-            f"<b>OUT</b><br>Preview<br><b>unavailable</b><br><b>{err_snippet}</b>"
+            f"<b>Output</b><br>Preview<br><b>unavailable</b><br><b>{err_snippet}</b>"
         )
         self.queue_status_changed.emit(self.get_queue_status_text())
 
