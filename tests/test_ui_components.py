@@ -8326,7 +8326,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("edit them on the canvas", import_box.accessibleDescription().lower())
         self.assertIn("copy one zone", import_box.accessibleDescription().lower())
         self.assertIn("Import the shared zones", self._widget._btn_import_shared.toolTip())
-        self.assertIn("Alpha & RGBA Adjuster", self._widget._btn_import_shared.toolTip())
+        self.assertIn("Alpha and RGBA Adjuster", self._widget._btn_import_shared.toolTip())
         self.assertIn("Choose the zone to edit", self._widget._active_zone_combo.toolTip())
         self.assertIn("editable zones", self._widget._btn_import_shared.accessibleDescription().lower())
         self.assertIn("clipboard", self._widget._btn_import_zone_to_clipboard.toolTip().lower())
