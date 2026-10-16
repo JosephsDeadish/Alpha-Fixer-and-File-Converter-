@@ -2242,7 +2242,7 @@ class SelectiveAlphaTool(QWidget):
             "Copies the active zone into the zone clipboard so it can be pasted into another zone."
         )
         self._ze_paste_btn.setAccessibleDescription(
-            "Pastes the zone clipboard into the active zone."
+            "Pastes the copied zone from the zone clipboard into the active zone."
         )
         self._ze_paste_btn.setEnabled(False)
         ze_row3.addWidget(self._ze_copy_btn)
