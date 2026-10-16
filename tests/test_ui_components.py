@@ -3593,10 +3593,15 @@ class TestTooltipManager(unittest.TestCase):
         vulgar_style = " ".join(_VULGAR["tooltip_style_combo"]).lower()
         self.assertIn("unfiltered", vulgar_mode)
         self.assertIn("fully unfiltered mode", vulgar_mode)
+        self.assertIn("nothing gets sugar-coated", vulgar_mode)
         self.assertIn("fucking", vulgar_style)
         for tips in (_NORMAL["tooltip_mode_combo"], _DUMBED["tooltip_mode_combo"], _VULGAR["tooltip_mode_combo"]):
             self.assertIn("unfiltered", " ".join(tips).lower())
         self.assertIn("fully unfiltered mode", " ".join(_VULGAR["tooltip_mode_combo"]).lower())
+        self.assertIn(
+            "fully unfiltered no filter 🤬",
+            " ".join(_NORMAL["tooltip_mode_combo"]).lower(),
+        )
         for key in ("sa_zone_copy_mask", "sa_zone_paste_mask"):
             for tips in (_NORMAL[key], _DUMBED[key], _VULGAR[key]):
                 self.assertIn("zone clipboard", " ".join(tips).lower())
