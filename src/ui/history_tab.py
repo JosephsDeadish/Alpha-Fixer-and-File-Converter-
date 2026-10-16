@@ -391,6 +391,11 @@ def _make_tree(columns: list[str], col_tips: list[str] | None = None) -> QTreeWi
     return tree
 
 
+def _set_history_tree_accessibility(tree: QTreeWidget, name: str, description: str) -> None:
+    tree.setAccessibleName(name)
+    tree.setAccessibleDescription(description)
+
+
 def _apply_default_sort(tree: QTreeWidget) -> None:
     """Apply the default newest-first sort and keep the header state in sync."""
     tree.sortItems(0, Qt.SortOrder.DescendingOrder)
@@ -576,6 +581,11 @@ class HistoryTab(QWidget):
                 "Input filenames in this batch.",
             ],
         )
+        _set_history_tree_accessibility(
+            self._conv_tree,
+            "Converter history table",
+            "Shows converter history entries. Use the search box above to filter rows by text or field expressions, and scan the column headers for per-field details.",
+        )
         conv_layout.addWidget(self._conv_tree)
         self._conv_summary = QLabel("")
         self._conv_summary.setObjectName("subheader")
@@ -602,6 +612,11 @@ class HistoryTab(QWidget):
                 "Input filenames in this batch.",
             ],
         )
+        _set_history_tree_accessibility(
+            self._alpha_tree,
+            "Alpha and RGBA Adjuster history table",
+            "Shows Alpha and RGBA Adjuster history entries. Use the search box above to filter rows by text or field expressions, and scan the column headers for per-field details.",
+        )
         alpha_layout.addWidget(self._alpha_tree)
         self._alpha_summary = QLabel("")
         self._alpha_summary.setObjectName("subheader")
@@ -627,6 +642,11 @@ class HistoryTab(QWidget):
                 "Files that encountered errors.",
                 "Input filenames in this batch.",
             ],
+        )
+        _set_history_tree_accessibility(
+            self._sel_tree,
+            "Alpha Painter history table",
+            "Shows Alpha Painter history entries. Use the search box above to filter rows by text or field expressions, and scan the column headers for per-field details.",
         )
         sel_layout.addWidget(self._sel_tree)
         self._sel_summary = QLabel("")
@@ -663,6 +683,11 @@ class HistoryTab(QWidget):
                 "Export settings / diagnostics notes recorded for this build.",
                 "Input filenames used in this build.",
             ],
+        )
+        _set_history_tree_accessibility(
+            self._gif_tree,
+            "GIF Builder history table",
+            "Shows GIF Builder history entries. Use the search box above to filter rows by text or field expressions, and scan the column headers for per-field details.",
         )
         gif_layout.addWidget(self._gif_tree)
         # Animated GIF thumbnails delegate (item 80)
@@ -703,6 +728,11 @@ class HistoryTab(QWidget):
                 "Recovery / export notes recorded for this build.",
                 "Input filenames used in this build.",
             ],
+        )
+        _set_history_tree_accessibility(
+            self._vid_tree,
+            "Video Builder history table",
+            "Shows Video Builder history entries. Use the search box above to filter rows by text or field expressions, and scan the column headers for per-field details.",
         )
         vid_layout.addWidget(self._vid_tree)
         self._vid_summary = QLabel("")
