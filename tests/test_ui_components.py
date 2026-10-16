@@ -8558,6 +8558,36 @@ class TestCursorMapOptions(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Main window menu/button phrasing
+# ---------------------------------------------------------------------------
+
+class TestMainWindowMenuCopy(unittest.TestCase):
+    @staticmethod
+    def _main_window_src():
+        import pathlib
+        return (pathlib.Path(__file__).parent.parent / "src" / "ui" / "main_window.py").read_text()
+
+    def test_open_actions_use_consistent_open_the_phrasing(self):
+        src = self._main_window_src()
+        self.assertIn(
+            "Open Settings to adjust theme, backup/recovery, sound, and visual effects (Ctrl+,).",
+            src,
+        )
+        self.assertIn(
+            "Open the GIF Builder to create animated GIFs from images.",
+            src,
+        )
+        self.assertIn(
+            "Open the Video Builder to combine, trim, and adjust video clips.",
+            src,
+        )
+        self.assertIn(
+            "Open Settings to adjust theme, backup/recovery, sound, and visual effects.",
+            src,
+        )
+
+
+# ---------------------------------------------------------------------------
 # THEME_BANNER and THEME_STATUS_MESSAGES
 # ---------------------------------------------------------------------------
 

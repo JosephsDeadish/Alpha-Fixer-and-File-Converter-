@@ -1485,7 +1485,7 @@ class MainWindow(QMainWindow):
         btn_settings.setMaximumWidth(170)
         btn_settings.setMinimumHeight(26)
         btn_settings.setToolTip(
-            "Open Settings — theme, backup/recovery, sound, and visual effects (Ctrl+,)"
+            "Open Settings to adjust theme, backup/recovery, sound, and visual effects (Ctrl+,)."
         )
         btn_settings.setAccessibleName("Open settings")
         btn_settings.setAccessibleDescription(
@@ -4651,16 +4651,16 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         act_gif = menu.addAction("🎞  Open GIF Builder")
         act_gif.setToolTip(
-            "Open the GIF Builder to compose animated GIFs from any images."
+            "Open the GIF Builder to create animated GIFs from images."
         )
         act_video = menu.addAction("🎬  Open Video Builder")
         act_video.setToolTip(
-            "Open the Video Builder to merge, trim and adjust video clips."
+            "Open the Video Builder to combine, trim, and adjust video clips."
         )
         menu.addSeparator()
         act_settings = menu.addAction("⚙  Settings")
         act_settings.setToolTip(
-            "Open Settings — theme, backup/recovery, sound, and visual effects."
+            "Open Settings to adjust theme, backup/recovery, sound, and visual effects."
         )
         act_settings.triggered.connect(self._open_settings)
         chosen = menu.exec(event.globalPos())
