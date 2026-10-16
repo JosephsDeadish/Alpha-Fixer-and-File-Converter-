@@ -1489,7 +1489,7 @@ class MainWindow(QMainWindow):
         )
         btn_settings.setAccessibleName("Open settings")
         btn_settings.setAccessibleDescription(
-            "Opens the Settings dialog for theme, backup and recovery, sound, and visual effects."
+            "Opens the Settings dialog for theme, backup/recovery, sound, and visual effects."
         )
         btn_settings.clicked.connect(self._open_settings)
         utility_layout.addWidget(btn_settings)
@@ -1500,11 +1500,11 @@ class MainWindow(QMainWindow):
         btn_help.setMaximumWidth(130)
         btn_help.setMinimumHeight(26)
         btn_help.setToolTip(
-            "Open the Help menu for the tutorial, shortcuts, About, and preferences backup guidance"
+            "Open the Help menu for the tutorial, shortcuts, About, and backup/recovery guidance."
         )
         btn_help.setAccessibleName("Open help menu")
         btn_help.setAccessibleDescription(
-            "Opens the Help menu with the tutorial, shortcut list, About dialog, and preferences backup actions."
+            "Opens the Help menu with the tutorial, shortcut list, About dialog, and backup/recovery actions."
         )
         btn_help.clicked.connect(self._show_help_menu)
         utility_layout.addWidget(btn_help)

@@ -77,8 +77,11 @@ def test_main_window_utility_buttons_use_clearer_accessible_copy(window):
     assert widget._btn_settings.accessibleName() == "Open settings"
     assert "backup/recovery" in widget._btn_settings.toolTip().lower()
     assert "settings dialog" in widget._btn_settings.accessibleDescription().lower()
+    assert "backup/recovery" in widget._btn_settings.accessibleDescription().lower()
     assert widget._btn_help.accessibleName() == "Open help menu"
     assert "help menu" in widget._btn_help.toolTip().lower()
+    assert "backup/recovery" in widget._btn_help.toolTip().lower()
+    assert "backup/recovery" in widget._btn_help.accessibleDescription().lower()
     assert widget._btn_patreon.accessibleName() == "Open Patreon page"
     assert "support development" in widget._btn_patreon.toolTip().lower()
 

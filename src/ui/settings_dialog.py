@@ -506,7 +506,9 @@ class SettingsDialog(QDialog):
             "Type part of a theme or preset name to filter the list below.\n"
             "Press Enter to focus the first match; filtering only changes the list view, not the active theme."
         )
-        self._theme_search.setAccessibleDescription(self._theme_search.toolTip())
+        self._theme_search.setAccessibleDescription(
+            "Search theme presets and saved preferences backups by name. Press Enter to jump to the first match."
+        )
         self._theme_search.installEventFilter(self)
         search_row.addWidget(self._theme_search, 1)
         ps_vl.addLayout(search_row)
@@ -526,7 +528,9 @@ class SettingsDialog(QDialog):
             "Locked entries stay greyed out until they are unlocked; hidden themes show unlock markers.\n"
             "Use the live preview pane below to compare layouts before applying a preset."
         )
-        self._theme_preset_combo.setAccessibleDescription(self._theme_preset_combo.toolTip())
+        self._theme_preset_combo.setAccessibleDescription(
+            "Select a theme preset. Use the search field above to filter the list, then compare the current theme with the live preview."
+        )
         self._rebuild_theme_combo()
         psl.addWidget(self._theme_preset_combo, 0, 1, 1, 3)
         self._btn_save_theme = QPushButton("Save Theme Preset…")
@@ -2904,7 +2908,7 @@ class SettingsDialog(QDialog):
         effects_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         effects_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         tabs.addTab(effects_scroll, "✨ Effects")
-        tabs.setTabToolTip(0, "Theme presets, palette editing, custom backgrounds, backups, recovery, and reset tools.")
+        tabs.setTabToolTip(0, "Theme presets, palette editing, custom backgrounds, backup/recovery, and reset tools.")
         tabs.setTabToolTip(1, "Layout, scaling, tooltip wording, history controls, and live preview.")
         tabs.setTabToolTip(2, "Sound toggles, profiles, and event volumes.")
         tabs.setTabToolTip(3, "Optional click, background, cursor, and button effects.")

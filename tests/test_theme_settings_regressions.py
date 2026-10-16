@@ -196,6 +196,8 @@ def test_tooltip_settings_controls_use_clearer_labels(dialog):
     assert "move your look, layout, and other saved preferences" in widget._btn_export_theme.toolTip().lower()
     assert "apply them immediately" in widget._btn_import_theme.toolTip().lower()
     assert "restart the app afterward" in widget._btn_reset.accessibleDescription().lower()
+    assert "saved preferences backups" in widget._theme_search.accessibleDescription().lower()
+    assert "filter the list" in widget._theme_preset_combo.accessibleDescription().lower()
 
 
 def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
@@ -203,6 +205,7 @@ def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
     assert widget._grp_preset_select.title() == "Theme Presets, Backup, and Recovery"
     assert widget._grp_preset_select.accessibleName() == "Theme preset, backup, and recovery tools"
     assert "json recovery backups" in widget._grp_preset_select.accessibleDescription().lower()
+    assert "backup/recovery" in widget._settings_tabs.tabToolTip(0).lower()
     assert "theme or preset name" in widget._theme_search.toolTip().lower()
     assert "theme, layout, shortcut, sound" in widget._preset_backup_note.text().lower()
     assert "before a big change" in widget._preset_backup_note.text().lower()
@@ -221,7 +224,7 @@ def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
     assert "live preview:" in widget._scale_preview_detail.text().lower()
     assert "preview the current ui scale" in widget._scale_preview_button.accessibleDescription().lower()
     assert "preview the current ui scale" in widget._scale_preview_combo.accessibleDescription().lower()
-    assert "backups, recovery, and reset tools" in widget._settings_tabs.tabToolTip(0).lower()
+    assert "backup/recovery" in widget._settings_tabs.tabToolTip(0).lower()
     assert "toggles and previews update live" in widget._live_settings_note.text().lower()
     assert "reset buttons below require a restart afterward" in widget._preset_backup_note.text().lower()
     assert "reload the app" in widget._btn_reset.toolTip().lower()
