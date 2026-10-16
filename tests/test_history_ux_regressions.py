@@ -130,6 +130,26 @@ def test_alpha_history_search_copy_uses_consistent_wording(history):
     assert "Alpha and RGBA Adjuster" in history._capability_lbl.toolTip()
 
 
+def test_history_overview_labels_have_screen_reader_copy(history):
+    assert history._capability_lbl.accessibleName() == "History capability summary"
+    assert "browse, filter, preview, export" in history._capability_lbl.accessibleDescription().lower()
+    assert history._session_status_lbl.accessibleName() == "History status summary"
+    assert "rows are visible" in history._session_status_lbl.accessibleDescription().lower()
+    assert history._next_step_lbl.accessibleName() == "History next step guidance"
+    assert "next action" in history._next_step_lbl.accessibleDescription().lower()
+    assert history._sub_tabs.accessibleName() == "History category tabs"
+    assert "Converter" in history._sub_tabs.accessibleDescription()
+    for summary, name in [
+        (history._conv_summary, "Converter history summary"),
+        (history._alpha_summary, "Alpha and RGBA history summary"),
+        (history._sel_summary, "Alpha Painter history summary"),
+        (history._gif_summary, "GIF Builder history summary"),
+        (history._vid_summary, "Video Builder history summary"),
+    ]:
+        assert summary.accessibleName() == name
+        assert summary.accessibleDescription()
+
+
 def test_animation_only_runs_while_history_tree_is_visible(app, tmp_path):
     path = tmp_path / "animation.gif"
     images = [Image.new("RGB", (12, 8), color) for color in ("red", "blue")]

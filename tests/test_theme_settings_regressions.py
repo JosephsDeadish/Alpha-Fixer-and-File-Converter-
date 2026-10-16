@@ -200,7 +200,10 @@ def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
     assert tab_bar is not None
     assert widget._grp_preset_select.accessibleName() == "Theme preset, backup, and recovery tools"
     assert "json recovery backups" in widget._grp_preset_select.accessibleDescription().lower()
+    assert "recovery copy" in widget._preset_backup_note.text().lower()
     assert "history and unlock progress" in widget._preset_backup_note.text().lower()
+    assert widget._grp_custom_bg.accessibleName() == "Custom background and live preview settings"
+    assert "live preview" in widget._grp_custom_bg.accessibleDescription().lower()
     assert "preview updates when a valid file is chosen" in widget._custom_bg_check.toolTip().lower()
     assert "return to a custom file" in widget._use_theme_bg_check.toolTip().lower()
     assert "live preview" in widget._custom_bg_preview.accessibleDescription().lower()
@@ -211,6 +214,26 @@ def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
     assert "preview the current ui scale" in widget._scale_preview_button.accessibleDescription().lower()
     assert "preview the current ui scale" in widget._scale_preview_combo.accessibleDescription().lower()
     assert "backup and recovery tools" in tab_bar.tabToolTip(0).lower()
+
+
+def test_settings_theme_and_reset_tab_order_follows_discovery(dialog, app):
+    widget, _manager = dialog
+    widget._settings_tabs.setCurrentIndex(0)
+    widget.show()
+    app.processEvents()
+    widget._theme_search.setFocus()
+    app.processEvents()
+    QTest.keyClick(widget._theme_search, Qt.Key.Key_Tab)
+    app.processEvents()
+    assert app.focusWidget() is widget._theme_preset_combo
+    QTest.keyClick(widget._theme_preset_combo, Qt.Key.Key_Tab)
+    app.processEvents()
+    assert app.focusWidget() is widget._btn_save_theme
+    widget._btn_reset.setFocus()
+    app.processEvents()
+    QTest.keyClick(widget._btn_reset, Qt.Key.Key_Tab)
+    app.processEvents()
+    assert app.focusWidget() is widget._btn_reset_unlocks
 
 
 def test_history_tracking_controls_have_screen_reader_descriptions(dialog):
@@ -836,12 +859,16 @@ def test_settings_compact_content_and_sound_keyboard_reachability(
                 0, scroll.widget().width() - scroll.viewport().width())
             # Focus scrolls both axes; formerly the hidden horizontal bar left
             # wide settings permanently cropped on these screens.
-            controls = [control for control in scroll.widget().findChildren(QWidget)
-                        if control.isVisible() and control.isEnabled()
-                        and control.focusPolicy() & Qt.FocusPolicy.TabFocus
-                        and not isinstance(control.parentWidget(), (QSpinBox, QComboBox))
-                        and isinstance(control, (QPushButton, QLineEdit, QComboBox,
-                                                 QSpinBox, QCheckBox, QSlider))]
+            controls = [
+                control for control in scroll.widget().findChildren(QWidget)
+                if isinstance(control, (QPushButton, QLineEdit, QComboBox,
+                                        QSpinBox, QCheckBox, QSlider))
+                and not sip.isdeleted(control)
+                and control.isVisible()
+                and control.isEnabled()
+                and control.focusPolicy() & Qt.FocusPolicy.TabFocus
+                and not isinstance(control.parentWidget(), (QSpinBox, QComboBox))
+            ]
             assert controls
             for control in controls:
                 widget._btn_close.setFocus()

@@ -572,7 +572,7 @@ class SettingsDialog(QDialog):
         ps_vl.addLayout(psl)
         self._preset_backup_note = QLabel(
             "Backups save theme, layout, shortcut, and other preferences. "
-            "History and unlock progress stay in the app."
+            "Use export or import to keep a recovery copy; history and unlock progress stay in the app."
         )
         self._preset_backup_note.setWordWrap(True)
         self._preset_backup_note.setProperty("settingsHint", True)
@@ -585,6 +585,10 @@ class SettingsDialog(QDialog):
 
         # ---- Custom Background GroupBox (item 81) ----
         self._grp_custom_bg = QGroupBox("Custom Background & Live Preview")
+        self._grp_custom_bg.setAccessibleName("Custom background and live preview settings")
+        self._grp_custom_bg.setAccessibleDescription(
+            "Choose a custom background file, compare the live preview, or follow the active theme background."
+        )
         self._grp_custom_bg.setAcceptDrops(True)
         custom_bg_layout = QVBoxLayout(self._grp_custom_bg)
         custom_bg_layout.setSpacing(6)
@@ -872,9 +876,7 @@ class SettingsDialog(QDialog):
             seen: set[int] = set()
 
             def _track(widget: QWidget | None) -> None:
-                if widget is None:
-                    return
-                if widget is self._settings_bg_overlay:
+                if widget is None or widget is self._settings_bg_overlay:
                     return
                 ident = id(widget)
                 if ident in seen:
@@ -882,32 +884,53 @@ class SettingsDialog(QDialog):
                 seen.add(ident)
                 targets.append(widget)
 
-            def _should_skip(widget: QWidget) -> bool:
-                return isinstance(widget, (
-                    QAbstractButton, QComboBox, QAbstractSpinBox, QAbstractSlider,
-                    QLineEdit, QPlainTextEdit, QTextEdit, QAbstractItemView,
-                ))
-
-            def _inside_control(widget: QWidget) -> bool:
-                while widget is not None and not sip.isdeleted(widget):
-                    if _should_skip(widget):
-                        return True
-                    try:
-                        widget = widget.parentWidget()
-                    except Exception:
-                        return False
-                return False
-
-            for child in self.findChildren(QWidget):
-                if sip.isdeleted(child):
-                    continue
-                if _inside_control(child):
-                    continue
-                _track(child)
-                if isinstance(child, (QAbstractScrollArea, QAbstractItemView)):
-                    _track(child.viewport())
-            _track(self._settings_tabs)
-            _track(self._settings_tabs.tabBar())
+            # Use the known container widgets directly rather than walking the
+            # entire QObject tree. This keeps the overlay transparency list
+            # stable even when tests repeatedly construct and destroy dialogs.
+            for widget in (
+                self,
+                self._settings_tabs,
+                self._settings_tabs.tabBar(),
+                theme_tab,
+                theme_scroll,
+                effects_tab,
+                effects_scroll,
+                gen_tab,
+                gen_scroll,
+                sound_tab,
+                sound_scroll,
+                self._grp_preset_select,
+                self._grp_custom_bg,
+                self._grp_misc,
+                self._grp_sound,
+                grp_colors,
+                grp_effect,
+                grp_emoji,
+                grp_hold,
+                grp_bg_drip,
+                grp_notif,
+                grp_trail,
+                grp_cursor,
+                grp_btn_anim,
+                grp_banner,
+                grp_scale,
+                grp_history,
+                self._sound_sub_widget,
+                self._click_effect_sub,
+                self._hold_effect_sub,
+                self._banner_anim_sub,
+                self._btn_anim_sub,
+                self._trail_sub,
+                self._cursor_sub,
+                self._bg_drip_sub,
+                self._bg_flock_sub,
+                self._bg_ambient_sub,
+                self._notif_overlay_sub,
+                self._custom_bg_sub,
+                self._custom_bg_file_row,
+                self._custom_bg_recent_row,
+            ):
+                _track(widget)
             return targets
 
         def _refresh_settings_background_transparency(enabled: bool) -> None:
@@ -2910,6 +2933,16 @@ class SettingsDialog(QDialog):
         btn_row.addWidget(self._btn_close)
         self._footer_layout = btn_row
         layout.addLayout(btn_row)
+        QWidget.setTabOrder(self._theme_search, self._theme_preset_combo)
+        QWidget.setTabOrder(self._theme_preset_combo, self._btn_save_theme)
+        QWidget.setTabOrder(self._btn_save_theme, self._btn_delete_theme)
+        QWidget.setTabOrder(self._btn_delete_theme, self._btn_export_theme)
+        QWidget.setTabOrder(self._btn_export_theme, self._btn_import_theme)
+        QWidget.setTabOrder(self._custom_bg_check, self._custom_bg_path_edit)
+        QWidget.setTabOrder(self._custom_bg_path_edit, self._custom_bg_browse_btn)
+        QWidget.setTabOrder(self._custom_bg_browse_btn, self._custom_bg_recent_combo)
+        QWidget.setTabOrder(self._btn_reset, self._btn_reset_unlocks)
+        QWidget.setTabOrder(self._btn_reset_unlocks, self._btn_close)
         self._footer_update_timer = QTimer(self)
         self._footer_update_timer.setSingleShot(True)
         self._footer_update_timer.timeout.connect(self._refresh_footer_layout)

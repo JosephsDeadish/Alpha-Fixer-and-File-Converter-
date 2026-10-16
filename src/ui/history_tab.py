@@ -518,17 +518,29 @@ class HistoryTab(QWidget):
             "capabilityState", "limited" if _history_capability_has_limits() else "ready"
         )
         self._capability_lbl.setToolTip(_history_capability_details())
+        self._capability_lbl.setAccessibleName("History capability summary")
+        self._capability_lbl.setAccessibleDescription(
+            "Summarizes what the history view can browse, filter, preview, export, and recover."
+        )
         layout.addWidget(self._capability_lbl)
 
         self._session_status_lbl = QLabel("")
         self._session_status_lbl.setWordWrap(True)
         self._session_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._session_status_lbl.setProperty("toolGuidance", True)
+        self._session_status_lbl.setAccessibleName("History status summary")
+        self._session_status_lbl.setAccessibleDescription(
+            "Shows the current history tab, how many rows are visible, and any active filter text."
+        )
         layout.addWidget(self._session_status_lbl)
         self._next_step_lbl = QLabel("Next step: run a tool or export from a builder to record history here.")
         self._next_step_lbl.setWordWrap(True)
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._next_step_lbl.setProperty("toolGuidance", True)
+        self._next_step_lbl.setAccessibleName("History next step guidance")
+        self._next_step_lbl.setAccessibleDescription(
+            "Explains the most useful next action for the current history view."
+        )
         layout.addWidget(self._next_step_lbl)
 
         action_host = QWidget()
@@ -562,6 +574,10 @@ class HistoryTab(QWidget):
         self._sub_tabs.setUsesScrollButtons(True)
         self._sub_tabs.tabBar().setElideMode(Qt.TextElideMode.ElideNone)
         self._sub_tabs.tabBar().setExpanding(False)
+        self._sub_tabs.setAccessibleName("History category tabs")
+        self._sub_tabs.setAccessibleDescription(
+            "Switch between Converter, Alpha and RGBA Adjuster, Alpha Painter, GIF Builder, and Video Builder history."
+        )
 
         # --- Converter sub-tab ---
         conv_widget = QWidget()
@@ -590,6 +606,10 @@ class HistoryTab(QWidget):
         self._conv_summary = QLabel("")
         self._conv_summary.setObjectName("subheader")
         self._conv_summary.setWordWrap(True)
+        self._conv_summary.setAccessibleName("Converter history summary")
+        self._conv_summary.setAccessibleDescription(
+            "Summarizes the number of converter history entries and whether they are newest first."
+        )
         conv_layout.addWidget(self._conv_summary)
         self._sub_tabs.addTab(conv_widget, "🔄 Converter")
         self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(conv_widget), "Converter history")
@@ -621,6 +641,10 @@ class HistoryTab(QWidget):
         self._alpha_summary = QLabel("")
         self._alpha_summary.setObjectName("subheader")
         self._alpha_summary.setWordWrap(True)
+        self._alpha_summary.setAccessibleName("Alpha and RGBA history summary")
+        self._alpha_summary.setAccessibleDescription(
+            "Summarizes the number of Alpha and RGBA Adjuster history entries and whether they are newest first."
+        )
         alpha_layout.addWidget(self._alpha_summary)
         self._sub_tabs.addTab(alpha_widget, "🖼  Alpha and RGBA")
         self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(alpha_widget), "Alpha and RGBA Adjuster history")
@@ -652,6 +676,10 @@ class HistoryTab(QWidget):
         self._sel_summary = QLabel("")
         self._sel_summary.setObjectName("subheader")
         self._sel_summary.setWordWrap(True)
+        self._sel_summary.setAccessibleName("Alpha Painter history summary")
+        self._sel_summary.setAccessibleDescription(
+            "Summarizes the number of Alpha Painter history entries and whether they are newest first."
+        )
         sel_layout.addWidget(self._sel_summary)
         self._sub_tabs.addTab(sel_widget, "🎭  Alpha Painter")
         self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(sel_widget), "Alpha Painter history")
@@ -696,6 +724,10 @@ class HistoryTab(QWidget):
         self._gif_summary = QLabel("")
         self._gif_summary.setObjectName("subheader")
         self._gif_summary.setWordWrap(True)
+        self._gif_summary.setAccessibleName("GIF Builder history summary")
+        self._gif_summary.setAccessibleDescription(
+            "Summarizes the number of GIF Builder history entries and the status mix."
+        )
         gif_layout.addWidget(self._gif_summary)
         self._sub_tabs.addTab(gif_widget, "🎞  GIF Builder")
         self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(gif_widget), "GIF Builder history")
@@ -738,6 +770,10 @@ class HistoryTab(QWidget):
         self._vid_summary = QLabel("")
         self._vid_summary.setObjectName("subheader")
         self._vid_summary.setWordWrap(True)
+        self._vid_summary.setAccessibleName("Video Builder history summary")
+        self._vid_summary.setAccessibleDescription(
+            "Summarizes the number of Video Builder history entries and the status mix."
+        )
         vid_layout.addWidget(self._vid_summary)
         self._sub_tabs.addTab(vid_widget, "🎬  Video Builder")
         self._sub_tabs.tabBar().setTabToolTip(self._sub_tabs.indexOf(vid_widget), "Video Builder history")
