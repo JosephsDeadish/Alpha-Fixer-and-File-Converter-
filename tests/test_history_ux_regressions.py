@@ -142,7 +142,7 @@ def test_history_overview_labels_have_screen_reader_copy(history):
     assert "Converter" in history._sub_tabs.accessibleDescription()
     for summary, name in [
         (history._conv_summary, "Converter history summary"),
-        (history._alpha_summary, "Alpha and RGBA history summary"),
+        (history._alpha_summary, "Alpha & RGBA Adjuster history summary"),
         (history._sel_summary, "Alpha Painter history summary"),
         (history._gif_summary, "GIF Builder history summary"),
         (history._vid_summary, "Video Builder history summary"),

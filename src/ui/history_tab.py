@@ -914,10 +914,18 @@ class HistoryTab(QWidget):
             if visible:
                 for key, values in grouped_fields.items():
                     haystack = str(fields.get(key, ""))
-                    if not haystack or not any(
-                        _matches_field_filter(haystack, value, numeric=key in _FILTER_NUMERIC_FIELDS)
-                        for value in values
-                    ):
+                    if not haystack:
+                        visible = False
+                        break
+                    matched = False
+                    for value in values:
+                        if key == "status" and "recover" in value and "recover" in haystack:
+                            matched = True
+                            break
+                        if _matches_field_filter(haystack, value, numeric=key in _FILTER_NUMERIC_FIELDS):
+                            matched = True
+                            break
+                    if not matched:
                         visible = False
                         break
             item.setHidden(not visible)
