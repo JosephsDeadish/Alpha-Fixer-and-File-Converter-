@@ -3598,8 +3598,11 @@ class TestTooltipManager(unittest.TestCase):
         self.assertIn("straightforward", " ".join(_NORMAL["tooltip_mode_combo"]).lower())
         self.assertIn("snarkier", " ".join(_DUMBED["tooltip_mode_combo"]).lower())
         self.assertIn("colour-coded zones", " ".join(_NORMAL["selective_alpha_tab"]).lower())
+        self.assertIn("shared-zone imports", " ".join(_NORMAL["selective_alpha_tab"]).lower())
         self.assertIn("colour-coded zones", " ".join(_DUMBED["selective_alpha_tab"]).lower())
+        self.assertIn("reuse the same layout", " ".join(_DUMBED["selective_alpha_tab"]).lower())
         self.assertIn("something to work on", " ".join(_DUMBED["sa_open_btn"]).lower())
+        self.assertIn("zone clipboard", " ".join(_NORMAL["sa_save_btn"]).lower())
         self.assertIn("checked the preview", " ".join(_NORMAL["sa_save_btn"]).lower())
         for tips in (_NORMAL["tooltip_mode_combo"], _DUMBED["tooltip_mode_combo"], _VULGAR["tooltip_mode_combo"]):
             self.assertIn("unfiltered", " ".join(tips).lower())
@@ -3627,6 +3630,8 @@ class TestTooltipManager(unittest.TestCase):
         self.assertIn("live preview", " ".join(_NORMAL["settings_general_tab"]).lower())
         self.assertIn("live preview", " ".join(_DUMBED["settings_general_tab"]).lower())
         self.assertIn("live preview", " ".join(_VULGAR["settings_general_tab"]).lower())
+        self.assertIn("shared-zone imports", " ".join(_VULGAR["selective_alpha_tab"]).lower())
+        self.assertIn("clipboard reuse", " ".join(_VULGAR["selective_alpha_tab"]).lower())
 
     def test_alpha_painter_tool_tips_use_brush_erase_move_language(self):
         from src.ui.tooltip_manager import _DUMBED, _NORMAL, _VULGAR
@@ -8176,8 +8181,11 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("copy one zone to the zone clipboard", self._widget._next_step_lbl.text())
         self.assertIn("clipboard state", self._widget._session_status_lbl.accessibleDescription())
         self.assertIn("enable 'Highlight Alpha Values'", self._widget._import_shared_status.text())
-        self.assertIn("bring them onto the canvas", self._widget._import_shared_status.accessibleDescription())
+        self.assertIn("full zone layout slot", self._widget._import_shared_status.accessibleDescription())
+        self.assertIn("zone clipboard", self._widget._import_shared_status.accessibleDescription())
         self.assertIn("highlighted zones", self._widget._import_shared_status.toolTip())
+        self.assertIn("full zone layout slot", self._widget._btn_import_shared.toolTip().lower())
+        self.assertIn("zone clipboard", self._widget._btn_import_shared.toolTip().lower())
 
     def test_selective_alpha_tool_names_are_more_descriptive(self):
         from PyQt6.QtWidgets import QGroupBox, QLabel
@@ -8194,7 +8202,8 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertEqual("Workflow: Open → Import → Paint → Save", workflow_box.title())
         self.assertEqual("Import Shared Zones", import_box.title())
         self.assertIn("clipboard", workflow_box.toolTip().lower())
-        self.assertIn("bring them onto the canvas", import_box.accessibleDescription())
+        self.assertIn("full zone layout slot", import_box.accessibleDescription())
+        self.assertIn("zone clipboard", import_box.accessibleDescription())
         label_by_name = {label.accessibleName(): label for label in labels}
         self.assertIn("Brush", self._widget._tool_btns["freehand"].text())
         self.assertIn("Erase", self._widget._tool_btns["eraser"].text())
@@ -8347,7 +8356,7 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("full zone layout slot", import_note.accessibleDescription())
         self.assertEqual("Alpha Painter shared zone import", import_box.accessibleName())
         self.assertIn("save them", import_box.accessibleDescription().lower())
-        self.assertIn("edit them on the canvas", import_box.accessibleDescription().lower())
+        self.assertIn("bring them onto the canvas", import_box.accessibleDescription().lower())
         self.assertIn("copy one zone", import_box.accessibleDescription().lower())
         self.assertIn("Import the shared zones", self._widget._btn_import_shared.toolTip())
         self.assertIn("Alpha and RGBA Adjuster", self._widget._btn_import_shared.toolTip())
