@@ -200,9 +200,10 @@ def test_settings_backup_recovery_and_preview_controls_use_clearer_copy(dialog):
     widget, _manager = dialog
     tab_bar = widget.findChild(QTabBar)
     assert tab_bar is not None
-    assert widget._grp_preset_select.title() == "Theme Presets, Settings Backup, and Recovery"
+    assert widget._grp_preset_select.title() == "Theme Presets, Backup, and Recovery"
     assert widget._grp_preset_select.accessibleName() == "Theme preset, backup, and recovery tools"
     assert "json recovery backups" in widget._grp_preset_select.accessibleDescription().lower()
+    assert "theme or preset name" in widget._theme_search.toolTip().lower()
     assert "theme, layout, shortcut, sound" in widget._preset_backup_note.text().lower()
     assert "before a big change" in widget._preset_backup_note.text().lower()
     assert "history and unlock progress" in widget._preset_backup_note.text().lower()
@@ -792,7 +793,7 @@ def test_settings_effects_have_dedicated_tab_without_duplicated_controls(dialog)
     ]
     theme_groups = {group.title() for group in tabs.widget(0).findChildren(QGroupBox)}
     effect_groups = {group.title() for group in tabs.widget(3).findChildren(QGroupBox)}
-    assert "Theme Presets, Settings Backup, and Recovery" in theme_groups
+    assert "Theme Presets, Backup, and Recovery" in theme_groups
     assert "Theme Colors" in theme_groups
     for title in ["Click Effect Style", "Hold-Click Effects", "Background Effects",
                   "Mouse Trail", "Cursor", "Button Press Animation"]:

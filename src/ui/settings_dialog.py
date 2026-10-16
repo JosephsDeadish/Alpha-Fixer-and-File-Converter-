@@ -30,6 +30,7 @@ from .video_tool import _IMAGE_EXTS, _VIDEO_EXTS
 # never longer than ~8 chars; this guards against adding entire search strings.
 _MAX_CUSTOM_EMOJI_LEN = 8
 _MAX_CUSTOM_BG_RECENTS = 5
+_SETTINGS_BACKUP_SCOPE_NOTE = "History and unlock progress stay in the app."
 
 # Trail slider range constants
 _TRAIL_LENGTH_MIN = 10
@@ -482,11 +483,11 @@ class SettingsDialog(QDialog):
         ev.addWidget(effects_intro)
 
         # ---- Preset GroupBox ----
-        self._grp_preset_select = QGroupBox("Theme Presets, Settings Backup, and Recovery")
+        self._grp_preset_select = QGroupBox("Theme Presets, Backup, and Recovery")
         self._grp_preset_select.setAccessibleName("Theme preset, backup, and recovery tools")
         self._grp_preset_select.setAccessibleDescription(
-            "Search, choose, save, export, and import themes and settings from one place. "
-            "Export and import buttons create and restore JSON recovery backups without touching history or unlock progress."
+            "Search, choose, save, export, and import themes and settings backups from one place. "
+            f"Export and import buttons create and restore JSON recovery backups. {_SETTINGS_BACKUP_SCOPE_NOTE}"
         )
         ps_vl = QVBoxLayout(self._grp_preset_select)
         ps_vl.setSpacing(4)
@@ -499,10 +500,10 @@ class SettingsDialog(QDialog):
         self._theme_search = QLineEdit()
         filter_label.setBuddy(self._theme_search)
         self._theme_search.setAccessibleName("Search theme presets")
-        self._theme_search.setPlaceholderText("Search theme names…")
+        self._theme_search.setPlaceholderText("Search themes or saved presets…")
         self._theme_search.setClearButtonEnabled(True)
         self._theme_search.setToolTip(
-            "Type part of a theme name to filter the preset list below.\n"
+            "Type part of a theme or preset name to filter the list below.\n"
             "Press Enter to focus the first match; filtering only changes the list view, not the active theme."
         )
         self._theme_search.setAccessibleDescription(self._theme_search.toolTip())
@@ -547,20 +548,20 @@ class SettingsDialog(QDialog):
         self._btn_export_theme.setToolTip(
             "Export the current settings to a JSON recovery backup.\n"
             "Use this as a recovery copy or move your look, layout, and other saved preferences to another install.\n"
-            "History and unlock progress stay in the app."
+            f"{_SETTINGS_BACKUP_SCOPE_NOTE}"
         )
         self._btn_import_theme.setToolTip(
             "Import settings from a JSON recovery backup and apply them immediately.\n"
             "Use this to restore a saved look or bring preferences in from another install.\n"
-            "History and unlock progress stay in the app."
+            f"{_SETTINGS_BACKUP_SCOPE_NOTE}"
         )
         self._btn_export_theme.setAccessibleName("Export settings backup")
         self._btn_export_theme.setAccessibleDescription(
-            "Exports the current settings to a JSON recovery backup for safekeeping, recovery, or transfer. History and unlock progress are not part of the backup."
+            f"Exports the current settings to a JSON recovery backup for safekeeping, recovery, or transfer. {_SETTINGS_BACKUP_SCOPE_NOTE}"
         )
         self._btn_import_theme.setAccessibleName("Import settings backup")
         self._btn_import_theme.setAccessibleDescription(
-            "Imports a JSON recovery backup and applies it immediately so you can recover saved settings or transfer them from another install. History and unlock progress are not part of the backup."
+            f"Imports a JSON recovery backup and applies it immediately so you can recover saved settings or transfer them from another install. {_SETTINGS_BACKUP_SCOPE_NOTE}"
         )
         psl.addWidget(self._btn_save_theme, 1, 0)
         psl.addWidget(self._btn_delete_theme, 1, 1)
@@ -573,7 +574,7 @@ class SettingsDialog(QDialog):
         self._preset_backup_note = QLabel(
             "Backups save theme, layout, shortcut, sound, and other settings. "
             "Use export or import to keep a recovery copy before a big change, reinstalling, or moving to another install. "
-            "History and unlock progress stay in the app."
+            f"{_SETTINGS_BACKUP_SCOPE_NOTE}"
         )
         self._preset_backup_note.setWordWrap(True)
         self._preset_backup_note.setProperty("settingsHint", True)

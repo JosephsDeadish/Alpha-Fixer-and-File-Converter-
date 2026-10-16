@@ -137,6 +137,7 @@ def test_history_overview_labels_have_screen_reader_copy(history):
     assert "rows are visible" in history._session_status_lbl.accessibleDescription().lower()
     assert history._next_step_lbl.accessibleName() == "History next step guidance"
     assert "next action" in history._next_step_lbl.accessibleDescription().lower()
+    assert "create history entries" in history._next_step_lbl.text().lower()
     assert history._sub_tabs.accessibleName() == "History category tabs"
     assert "Converter" in history._sub_tabs.accessibleDescription()
     for summary, name in [
@@ -148,6 +149,24 @@ def test_history_overview_labels_have_screen_reader_copy(history):
     ]:
         assert summary.accessibleName() == name
         assert summary.accessibleDescription()
+
+
+def test_history_clear_button_copy_and_status_label_are_more_actionable(history):
+    assert "confirm the prompt" in history._btn_clear.accessibleDescription().lower()
+    history._vid_tree.clear()
+    history._settings.add_video_builder_history({
+        "timestamp": "2026-10-09T12:00:00",
+        "output": "export.mp4",
+        "format": "mp4",
+        "clip_count": 1,
+        "success": 1,
+        "errors": 0,
+        "recovery": "remux ×1",
+        "notes": "temporary ffmpeg remux fallback active",
+        "files": ["clip.iso"],
+    })
+    history.refresh()
+    assert history._vid_tree.topLevelItem(0).text(13) == "Recovered"
 
 
 def test_animation_only_runs_while_history_tree_is_visible(app, tmp_path):

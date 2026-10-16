@@ -42,7 +42,7 @@ def _history_capability_details() -> str:
             "• Filter across visible columns, status, notes, file names, and field-specific queries.",
             "• Export the current sub-tab to CSV, JSON, HTML, or plain text report formats.",
             "• Preview thumbnails appear when stored source/output media is still available locally.",
-            "• Recovery and partial-status labels help you spot entries that need another look.",
+            "• Recovery, partial-status, and status labels help you spot entries that need another look.",
         ]
     )
 
@@ -423,7 +423,7 @@ def _set_builder_tooltip(item: QTreeWidgetItem, columns: int, base_text: str, fi
 
 def _history_next_step_text(total: int, visible: int, filter_text: str) -> str:
     if total <= 0:
-        return "Next step: run a tool or export from a builder to record history here."
+        return "Next step: run a tool or export from a builder to create history entries."
     if filter_text and visible <= 0:
         return "Next step: clear or loosen the current filter to bring matching rows back into view."
     if filter_text and visible < total:
@@ -439,11 +439,11 @@ def _video_history_status(errors: object, notes: str) -> str:
     lower_notes = notes.lower()
     has_recovery = "fallback" in lower_notes or "recovery" in lower_notes
     if err_count > 0 and has_recovery:
-        return "Partial / recovery"
+        return "Recovered with issues"
     if err_count > 0:
         return "Issues"
     if has_recovery:
-        return "Recovery"
+        return "Recovered"
     return "OK"
 
 
@@ -457,7 +457,7 @@ def _gif_history_status(errors: object) -> str:
 def _history_status_mix(statuses: list[str]) -> str:
     if not statuses:
         return ""
-    order = ("OK", "Recovery", "Partial / recovery", "Issues")
+    order = ("OK", "Recovered", "Recovered with issues", "Issues")
     counts: dict[str, int] = {}
     for status in statuses:
         key = str(status or "").strip() or "Unknown"
@@ -556,7 +556,7 @@ class HistoryTab(QWidget):
         )
         self._btn_clear.setAccessibleName("Clear all history")
         self._btn_clear.setAccessibleDescription(
-            "Remove the stored converter, alpha, Alpha Painter, GIF Builder, and Video Builder history entries."
+            "Remove the stored converter, alpha, Alpha Painter, GIF Builder, and Video Builder history entries after you confirm the prompt."
         )
         btn_row.addWidget(self._btn_export)
         btn_row.addStretch(1)
