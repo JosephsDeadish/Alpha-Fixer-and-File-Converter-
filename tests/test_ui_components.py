@@ -8233,10 +8233,13 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
             self._app.processEvents()
 
     def test_selective_alpha_slot_labels_explain_next_actions(self):
+        from src.ui.selective_alpha_tool import SelectiveAlphaTool
+
         self.assertIn("Empty", self._widget._slot_info_lbl.text())
         self.assertIn("save the active zone here", self._widget._slot_info_lbl.text())
         self.assertIn("Empty", self._widget._az_slot_info_lbl.text())
         self.assertIn("save all current zones here", self._widget._az_slot_info_lbl.text())
+        self.assertIn("Zone Clipboard", SelectiveAlphaTool._empty_single_zone_slot_text())
         self.assertIn("Single-zone slot selector", self._widget._slot_combo.accessibleName())
         self.assertIn("Add single-zone slot", self._widget._btn_slot_add.accessibleName())
         self.assertIn("Delete single-zone slot", self._widget._btn_slot_del.accessibleName())
@@ -8315,7 +8318,9 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Paste Zone", text)
         self.assertIn("Import Shared Zones to Canvas", self._widget._btn_import_shared.text())
         self.assertIn("Copy One Zone", self._widget._btn_import_zone_to_clipboard.text())
+        self.assertIn("zone clipboard", self._widget._btn_import_zone_to_clipboard.text().lower())
         self.assertIn("Copy one shared zone", self._widget._btn_import_zone_to_clipboard.accessibleName())
+        self.assertIn("zone clipboard", self._widget._btn_import_zone_to_clipboard.accessibleName().lower())
         self.assertIn("zone clipboard", self._widget._btn_import_zone_to_clipboard.toolTip())
         self.assertIn("zone clipboard", self._widget._btn_import_zone_to_clipboard.accessibleDescription().lower())
         self.assertTrue(self._widget._btn_import_shared.isEnabled())

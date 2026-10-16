@@ -1805,7 +1805,7 @@ class SelectiveAlphaTool(QWidget):
     def _empty_single_zone_slot_text(cls) -> str:
         return (
             "Empty — save the active zone here, or bring in one shared zone and use "
-            "'Copy One Zone → Clipboard' before pasting."
+            "'Copy One Zone → Zone Clipboard' before pasting."
         )
 
     @classmethod
@@ -2636,7 +2636,7 @@ class SelectiveAlphaTool(QWidget):
         iv.addWidget(self._btn_import_to_az_slot)
 
         # Item 23: copy one shared zone to the zone clipboard
-        self._btn_import_zone_to_clipboard = QPushButton("📋 Copy One Zone → Clipboard")
+        self._btn_import_zone_to_clipboard = QPushButton("📋 Copy One Zone → Zone Clipboard")
         self._btn_import_zone_to_clipboard.setMinimumHeight(26)
         self._btn_import_zone_to_clipboard.setEnabled(False)
         self._btn_import_zone_to_clipboard.setToolTip(
@@ -2644,7 +2644,7 @@ class SelectiveAlphaTool(QWidget):
             "If several zones are ready, you can pick which one to copy.\n\n"
             "Then paste it into the active zone below with 'Paste Zone'."
         )
-        self._btn_import_zone_to_clipboard.setAccessibleName("Copy one shared zone to clipboard")
+        self._btn_import_zone_to_clipboard.setAccessibleName("Copy one shared zone to zone clipboard")
         self._btn_import_zone_to_clipboard.setAccessibleDescription(
             "Copies one shared zone into the zone clipboard so it can be pasted into the active zone."
         )
@@ -3531,14 +3531,14 @@ class SelectiveAlphaTool(QWidget):
             self._mask_clipboard = (bool_mask.astype(np_imp.uint8) * 255)
             self._ze_paste_btn.setEnabled(True)
             clipboard_note = (
-                f"\n📋 α={alpha_val} pre-loaded in clipboard — 'Paste Zone' to apply."
+                f"\n📋 α={alpha_val} pre-loaded in the zone clipboard — 'Paste Zone' to apply."
             )
         else:
             clipboard_note = ""
 
-        next_actions = "Next: import the shared zones, save them to the full-layout slot, or copy one zone to the clipboard."
+        next_actions = "Next: import the shared zones, save them to the full-layout slot, or copy one zone to the zone clipboard."
         if count == 1:
-            next_actions = "Next: open an image, import the shared zones, or press Paste Zone to apply the pre-loaded clipboard zone."
+            next_actions = "Next: open an image, import the shared zones, or press Paste Zone to apply the pre-loaded zone clipboard copy."
         self._import_shared_status.setText(
             f"✅ {count} shared zone(s) ready"
             f" (α: {', '.join(str(v) for v, _ in displayed)}{suffix})"
@@ -3650,7 +3650,7 @@ class SelectiveAlphaTool(QWidget):
             ]
             dialog = QInputDialog(self)
             dialog.setWindowTitle("Select Zone")
-            dialog.setLabelText("Choose a zone to copy to the clipboard:")
+            dialog.setLabelText("Choose a zone to copy to the zone clipboard:")
             dialog.setComboBoxItems(items)
             dialog.setComboBoxEditable(False)
             dialog.findChild(QLabel).setWordWrap(True)
