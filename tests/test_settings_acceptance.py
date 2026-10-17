@@ -488,7 +488,10 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
         manager.set(key, histories[key])
     manager.sync()
     backup = tmp_path / "preferences.json"
-    manager.export_settings(str(backup))
+    with patch("src.ui.main_window.QFileDialog.getSaveFileName",
+               return_value=(str(backup), "")), \
+            patch("src.ui.main_window.QMessageBox.information"):
+        window._export_settings()
     payload = json.loads(backup.read_text(encoding="utf-8"))
     assert not any(key in payload for key in histories)
     if legacy:
@@ -566,9 +569,9 @@ def test_confirmed_dialog_resets_survive_relaunch_with_intended_scope(
     with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes), \
          patch.object(QMessageBox, "information"):
         if reset_all:
-            widget._reset_all_settings()
+            widget._btn_reset.click()
         else:
-            widget._reset_unlocks_only()
+            widget._btn_reset_unlocks.click()
     widget.close()
     reloaded = launch()
     reopened = open_settings(reloaded)

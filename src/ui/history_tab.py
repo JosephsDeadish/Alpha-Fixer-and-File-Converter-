@@ -11,13 +11,13 @@ import re
 import shlex
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QTimer, QSize, QRect, QEvent, pyqtSlot, pyqtSignal
-from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtCore import Qt, QTimer, QSize, QRect, QEvent, QUrl, pyqtSlot, pyqtSignal
+from PyQt6.QtGui import QDesktopServices, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QBoxLayout, QLabel, QPushButton,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QMessageBox,
     QTabWidget, QFileDialog, QLineEdit, QStyledItemDelegate, QStyleOptionViewItem, QSizePolicy,
-    QScrollArea,
+    QScrollArea, QMenu,
 )
 
 _THUMB_SIZE = 32  # thumbnail icon size (pixels, square)
@@ -43,6 +43,7 @@ def _history_capability_details() -> str:
             "• Export the current sub-tab to CSV, JSON, HTML, or plain text report formats.",
             "• Preview thumbnails appear when stored source/output media is still available locally.",
             "• Recovery, partial-status, and status labels help you spot entries that need another look.",
+            "• Right-click or double-click a row to open recorded outputs or reveal their folders when files are still available.",
         ]
     )
 
@@ -54,6 +55,9 @@ class _HistoryItem(QTreeWidgetItem):
     _FILTER_ROLE = Qt.ItemDataRole.UserRole + 3
     _FILTER_FIELDS_ROLE = Qt.ItemDataRole.UserRole + 4
     _BATCH_STATUS_ROLE = Qt.ItemDataRole.UserRole + 5
+    _OUTPUTS_ROLE = Qt.ItemDataRole.UserRole + 6
+    _OPTIONS_ROLE = Qt.ItemDataRole.UserRole + 7
+    _FAILURES_ROLE = Qt.ItemDataRole.UserRole + 8
 
     def __lt__(self, other) -> bool:
         tree = self.treeWidget()
@@ -587,7 +591,7 @@ class HistoryTab(QWidget):
         self._conv_search = self._make_search_field("converter")
         conv_layout.addWidget(self._conv_search)
         self._conv_tree = _make_tree(
-            ["Time", "Format", "Files", "✔ OK", "✘ Err", "File names"],
+            ["Time", "Format", "Files", "✔ OK", "✘ Err", "File names", "Outputs", "Run options", "Failures"],
             col_tips=[
                 "When the conversion batch was started.",
                 "Output format chosen for this batch (e.g. PNG, WEBP, DDS).",
@@ -595,8 +599,15 @@ class HistoryTab(QWidget):
                 "Files that converted successfully.",
                 "Files that failed — check the format/path if this is non-zero.",
                 "Input filenames in this batch.",
+                "Recorded output paths. Right-click a row to open available outputs or reveal their folders.",
+                "Settings captured when this batch started.",
+                "Per-file failure diagnostics recorded for this batch.",
             ],
         )
+        self._conv_tree.header().setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)
+        self._conv_tree.header().setSectionResizeMode(7, QHeaderView.ResizeMode.Interactive)
+        self._conv_tree.setColumnWidth(6, 180)
+        self._conv_tree.setColumnWidth(7, 150)
         _set_history_tree_accessibility(
             self._conv_tree,
             "Converter history table",
@@ -781,6 +792,16 @@ class HistoryTab(QWidget):
         layout.addWidget(self._sub_tabs, 1)
         for widget in [self._sub_tabs, *self._sub_tabs.findChildren(QWidget)]:
             widget.installEventFilter(self)
+        for tree in (
+            self._conv_tree, self._alpha_tree, self._sel_tree, self._gif_tree, self._vid_tree,
+        ):
+            tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            tree.customContextMenuRequested.connect(
+                lambda pos, current_tree=tree: self._show_output_context_menu(current_tree, pos)
+            )
+            tree.itemDoubleClicked.connect(
+                lambda item, _column: self._open_first_history_output(item)
+            )
 
         # Connections
         self._btn_export.clicked.connect(self._export_history)
@@ -933,6 +954,73 @@ class HistoryTab(QWidget):
         if isinstance(delegate, _AnimatedGifDelegate):
             delegate.sync_visibility()
 
+    @staticmethod
+    def _set_history_outputs(item: QTreeWidgetItem, paths) -> list[str]:
+        if isinstance(paths, str):
+            paths = [paths]
+        outputs = list(dict.fromkeys(
+            str(path).strip() for path in (paths or [])
+            if isinstance(path, (str, os.PathLike)) and str(path).strip()
+        ))
+        item.setData(0, _HistoryItem._OUTPUTS_ROLE, outputs)
+        return outputs
+
+    @staticmethod
+    def _history_outputs(item: QTreeWidgetItem) -> list[str]:
+        outputs = item.data(0, _HistoryItem._OUTPUTS_ROLE) or []
+        return [str(path) for path in outputs if str(path).strip()]
+
+    @staticmethod
+    def _open_history_output(path: str) -> bool:
+        if not path or not os.path.isfile(path):
+            return False
+        return QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(path)))
+
+    @staticmethod
+    def _reveal_history_output(path: str) -> bool:
+        if not path:
+            return False
+        folder = os.path.dirname(os.path.abspath(path))
+        return HistoryTab._open_history_folder(folder)
+
+    @staticmethod
+    def _open_history_folder(folder: str) -> bool:
+        if not os.path.isdir(folder):
+            return False
+        return QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(folder)))
+
+    def _open_first_history_output(self, item: QTreeWidgetItem) -> None:
+        for path in self._history_outputs(item):
+            if os.path.isfile(path):
+                self._open_history_output(path)
+                return
+
+    def _show_output_context_menu(self, tree: QTreeWidget, pos) -> None:
+        item = tree.itemAt(pos)
+        if item is None:
+            return
+        tree.setCurrentItem(item)
+        outputs = self._history_outputs(item)
+        if not outputs:
+            return
+        menu = QMenu(self)
+        open_menu = menu.addMenu("Open output")
+        for path in outputs:
+            action = open_menu.addAction(Path(path).name or path)
+            action.setEnabled(os.path.isfile(path))
+            action.triggered.connect(
+                lambda _checked=False, output_path=path: self._open_history_output(output_path)
+            )
+        folders = list(dict.fromkeys(os.path.dirname(os.path.abspath(path)) for path in outputs))
+        reveal_menu = menu.addMenu("Show output folder")
+        for folder in folders:
+            action = reveal_menu.addAction(Path(folder).name or folder)
+            action.setEnabled(os.path.isdir(folder))
+            action.triggered.connect(
+                lambda _checked=False, output_folder=folder: self._open_history_folder(output_folder)
+            )
+        menu.exec(tree.viewport().mapToGlobal(pos))
+
     # ------------------------------------------------------------------
     # Tooltip registration
     # ------------------------------------------------------------------
@@ -1067,16 +1155,61 @@ class HistoryTab(QWidget):
             n_err = str(entry.get("errors", "?"))
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
-            item = _HistoryItem([ts, fmt, n_files, n_ok, n_err, files])
+            results = entry.get("results", [])
+            if not isinstance(results, list):
+                results = []
+            output_paths = [
+                str(result.get("output") or "")
+                for result in results
+                if isinstance(result, dict) and result.get("output")
+            ]
+            if not output_paths:
+                output_paths = [str(path) for path in (entry.get("outputs") or []) if path]
+            options = entry.get("options", {})
+            if not isinstance(options, dict):
+                options = {}
+            failures = entry.get("failure_details", [])
+            if not isinstance(failures, list):
+                failures = []
+            failure_texts = []
+            for failure in failures:
+                if not isinstance(failure, dict):
+                    continue
+                label = str(failure.get("source_label") or failure.get("source") or "File")
+                detail = str(failure.get("detail") or failure.get("reason") or "").strip()
+                if detail:
+                    failure_texts.append(f"{label}: {detail}")
+            output_summary = ""
+            if output_paths:
+                output_summary = Path(output_paths[0]).name
+                if len(output_paths) > 1:
+                    output_summary += f" (+{len(output_paths) - 1})"
+            failure_summary = (
+                f"{len(failure_texts)} failure(s)" if failure_texts else ""
+            )
+            item = _HistoryItem([
+                ts, fmt, n_files, n_ok, n_err, files, output_summary,
+                f"{len(options)} setting(s)" if options else "",
+                failure_summary,
+            ])
+            item.setData(0, _HistoryItem._OPTIONS_ROLE, options)
+            item.setData(0, _HistoryItem._FAILURES_ROLE, failure_texts)
+            self._set_history_outputs(item, output_paths)
             status = "Stopped" if entry.get("stopped") is True else _gif_history_status(entry.get("errors"))
             item.setData(0, _HistoryItem._BATCH_STATUS_ROLE, [status, str(entry.get("not_processed", 0))])
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
-            _set_filter_text(item, ts, fmt, n_files, n_ok, n_err, file_list, status)
+            _set_filter_text(
+                item, ts, fmt, n_files, n_ok, n_err, file_list, output_paths,
+                options, failure_texts, status,
+            )
             _set_filter_fields(
                 item,
                 time=ts,
                 format=fmt,
                 file=file_list,
+                output=output_paths,
+                option=[f"{key}: {value}" for key, value in options.items()],
+                failure=failure_texts,
                 status=status,
                 success=n_ok,
                 errors=n_err,
@@ -1088,11 +1221,16 @@ class HistoryTab(QWidget):
                 item.setIcon(0, thumb)
             _set_history_tooltip(
                 item,
-                6,
+                9,
                 f"Batch: {ts}\nFormat: {fmt}\n"
                 f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n"
                 f"Status: {status}  Not processed: {entry.get('not_processed', 0)}\n"
-                f"{preview_text}",
+                f"{preview_text}"
+                + ("\n\nOutputs:\n  " + "\n  ".join(output_paths) if output_paths else "")
+                + ("\n\nRun options:\n  " + "\n  ".join(
+                    f"{key}: {value}" for key, value in options.items()
+                ) if options else "")
+                + ("\n\nFailure details:\n  " + "\n  ".join(failure_texts) if failure_texts else ""),
                 file_list,
             )
             self._conv_tree.addTopLevelItem(item)
@@ -1117,6 +1255,7 @@ class HistoryTab(QWidget):
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
             item = _HistoryItem([ts, mode, n_files, n_ok, n_err, files])
+            self._set_history_outputs(item, entry.get("output", ""))
             status = "Stopped" if entry.get("stopped") is True else _gif_history_status(entry.get("errors"))
             item.setData(0, _HistoryItem._BATCH_STATUS_ROLE, [status, str(entry.get("not_processed", 0))])
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
@@ -1171,6 +1310,7 @@ class HistoryTab(QWidget):
                 file_list = [_os.path.basename(entry["output"])]
             files = ", ".join(file_list)
             item = _HistoryItem([ts, mode, n_files, n_ok, n_err, files])
+            self._set_history_outputs(item, entry.get("output", ""))
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
             _set_filter_text(
                 item,
@@ -1246,6 +1386,7 @@ class HistoryTab(QWidget):
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
             item = _HistoryItem([ts, output, n_frames, delay, fps, optimize, loop, resize, sources, largest, alpha, n_ok, n_err, status, notes, files])
+            self._set_history_outputs(item, output_path)
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
             _set_filter_text(
                 item,
@@ -1348,6 +1489,7 @@ class HistoryTab(QWidget):
             file_list = entry.get("files", [])
             files = ", ".join(file_list)
             item = _HistoryItem([ts, output, fmt, n_clips, fps, canvas, filter_name, audio_mode, recovery, streams, sources, n_ok, n_err, status, clip_details, notes, files])
+            self._set_history_outputs(item, raw_output or "")
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
             _set_filter_text(
                 item,
@@ -1462,7 +1604,10 @@ class HistoryTab(QWidget):
         if tab_idx == 0:
             tree = self._conv_tree
             tab_name = "converter"
-            headers = ["Time", "Format", "Files", "OK", "Errors", "File names"]
+            headers = [
+                "Time", "Format", "Files", "OK", "Errors", "File names",
+                "Output files", "Run options", "Failure details",
+            ]
         elif tab_idx == 1:
             tree = self._alpha_tree
             tab_name = "alpha_fixer"
@@ -1515,6 +1660,13 @@ class HistoryTab(QWidget):
             if item is None or item.isHidden():
                 continue
             row = [item.text(c) for c in range(tree.columnCount())]
+            if tab_idx == 0:
+                outputs = self._history_outputs(item)
+                options = item.data(0, _HistoryItem._OPTIONS_ROLE) or {}
+                failures = item.data(0, _HistoryItem._FAILURES_ROLE) or []
+                row[6] = "\n".join(outputs)
+                row[7] = _json.dumps(options, ensure_ascii=False, sort_keys=True)
+                row[8] = "\n".join(failures)
             if tab_idx in (0, 1):
                 batch_status = item.data(0, _HistoryItem._BATCH_STATUS_ROLE)
                 row.extend(batch_status or ["Unknown", ""])

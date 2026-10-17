@@ -2234,9 +2234,54 @@ def _probe_video_clip(path: str) -> tuple[float, int, Optional[tuple[int, int]],
         reader.close()
 
 
-def _load_video_frames(path: str) -> tuple[list["PIL.Image.Image"], float]:
+def _load_video_frames(
+    path: str,
+    *,
+    preferred_video_stream_index: Optional[int] = None,
+    preferred_audio_stream_index: Optional[int] = None,
+    load_note: Optional[list[str]] = None,
+) -> tuple[list["PIL.Image.Image"], float]:
     """Decode a whole video into RGBA frames for reuse in GIF Builder."""
     from PIL import Image
+
+    if preferred_video_stream_index is not None or preferred_audio_stream_index is not None:
+        clip = _load_video_clip(
+            path,
+            preferred_video_stream_index=preferred_video_stream_index,
+            preferred_audio_stream_index=preferred_audio_stream_index,
+        )
+        if clip is None:
+            raise ValueError(_video_load_failure_hint(
+                path,
+                preferred_video_stream_index=preferred_video_stream_index,
+                preferred_audio_stream_index=preferred_audio_stream_index,
+            ))
+        frames: list[Image.Image] = []
+        try:
+            for frame_index in range(max(0, int(clip.total_frames))):
+                try:
+                    frame = clip.get_frame(frame_index)
+                except IndexError:
+                    break
+                except Exception:
+                    if frame_index == 0:
+                        raise
+                    break
+                try:
+                    frames.append(frame.convert("RGBA"))
+                finally:
+                    frame.close()
+            if not frames:
+                raise ValueError("No readable frames found in the selected video stream.")
+            if load_note is not None and clip.load_note:
+                load_note.append(str(clip.load_note))
+            return frames, max(0.1, float(clip.fps or 25.0))
+        except Exception:
+            for frame in frames:
+                frame.close()
+            raise
+        finally:
+            clip.close()
 
     reader = _open_video_reader(path)
     frames: list[Image.Image] = []

@@ -1,5 +1,7 @@
 import csv
 import json
+import time
+from pathlib import Path
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -70,6 +72,132 @@ def select_format(converter, fmt):
     converter._fmt_combo.setCurrentIndex(index)
     converter._on_format_changed(index)
     converter._preview_debounce.stop()
+
+
+def test_converter_batch_history_persists_outputs_fallback_options_and_failures(
+        app, converter, settings, tmp_path):
+    opaque = tmp_path / "opaque.png"
+    transparent = tmp_path / "transparent.png"
+    broken = tmp_path / "broken.png"
+    opaque_image = Image.new("RGB", (8, 6), "navy")
+    opaque_image.save(opaque)
+    opaque_image.close()
+    rgba = Image.new("RGBA", (8, 6), (10, 20, 30, 80))
+    rgba.save(transparent)
+    rgba.close()
+    broken.write_bytes(b"not an image")
+    output_dir = tmp_path / "converted"
+    converter._add_to_list([str(opaque), str(transparent), str(broken)])
+    converter._out_dir_edit.setText(str(output_dir))
+    converter._suffix_edit.setText("_archive")
+    converter._quality_spin.setValue(73)
+    converter._keep_metadata_check.setChecked(True)
+    select_format(converter, "JPEG")
+
+    converter._run()
+    deadline = time.monotonic() + 15
+    while not settings.get_converter_history() and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(0.01)
+    app.processEvents()
+
+    history = settings.get_converter_history()
+    assert history
+    entry = history[0]
+    assert entry["success"] == 2
+    assert entry["errors"] == 1
+    assert entry["options"]["requested_format"] == "JPEG"
+    assert entry["options"]["actual_batch_format"] == "JPEG"
+    assert entry["options"]["quality"] == 73
+    assert entry["options"]["preserve_metadata"] is True
+    results = {Path(result["source"]).name: result for result in entry["results"]}
+    assert results["opaque.png"]["status"] == "success"
+    assert results["opaque.png"]["output"].endswith("opaque_archive.jpg")
+    assert results["opaque.png"]["output_format"] == "jpg"
+    assert results["transparent.png"]["output"].endswith("transparent_archive.png")
+    assert results["transparent.png"]["output_format"] == "png"
+    assert results["broken.png"]["status"] == "failed"
+    assert "broken.png" in entry["failure_details"][0]["source"]
+    assert entry["failure_details"][0]["detail"]
+
+
+def test_converter_stopped_history_marks_unprocessed_file(converter, settings, tmp_path):
+    sources = [str(tmp_path / f"source-{index}.png") for index in range(3)]
+    output = str(tmp_path / "source-0.png")
+    converter._last_run_files = sources
+    converter._last_run_format = "PNG"
+    converter._last_run_options = {"requested_format": "PNG", "quality": 90}
+    converter._last_run_source_aliases = {}
+    converter._last_run_out_dir = None
+    converter._batch_total = 3
+    converter._stop_requested = True
+    converter._batch_outputs = {sources[0]: output}
+    converter._batch_error_reasons.update({"decode failed": 1})
+    converter._batch_error_files = {"decode failed": [sources[1]]}
+    converter._batch_failure_details = [{
+        "source": sources[1], "reason": "decode failed", "detail": "decode failed",
+    }]
+    converter._on_finished(1, 1)
+
+    entry = settings.get_converter_history()[0]
+    assert entry["stopped"] is True
+    assert entry["not_processed"] == 1
+    assert [result["status"] for result in entry["results"]] == [
+        "success", "failed", "not processed",
+    ]
+
+
+def test_converter_history_opens_outputs_and_exports_full_details(
+        app, settings, tmp_path):
+    from src.ui.history_tab import _HistoryItem
+
+    output = tmp_path / "finished.png"
+    Image.new("RGB", (4, 4), "orange").save(output)
+    settings.add_converter_history({
+        "timestamp": "2026-10-09T12:00:00",
+        "format": "JPEG",
+        "file_count": 2,
+        "success": 1,
+        "errors": 1,
+        "not_processed": 0,
+        "files": ["source.png", "broken.png"],
+        "options": {"quality": 75, "resize": [24, 16]},
+        "results": [
+            {"source": str(tmp_path / "source.png"), "output": str(output), "status": "success"},
+            {"source": str(tmp_path / "broken.png"), "output": "", "status": "failed"},
+        ],
+        "failure_details": [{
+            "source": str(tmp_path / "broken.png"),
+            "source_label": "broken.png",
+            "reason": "decode failed",
+            "detail": "decoder reported: corrupt image payload",
+        }],
+    })
+    widget = HistoryTab(settings)
+    try:
+        item = widget._conv_tree.topLevelItem(0)
+        assert widget._history_outputs(item) == [str(output)]
+        assert "corrupt image payload" in item.data(0, _HistoryItem._FAILURES_ROLE)[0]
+        widget._conv_search.setText("failure:corrupt")
+        assert not item.isHidden()
+        with patch("src.ui.history_tab.QDesktopServices.openUrl", return_value=True) as open_url:
+            widget._open_first_history_output(item)
+            assert open_url.call_args.args[0].toLocalFile() == str(output)
+            widget._reveal_history_output(str(output))
+            assert open_url.call_args.args[0].toLocalFile() == str(tmp_path)
+
+        report = tmp_path / "converter-history.json"
+        with patch("src.ui.history_tab.QFileDialog.getSaveFileName",
+                   return_value=(str(report), "JSON Files (*.json)")), \
+                patch("src.ui.history_tab.QMessageBox.information"):
+            widget._export_history()
+        row = json.loads(report.read_text(encoding="utf-8"))[0]
+        assert row["Output files"] == str(output)
+        assert json.loads(row["Run options"]) == {"quality": 75, "resize": [24, 16]}
+        assert "corrupt image payload" in row["Failure details"]
+    finally:
+        widget.close()
+        sip.delete(widget)
 
 
 @pytest.mark.parametrize("resize", [None, (24, 10), (160, 80)])

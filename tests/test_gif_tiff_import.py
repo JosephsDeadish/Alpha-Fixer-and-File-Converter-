@@ -6,9 +6,9 @@ from unittest.mock import patch
 import pytest
 from PIL import Image, TiffImagePlugin
 from PyQt6 import sip
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QDialog
 
-from src.ui.gif_builder import GifBuilderDialog, _load_pillow_rgba
+from src.ui.gif_builder import GifBuilderDialog, _GifStreamPickerDialog, _load_pillow_rgba
 
 
 @pytest.fixture
@@ -64,6 +64,116 @@ def corrupt_last_page(path):
         offset = image.tag_v2[273][0]
     with path.open("r+b") as stream:
         stream.truncate(offset + 1)
+
+
+def _multi_stream_probe():
+    return {
+        "video_stream_index": 1,
+        "audio_stream_index": 2,
+        "video_stream_count": 2,
+        "audio_stream_count": 2,
+        "video_stream_choices": [
+            {"index": 1, "codec_name": "h264", "width": 640, "height": 360},
+            {"index": 3, "codec_name": "hevc", "width": 1280, "height": 720},
+        ],
+        "audio_stream_choices": [
+            {"index": 2, "codec_name": "aac", "tags": {"language": "eng"}},
+            {"index": 4, "codec_name": "opus", "tags": {"language": "jpn"}},
+        ],
+    }
+
+
+def test_gif_stream_picker_exposes_accessible_video_and_audio_choices(app, tmp_path):
+    picker = _GifStreamPickerDialog(str(tmp_path / "multi.mkv"), _multi_stream_probe())
+    try:
+        assert picker._video_combo.count() == 3
+        assert picker._audio_combo.count() == 3
+        assert picker._video_combo.accessibleName() == "GIF Builder video stream"
+        assert picker._audio_combo.accessibleName() == "GIF Builder audio stream"
+        picker._video_combo.setCurrentIndex(2)
+        picker._audio_combo.setCurrentIndex(2)
+        assert picker.selected_video_stream_index == 3
+        assert picker.selected_audio_stream_index == 4
+        picker._video_combo.setCurrentIndex(0)
+        assert picker.selected_video_stream_index is None
+    finally:
+        picker.close()
+        sip.delete(picker)
+
+
+@pytest.mark.parametrize("accepted", [True, False])
+def test_gif_multistream_import_applies_manual_selection_or_skips_cleanly(
+        app, builder, tmp_path, accepted):
+    source = tmp_path / "multi.mkv"
+    source.touch()
+    class Picker:
+        def __init__(self, *_args):
+            self.selected_video_stream_index = 3
+            self.selected_audio_stream_index = 4
+
+        def exec(self):
+            return QDialog.DialogCode.Accepted if accepted else QDialog.DialogCode.Rejected
+
+    with patch("src.ui.gif_builder._probe_media_details", return_value=_multi_stream_probe()), \
+            patch("src.ui.gif_builder._GifStreamPickerDialog", Picker), \
+            patch("src.ui.gif_builder._load_video_frames") as load_video:
+        load_video.return_value = ([Image.new("RGBA", (4, 3), "red")], 25.0)
+        builder._import_paths([str(source)])
+
+    if accepted:
+        load_video.assert_called_once_with(
+            str(source),
+            preferred_video_stream_index=3,
+            preferred_audio_stream_index=4,
+            load_note=[],
+        )
+        assert len(builder._frames) == 1
+        assert "video stream #3" in builder._import_detail_box.toPlainText()
+        assert "audio stream #4" in builder._import_detail_box.toPlainText()
+    else:
+        load_video.assert_not_called()
+        assert not builder._frames
+        assert "stream selection cancelled" in builder._import_detail_box.toPlainText()
+
+
+def test_selected_video_stream_decoder_uses_video_recovery_path_and_releases_clip(tmp_path):
+    from src.ui.video_tool import _load_video_frames
+
+    class Clip:
+        total_frames = 2
+        fps = 24.0
+        load_note = "temporary remux used"
+        closed = False
+
+        @staticmethod
+        def get_frame(index):
+            return Image.new("RGB", (3, 2), "red" if index == 0 else "blue")
+
+        def close(self):
+            self.closed = True
+
+    clip = Clip()
+    notes = []
+    with patch("src.ui.video_tool._load_video_clip", return_value=clip) as load_clip:
+        frames, fps = _load_video_frames(
+            str(tmp_path / "selected.mkv"),
+            preferred_video_stream_index=7,
+            preferred_audio_stream_index=9,
+            load_note=notes,
+        )
+    try:
+        load_clip.assert_called_once_with(
+            str(tmp_path / "selected.mkv"),
+            preferred_video_stream_index=7,
+            preferred_audio_stream_index=9,
+        )
+        assert fps == 24.0
+        assert len(frames) == 2
+        assert notes == ["temporary remux used"]
+        assert clip.closed
+    finally:
+        for frame in frames:
+            frame.close()
 
 
 def make_palette_tiff(folder, compression):

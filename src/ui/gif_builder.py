@@ -44,11 +44,13 @@ from PyQt6.QtWidgets import (
     QCheckBox, QGroupBox, QGridLayout, QMessageBox,
     QProgressDialog, QSplitter, QWidget, QApplication,
     QFrame, QPlainTextEdit, QSpinBox, QAbstractSpinBox, QSizePolicy, QLayout, QBoxLayout,
-    QLineEdit, QTextEdit,
+    QLineEdit, QTextEdit, QComboBox, QDialogButtonBox,
 )
 from .video_tool import (
     _VIDEO_EXTS,
     _classify_video_import_failure,
+    _coerce_optional_stream_index,
+    _describe_stream_choice,
     _extract_visual_still_frame,
     _get_ffprobe_exe,
     _has_ffmpeg,
@@ -77,6 +79,91 @@ _THUMB_H = 100
 _ENTRY_ROLE = Qt.ItemDataRole.UserRole
 _HISTORY_LIMIT = 50
 _HISTORY_PIXEL_LIMIT = 32_000_000
+
+
+class _GifStreamPickerDialog(QDialog):
+    """Choose video/audio streams before a multi-stream source is expanded."""
+
+    def __init__(self, path: str, probe: dict[str, object], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Choose Streams — {Path(path).name}")
+        self.setMinimumWidth(420)
+        layout = QVBoxLayout(self)
+        summary = QLabel(
+            f"Choose which streams to use when importing {Path(path).name}. "
+            "Auto keeps ffprobe's preferred stream."
+        )
+        summary.setWordWrap(True)
+        layout.addWidget(summary)
+
+        self._video_combo = QComboBox()
+        self._video_combo.setAccessibleName("GIF Builder video stream")
+        self._video_combo.setToolTip("Choose the visual stream to expand into GIF frames.")
+        self._add_choices(
+            self._video_combo,
+            probe.get("video_stream_choices"),
+            probe.get("video_stream_index"),
+        )
+        video_label = QLabel("Video stream:")
+        video_label.setBuddy(self._video_combo)
+        layout.addWidget(video_label)
+        layout.addWidget(self._video_combo)
+
+        self._audio_combo = QComboBox()
+        self._audio_combo.setAccessibleName("GIF Builder audio stream")
+        self._audio_combo.setToolTip("Select the preferred source audio stream. GIF output remains silent.")
+        self._add_choices(
+            self._audio_combo,
+            probe.get("audio_stream_choices"),
+            probe.get("audio_stream_index"),
+        )
+        audio_label = QLabel("Audio stream (GIF output is silent):")
+        audio_label.setBuddy(self._audio_combo)
+        layout.addWidget(audio_label)
+        layout.addWidget(self._audio_combo)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Use Selected Streams")
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    @staticmethod
+    def _add_choices(combo: QComboBox, raw_choices, preferred_index) -> None:
+        choices = raw_choices if isinstance(raw_choices, list) else []
+        preferred = _coerce_optional_stream_index(preferred_index)
+        preferred_choice = next(
+            (
+                choice for choice in choices
+                if isinstance(choice, dict)
+                and _coerce_optional_stream_index(choice.get("index")) == preferred
+            ),
+            None,
+        )
+        preferred_label = _describe_stream_choice(preferred_choice)
+        auto_label = f"Auto — {preferred_label}" if preferred_label else "Auto (probe preference)"
+        combo.addItem(auto_label, userData=None)
+        for choice in choices:
+            if not isinstance(choice, dict):
+                continue
+            index = _coerce_optional_stream_index(choice.get("index"))
+            if index is None:
+                continue
+            description = _describe_stream_choice(choice)
+            label = f"Stream #{index}"
+            if description:
+                label += f" — {description}"
+            combo.addItem(label, userData=index)
+
+    @property
+    def selected_video_stream_index(self) -> Optional[int]:
+        return _coerce_optional_stream_index(self._video_combo.currentData())
+
+    @property
+    def selected_audio_stream_index(self) -> Optional[int]:
+        return _coerce_optional_stream_index(self._audio_combo.currentData())
 
 
 @dataclass(frozen=True)
@@ -165,12 +252,12 @@ def _gif_builder_capability_details() -> str:
             "• Image and animated-GIF imports are fully available.",
             "• Video imports expand decoded visual frames into GIF frames automatically; audio is ignored on import/export.",
             "• Odd-container probing/recovery is best-effort when ffmpeg can expose a playable stream or salvageable still frame.",
-            "• Automatic preferred-stream selection is used when ffprobe is available, but a manual multi-stream picker is not available yet.",
         ])
         if ffprobe_exe:
             lines.append(f"• ffprobe detail/probing ready: {ffprobe_exe}")
+            lines.append("• Multi-stream video imports offer manual video/audio stream selection or the automatic preference.")
         else:
-            lines.append("• ffprobe detail/probing limited: grouped failure diagnostics stay less specific.")
+            lines.append("• ffprobe detail/probing and manual stream selection are unavailable; grouped failure diagnostics stay less specific.")
     else:
         lines.extend([
             "",
@@ -317,7 +404,7 @@ def _gif_import_next_step_text(
     if recovered:
         steps.append("recovered sources already contributed frames, so you can keep arranging/exporting while reviewing failures")
     if skipped:
-        steps.append("unsupported files were skipped; Show details lists exactly which ones")
+        steps.append("files were skipped or their stream selection was cancelled; Show details lists which ones")
     if failures:
         steps.append("use Show details or Copy details for grouped import guidance")
     elif loaded_sources > 0:
@@ -950,11 +1037,51 @@ class GifBuilderDialog(QDialog):
                 else:
                     skipped.append(Path(path).name)
                     continue
+            preferred_video_stream_index = None
+            preferred_audio_stream_index = None
+            stream_note = ""
+            if treat_as_video:
+                if probe is None:
+                    probe = _probe_media_details(path)
+                if probe:
+                    try:
+                        video_stream_count = int(probe.get("video_stream_count") or 0)
+                        audio_stream_count = int(probe.get("audio_stream_count") or 0)
+                    except (TypeError, ValueError):
+                        video_stream_count = audio_stream_count = 0
+                    if video_stream_count > 1 or audio_stream_count > 1:
+                        picker = _GifStreamPickerDialog(path, probe, self)
+                        if picker.exec() != QDialog.DialogCode.Accepted:
+                            skipped.append(f"{Path(path).name} (stream selection cancelled)")
+                            continue
+                        preferred_video_stream_index = picker.selected_video_stream_index
+                        preferred_audio_stream_index = picker.selected_audio_stream_index
+                        selected_streams = []
+                        if preferred_video_stream_index is not None:
+                            selected_streams.append(f"video stream #{preferred_video_stream_index}")
+                        if preferred_audio_stream_index is not None:
+                            selected_streams.append(f"audio stream #{preferred_audio_stream_index}")
+                        if selected_streams:
+                            stream_note = "Selected " + " and ".join(selected_streams) + "."
             try:
                 if treat_as_video:
-                    pil_frames, fps = _load_video_frames(path)
+                    load_notes = []
+                    if (
+                        preferred_video_stream_index is not None
+                        or preferred_audio_stream_index is not None
+                    ):
+                        pil_frames, fps = _load_video_frames(
+                            path,
+                            preferred_video_stream_index=preferred_video_stream_index,
+                            preferred_audio_stream_index=preferred_audio_stream_index,
+                            load_note=load_notes,
+                        )
+                    else:
+                        pil_frames, fps = _load_video_frames(path)
                     frame_delay_ms = max(10, int(round(1000.0 / max(1.0, fps))))
-                    recovery_note = ""
+                    recovery_note = "; ".join(note for note in load_notes if note)
+                    if recovery_note:
+                        recovered_sources.append((Path(path).name, recovery_note))
                 else:
                     pil_frames = _load_pillow_rgba(path)
                     frame_delay_ms = None
@@ -969,7 +1096,11 @@ class GifBuilderDialog(QDialog):
                         frame_delay_ms = None
                         recovered_sources.append((Path(path).name, recovery_note))
                     else:
-                        hint = _video_load_failure_hint(path)
+                        hint = _video_load_failure_hint(
+                            path,
+                            preferred_video_stream_index=preferred_video_stream_index,
+                            preferred_audio_stream_index=preferred_audio_stream_index,
+                        )
                         detail = f"{detail}\n{hint}" if detail else hint
                         failures.append((Path(path).name, detail))
                         continue
@@ -1006,6 +1137,8 @@ class GifBuilderDialog(QDialog):
                 source_note += f"  •  {frame_width}×{frame_height}"
             if frame_delay_ms is not None:
                 source_note += f" @ ~{frame_delay_ms} ms"
+            if stream_note:
+                source_note += f"  •  {stream_note}"
             if recovery_note:
                 source_note += f"  •  {recovery_note}"
             loaded_details.append(source_note)
@@ -1610,7 +1743,7 @@ class GifBuilderDialog(QDialog):
                 "Import failures:\n  " + "\n  ".join(f"{name}: {detail}" for name, detail in failures)
             )
         if skipped:
-            detail_lines.append("Skipped unsupported files:\n  " + "\n  ".join(skipped))
+            detail_lines.append("Skipped or cancelled files:\n  " + "\n  ".join(skipped))
         summary = "Import summary: " + "  •  ".join(parts)
         self._set_import_status(summary, detail="\n\n".join(detail_lines), tone=tone)
         self._set_next_step_text(

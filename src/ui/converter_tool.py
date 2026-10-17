@@ -142,6 +142,8 @@ class ConverterTab(QWidget):
         # Track source files so we can record history
         self._last_run_files: list[str] = []
         self._last_run_format: str = ""
+        self._last_run_source_aliases: dict[str, str] = {}
+        self._last_run_options: dict[str, object] = {}
         self._last_failed_files: list[str] = []
         # Cached aspect ratio (w, h) of the currently selected file
         # to avoid re-opening the image on every width spinbox tick.
@@ -1706,6 +1708,18 @@ class ConverterTab(QWidget):
         # Remember for history
         self._last_run_files = expanded
         self._last_run_format = actual_target_format
+        self._last_run_source_aliases = dict(logical_sources)
+        self._last_run_options = {
+            "requested_format": target_format,
+            "actual_batch_format": actual_target_format,
+            "quality": quality,
+            "resize": list(resize) if resize else None,
+            "preserve_metadata": self._keep_metadata_check.isChecked(),
+            "dds_variant": self._dds_variant_combo.currentData() or "auto",
+            "suffix": suffix,
+            "output_dir": out_dir or "",
+            "recursive": self._recursive_check.isChecked(),
+        }
         # Remember where output files will go for the completion message.
         self._last_run_out_dir = out_dir or None
 
@@ -2097,6 +2111,7 @@ class ConverterTab(QWidget):
             self._batch_failure_details.append({
                 "source": src,
                 "reason": reason,
+                "detail": msg.strip() if msg else reason,
             })
             self._log_msg(f"✘ {name}  →  {reason}")
 
@@ -2165,17 +2180,63 @@ class ConverterTab(QWidget):
             self._refresh_preview(item.text())
 
         # Record in history
+        failure_by_source = {
+            str(item.get("source") or ""): item
+            for item in self._batch_failure_details
+            if isinstance(item, dict)
+        }
+        results = []
+        for source in self._last_run_files:
+            logical_source = self._last_run_source_aliases.get(source, source)
+            output = self._batch_outputs.get(source, "")
+            failure = failure_by_source.get(source, {})
+            if output:
+                result_status = "success"
+            elif failure:
+                result_status = "failed"
+            else:
+                result_status = "not processed"
+            results.append({
+                "source": logical_source,
+                "working_source": source if logical_source != source else "",
+                "output": output,
+                "output_format": Path(output).suffix.lower().lstrip(".") if output else "",
+                "status": result_status,
+                "reason": str(failure.get("reason") or ""),
+                "detail": str(failure.get("detail") or failure.get("reason") or ""),
+            })
         entry = {
             "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
             "format": self._last_run_format,
+            "options": dict(self._last_run_options),
             "file_count": len(self._last_run_files),
             "success": success,
             "errors": errors,
             "stopped": self._stop_requested or success + errors < self._batch_total,
             "not_processed": max(0, self._batch_total - success - errors),
-            "files": [Path(f).name for f in self._last_run_files[:10]],  # trim for storage
+            "files": [
+                Path(self._last_run_source_aliases.get(f, f)).name
+                for f in self._last_run_files[:10]
+            ],
+            "results": results,
+            "failure_details": [
+                {
+                    **failure,
+                    "source_label": self._last_run_source_aliases.get(
+                        str(failure.get("source") or ""),
+                        str(failure.get("source") or ""),
+                    ),
+                }
+                for failure in self._batch_failure_details
+                if isinstance(failure, dict)
+            ],
             # Store first file path for thumbnail display (item 9)
-            "first_file": str(self._last_run_files[0]) if self._last_run_files else "",
+            "first_file": (
+                self._last_run_source_aliases.get(
+                    self._last_run_files[0], self._last_run_files[0]
+                )
+                if self._last_run_files else ""
+            ),
         }
         if self._settings.get("history_track_converter", True):
             self._settings.add_converter_history(entry)
@@ -2235,6 +2296,9 @@ class ConverterTab(QWidget):
             lines.extend(["", "Per-file failures:"])
             for entry in payload["failures"]:
                 lines.append(f"- {Path(entry['source']).name}: {entry['reason']}")
+                detail = str(entry.get("detail") or "").strip()
+                if detail and detail != entry["reason"]:
+                    lines.extend(f"    {line}" for line in detail.splitlines())
         return "\n".join(lines)
 
     def _export_failure_report(self) -> None:
