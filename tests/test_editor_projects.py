@@ -2455,19 +2455,22 @@ def test_repeated_truncated_gif_project_load_releases_partial_frames(dialogs, tm
     history = list(widget._undo_stack), list(widget._redo_stack)
     saved, autosaved = project._saved, project._autosaved
     before = path.read_bytes()
-    copied, prepared = [], []
-    copy = Image.Image.copy
+    converted_frames, prepared = [], []
+    convert = Image.Image.convert
     loader = video_tool._load_image_as_clip
 
-    def tracked_copy(image):
-        result = copy(image)
-        result.close = Mock(wraps=result.close)
-        copied.append(result)
+    def tracked_convert(image, *args, **kwargs):
+        if str(getattr(image, "filename", "")) == str(broken) and image.tell() == 1:
+            raise OSError("image file is truncated")
+        result = convert(image, *args, **kwargs)
+        if str(getattr(image, "filename", "")) == str(broken):
+            result.close = Mock(wraps=result.close)
+            converted_frames.append(result)
         return result
 
     def tracked_loader(source_path):
         if source_path == str(broken):
-            with patch.object(Image.Image, "copy", tracked_copy):
+            with patch.object(Image.Image, "convert", tracked_convert):
                 return loader(source_path)
         result = loader(source_path)
         result.close = Mock(wraps=result.close)
@@ -2478,11 +2481,11 @@ def test_repeated_truncated_gif_project_load_releases_partial_frames(dialogs, tm
             patch("src.ui.editor_project.QMessageBox.critical") as error, \
             patch("src.ui.editor_project.QMessageBox.question") as replacement:
         for iteration in range(20):
-            start = len(copied)
+            start = len(converted_frames)
             assert project.load(path, recovery=bool(iteration % 2))
             wait(widget)
-            assert len(copied) - start == 6
-            for image in copied[start:]:
+            assert len(converted_frames) - start == 1
+            for image in converted_frames[start:]:
                 image.close.assert_called_once()
                 with pytest.raises(ValueError, match="closed"):
                     image.getpixel((0, 0))
@@ -2497,7 +2500,7 @@ def test_repeated_truncated_gif_project_load_releases_partial_frames(dialogs, tm
             assert not widget._preview_timer.isActive()
         assert error.call_count == 20
         replacement.assert_not_called()
-    assert len(prepared) == 20 and len(copied) == 120
+    assert len(prepared) == 20 and len(converted_frames) == 20
     with entries[1].get_frame(0) as frame:
         assert frame.getpixel((0, 0)) == (255, 0, 0, 255)
     assert not list(tmp_path.glob(".alpha_fixer_save_*"))
@@ -3138,8 +3141,16 @@ def test_media_hash_runs_only_in_project_workers_and_once_per_source(dialogs, tm
 def test_cancelled_parent_shutdown_preserves_closed_editor_reopen(dialogs, tmp_path):
     from src.ui.editor_project import approve_parent_projects
     gif, video = dialogs("gif"), dialogs("video")
+    still = tmp_path / "closed-editor.png"
+    with Image.new("RGBA", (10, 8), "green") as image:
+        image.save(still)
+    gif._add_paths([str(still)])
     gif.show()
-    assert gif.close()
+    with patch("src.ui.editor_project.QMessageBox.question",
+               return_value=QMessageBox.StandardButton.Discard):
+        assert gif.close()
+    assert gif._project._closing_approved
+    assert not gif._project.timer.isActive()
     identity = gif._project.session_id
     video._brightness_slider.setValue(151)
     with patch("src.ui.editor_project.QMessageBox.question", return_value=QMessageBox.StandardButton.Cancel):
