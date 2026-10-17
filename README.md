@@ -1075,10 +1075,15 @@ Retain platform-specific evidence for these remaining gates:
 - **Release obligations:** review actual bundled licenses, corresponding-source
   requirements and project licensing; retain exact reproducible build versions;
   qualify installers, upgrades/uninstall, signing and macOS notarization.
-- **End-to-end acceptance:** first launch through every tool's successful export,
-  including Painter editing, clipboard, undo/redo and saving; settings/backup
-  restoration and relaunch, with native visual checks and retained results.
-  Diagnose all failures and unexplained skips before claiming readiness.
+- **Automated UI acceptance:** offscreen MainWindow workflows cover Settings
+  backup/import/reset and relaunch; Converter mixed success/failure, fallback
+  output, stop/retry, reports and History exports; and GIF/Video project save,
+  reopen, recovery and coordinated shutdown. GIF stream choice and decode
+  recovery/failure feedback are also exercised through the builder UI.
+- **End-to-end/native acceptance remains open:** first launch through every
+  tool's successful export, including Painter editing, clipboard, undo/redo and
+  saving; native visual checks and retained results. Diagnose all failures and
+  unexplained skips before claiming readiness.
 - **Native visual consistency:** final layout and usability checks across every
   theme/dialog, including clipping, focus, scaling and input-device behavior.
 - **Optional feature expansion:** DDS multi-surface/DX10 coverage, disc-image

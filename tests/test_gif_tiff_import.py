@@ -137,6 +137,58 @@ def test_gif_multistream_import_applies_manual_selection_or_skips_cleanly(
         assert "stream selection cancelled" in builder._import_detail_box.toPlainText()
 
 
+def test_gif_import_uses_actual_stream_picker_and_reports_selected_stream_failure(
+        builder, tmp_path, monkeypatch):
+    selected = tmp_path / "selected.mkv"
+    failed = tmp_path / "failed.mkv"
+    selected.touch()
+    failed.touch()
+    probe = _multi_stream_probe()
+    selections = []
+
+    def choose_streams(picker):
+        picker._video_combo.setCurrentIndex(2)
+        picker._audio_combo.setCurrentIndex(2)
+        selections.append((
+            picker.selected_video_stream_index,
+            picker.selected_audio_stream_index,
+        ))
+        picker.accept()
+        return QDialog.DialogCode.Accepted
+
+    def decode(path, **kwargs):
+        if path == str(failed):
+            raise ValueError("selected stream did not decode")
+        return [Image.new("RGBA", (5, 4), "red")], 25.0
+
+    monkeypatch.setattr(_GifStreamPickerDialog, "exec", choose_streams)
+    with patch(
+        "src.ui.gif_builder._probe_media_details", return_value=probe
+    ), patch(
+        "src.ui.gif_builder._load_video_frames", side_effect=decode
+    ) as load_video, patch(
+        "src.ui.gif_builder._video_load_failure_hint",
+        return_value="Selected video stream #3 could not be decoded.",
+    ), patch(
+        "src.ui.gif_builder._visual_still_fallback_note",
+        return_value="No still frame was recoverable.",
+    ), patch(
+        "src.ui.gif_builder._extract_visual_still_frame", return_value=None
+    ):
+        builder.add_media_paths([str(selected), str(failed)])
+
+    assert selections == [(3, 4), (3, 4)]
+    assert [call.kwargs["preferred_video_stream_index"] for call in load_video.call_args_list] == [3, 3]
+    assert [call.kwargs["preferred_audio_stream_index"] for call in load_video.call_args_list] == [4, 4]
+    assert len(builder._frames) == 1
+    assert "1 failed" in builder._import_status_lbl.text()
+    details = builder._import_detail_box.toPlainText()
+    assert "selected.mkv" in details
+    assert "video stream #3" in details
+    assert "failed.mkv: selected stream did not decode" in details
+    assert "Selected video stream #3 could not be decoded." in details
+
+
 def test_gif_selected_stream_still_fallback_keeps_manual_selection(builder, tmp_path):
     source = tmp_path / "multi.mkv"
     source.touch()

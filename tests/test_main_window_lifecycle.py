@@ -194,6 +194,98 @@ def test_main_window_project_save_reopen_and_recovery_ui_workflow(app, tmp_path,
             app.setStyleSheet(original_stylesheet)
 
 
+def test_main_window_shutdown_preserves_dirty_builder_sessions_until_approved(app, tmp_path):
+    from src.ui import editor_project
+
+    original_font, original_stylesheet = app.font(), app.styleSheet()
+    source_path = tmp_path / "shutdown-source.png"
+    with Image.new("RGBA", (12, 9), "purple") as source:
+        source.save(source_path)
+
+    with patch(
+        "src.core.settings_manager._settings_ini_path",
+        return_value=str(tmp_path / "settings.ini"),
+    ), patch.object(
+        editor_project, "user_data_directory", return_value=tmp_path / "user-data"
+    ):
+        settings = SettingsManager()
+        window = MainWindow(settings)
+    try:
+        window.show()
+        window._open_or_focus_gif_builder()
+        gif = window._gif_builder_dlg
+        with patch(
+            "src.ui.gif_builder.QFileDialog.getOpenFileNames",
+            return_value=([str(source_path)], ""),
+        ):
+            gif._btn_add.click()
+        window._open_or_focus_video_builder()
+        video = window._video_tool_dlg
+        with patch(
+            "src.ui.video_tool.QFileDialog.getOpenFileNames",
+            return_value=([str(source_path)], ""),
+        ):
+            video._btn_add_img.click()
+        assert gif._project.dirty and video._project.dirty
+        assert gif._project.autosave()
+        wait_for_project(gif)
+        assert video._project.autosave()
+        wait_for_project(video)
+        gif_lock, video_lock = gif._project._lock, video._project._lock
+        assert gif_lock is not None and video_lock is not None
+
+        with patch(
+            "src.ui.editor_project.QMessageBox.question",
+            side_effect=[
+                QMessageBox.StandardButton.Discard,
+                QMessageBox.StandardButton.Cancel,
+            ],
+        ) as question:
+            assert not window.close()
+        assert question.call_count == 2
+        assert window.isVisible()
+        assert gif._project.dirty and video._project.dirty
+        assert not gif._project._closing_approved
+        assert not video._project._closing_approved
+        assert gif_lock.isLocked() and video_lock.isLocked()
+
+        gif_project_path = tmp_path / "shutdown.gifproject.json"
+        with patch(
+            "src.ui.editor_project.QMessageBox.question",
+            side_effect=[
+                QMessageBox.StandardButton.Save,
+                QMessageBox.StandardButton.Discard,
+            ],
+        ) as question, patch(
+            "src.ui.editor_project.QFileDialog.getSaveFileName",
+            return_value=(str(gif_project_path), ""),
+        ):
+            assert not window.close()
+            wait_for_project(gif)
+        app.processEvents()
+
+        assert question.call_count == 2
+        assert gif_project_path.is_file()
+        assert not window.isVisible()
+        assert window._shutdown_complete
+        assert not gif_lock.isLocked() and not video_lock.isLocked()
+        assert len(json.loads(gif_project_path.read_text(encoding="utf-8"))["entries"]) == 1
+        assert video._project.recovery_path.is_file()
+    finally:
+        if window.isVisible():
+            with patch(
+                "src.ui.editor_project.QMessageBox.question",
+                return_value=QMessageBox.StandardButton.Discard,
+            ):
+                window.close()
+        sip.delete(window)
+        settings.sync()
+        sip.delete(settings._qs)
+        app.processEvents()
+        app.setFont(original_font)
+        app.setStyleSheet(original_stylesheet)
+
+
 def test_main_window_history_refreshes_and_opens_converter_output(app, tmp_path):
     original_font, original_stylesheet = app.font(), app.styleSheet()
 
@@ -297,6 +389,219 @@ def test_main_window_history_refreshes_and_opens_converter_output(app, tmp_path)
         worker = converter._worker
         if worker is not None:
             assert worker.wait(15_000)
+        window.close()
+        sip.delete(window)
+        settings.sync()
+        sip.delete(settings._qs)
+        app.processEvents()
+        app.setFont(original_font)
+        app.setStyleSheet(original_stylesheet)
+
+
+def test_main_window_converter_fallback_batch_failure_retry_and_history_export(
+        app, tmp_path):
+    original_font, original_stylesheet = app.font(), app.styleSheet()
+    valid_path = tmp_path / "valid.png"
+    broken_path = tmp_path / "broken.png"
+    with Image.new("RGBA", (9, 7), (30, 80, 140, 180)) as source:
+        source.save(valid_path)
+    broken_path.write_bytes(b"not a PNG")
+    output_dir = tmp_path / "converted"
+    output_path = output_dir / "valid.png"
+
+    with patch(
+        "src.core.settings_manager._settings_ini_path",
+        return_value=str(tmp_path / "settings.ini"),
+    ):
+        settings = SettingsManager()
+        window = MainWindow(settings)
+    converter = window._converter_tab
+
+    def wait_for_history(count):
+        deadline = time.monotonic() + 15
+        while len(settings.get_converter_history()) < count and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(0.01)
+        app.processEvents()
+        assert len(settings.get_converter_history()) >= count
+
+    try:
+        window.show()
+        with patch(
+            "src.ui.converter_tool.QFileDialog.getOpenFileNames",
+            return_value=([str(valid_path), str(broken_path)], ""),
+        ):
+            converter._btn_add_files.click()
+        converter._out_dir_edit.setText(str(output_dir))
+        jpeg_index = next(
+            index for index in range(converter._fmt_combo.count())
+            if converter._fmt_combo.itemData(index)[0] == "JPEG"
+        )
+        converter._fmt_combo.setCurrentIndex(jpeg_index)
+        converter._quality_spin.setValue(73)
+
+        unavailable = lambda fmt: "Simulated runtime capability gap" if fmt == "JPEG" else None
+        with patch(
+            "src.ui.converter_tool.output_format_unavailable_reason",
+            side_effect=unavailable,
+        ), patch("src.ui.converter_tool.QMessageBox.information"), patch(
+            "src.ui.converter_tool.QMessageBox.question",
+            return_value=QMessageBox.StandardButton.No,
+        ):
+            converter._btn_run.click()
+            wait_for_history(1)
+
+        first = settings.get_converter_history()[0]
+        assert first["format"] == "PNG"
+        assert first["options"]["requested_format"] == "JPEG"
+        assert first["options"]["actual_batch_format"] == "PNG"
+        assert first["options"]["quality"] == 73
+        assert first["options"]["output_dir"] == str(output_dir)
+        assert first["success"] == 1 and first["errors"] == 1
+        assert first["stopped"] is False and first["not_processed"] == 0
+        result_by_source = {result["source"]: result for result in first["results"]}
+        assert result_by_source[str(valid_path)]["status"] == "success"
+        assert result_by_source[str(valid_path)]["output"] == str(output_path)
+        assert result_by_source[str(valid_path)]["output_format"] == "png"
+        assert result_by_source[str(broken_path)]["status"] == "failed"
+        assert result_by_source[str(broken_path)]["reason"]
+        assert converter._btn_retry_failed.isEnabled()
+        assert converter._btn_export_failures.isEnabled()
+        assert output_path.is_file()
+
+        failure_report = tmp_path / "converter-failures.json"
+        with patch(
+            "src.ui.converter_tool.QFileDialog.getSaveFileName",
+            return_value=(str(failure_report), "JSON Report (*.json)"),
+        ):
+            converter._btn_export_failures.click()
+        failure_payload = json.loads(failure_report.read_text(encoding="utf-8"))
+        assert failure_payload["error_count"] == 1
+        assert failure_payload["failures"][0]["source"] == str(broken_path)
+        assert failure_payload["failure_groups"][0]["count"] == 1
+
+        with Image.new("RGB", (6, 5), "orange") as repaired:
+            repaired.save(broken_path)
+        with patch(
+            "src.ui.converter_tool.output_format_unavailable_reason",
+            side_effect=unavailable,
+        ), patch("src.ui.converter_tool.QMessageBox.information"), patch(
+            "src.ui.converter_tool.QMessageBox.question",
+            return_value=QMessageBox.StandardButton.No,
+        ):
+            converter._btn_retry_failed.click()
+            wait_for_history(2)
+        retry = settings.get_converter_history()[0]
+        assert retry["success"] == 1 and retry["errors"] == 0
+        assert retry["results"][0]["source"] == str(broken_path)
+        assert retry["results"][0]["status"] == "success"
+        assert Path(retry["results"][0]["output"]).is_file()
+
+        history = window._history_tab
+        window._tabs.setCurrentIndex(window._tabs.indexOf(history))
+        history.refresh()
+        export_path = tmp_path / "converter-history.json"
+        with patch(
+            "src.ui.history_tab.QFileDialog.getSaveFileName",
+            return_value=(str(export_path), "JSON Files (*.json)"),
+        ):
+            history._btn_export.click()
+        exported = json.loads(export_path.read_text(encoding="utf-8"))
+        exported_by_sources = {
+            frozenset(result["source"] for result in item["Per-file outcomes"]): item
+            for item in exported
+        }
+        exported_initial = exported_by_sources[frozenset((str(valid_path), str(broken_path)))]
+        assert exported_initial["Format"] == "PNG"
+        assert json.loads(exported_initial["Run options"]) == first["options"]
+        assert exported_initial["Per-file outcomes"] == first["results"]
+        assert str(broken_path) in exported_initial["Failure details"]
+    finally:
+        converter._stop_preview_loader()
+        worker = converter._worker
+        if worker is not None and worker.isRunning():
+            worker.stop()
+            assert worker.wait(15_000)
+        window.close()
+        sip.delete(window)
+        settings.sync()
+        sip.delete(settings._qs)
+        app.processEvents()
+        app.setFont(original_font)
+        app.setStyleSheet(original_stylesheet)
+
+
+def test_main_window_converter_stop_records_unprocessed_inputs(app, tmp_path):
+    from threading import Event
+    from src.core.file_converter import convert_file as real_convert_file
+
+    original_font, original_stylesheet = app.font(), app.styleSheet()
+    source_paths = []
+    for index in range(4):
+        path = tmp_path / f"stop-{index}.png"
+        with Image.new("RGB", (8, 6), (index * 30, 50, 120)) as source:
+            source.save(path)
+        source_paths.append(path)
+    output_dir = tmp_path / "stopped-output"
+
+    with patch(
+        "src.core.settings_manager._settings_ini_path",
+        return_value=str(tmp_path / "settings.ini"),
+    ):
+        settings = SettingsManager()
+        window = MainWindow(settings)
+    converter = window._converter_tab
+    entered, release = Event(), Event()
+
+    def paused_convert(*args, **kwargs):
+        entered.set()
+        if not release.wait(10):
+            raise TimeoutError("test did not release the in-flight conversion")
+        return real_convert_file(*args, **kwargs)
+
+    try:
+        window.show()
+        with patch(
+            "src.ui.converter_tool.QFileDialog.getOpenFileNames",
+            return_value=([str(path) for path in source_paths], ""),
+        ):
+            converter._btn_add_files.click()
+        converter._out_dir_edit.setText(str(output_dir))
+        with patch(
+            "src.core.worker.ConverterWorker._recommend_worker_count",
+            return_value=1,
+        ), patch("src.core.worker.convert_file", side_effect=paused_convert):
+            converter._btn_run.click()
+            assert entered.wait(10)
+            converter._btn_stop.click()
+            release.set()
+            deadline = time.monotonic() + 15
+            while not settings.get_converter_history() and time.monotonic() < deadline:
+                app.processEvents()
+                time.sleep(0.01)
+            app.processEvents()
+
+        records = settings.get_converter_history()
+        assert len(records) == 1
+        stopped = records[0]
+        assert stopped["stopped"] is True
+        assert stopped["success"] == 1
+        assert stopped["errors"] == 0
+        assert stopped["not_processed"] == len(source_paths) - 1
+        assert len(stopped["results"]) == len(source_paths)
+        assert stopped["results"][0]["status"] == "success"
+        assert Path(stopped["results"][0]["output"]).is_file()
+        assert all(
+            result["status"] == "not processed"
+            for result in stopped["results"][1:]
+        )
+    finally:
+        release.set()
+        worker = converter._worker
+        if worker is not None and worker.isRunning():
+            worker.stop()
+            assert worker.wait(15_000)
+        converter._stop_preview_loader()
         window.close()
         sip.delete(window)
         settings.sync()
