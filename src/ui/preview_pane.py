@@ -1218,13 +1218,14 @@ class _ConverterPreviewLoader(QThread):
     failed = pyqtSignal(str)
 
     def __init__(self, path: str, target_fmt: str, quality: int, max_size: int = 512,
-                 *, resize: tuple[int, int] | None = None):
+                 *, resize: tuple[int, int] | None = None, keep_metadata: bool = False):
         super().__init__()
         self._path = path
         self._target_fmt = target_fmt.upper()
         self._quality = quality
         self._max_size = max_size
         self._resize = resize
+        self._keep_metadata = keep_metadata
         self._abort = False
 
     def stop(self) -> None:
@@ -1236,12 +1237,35 @@ class _ConverterPreviewLoader(QThread):
         try:
             import io
             from PIL import Image
-            from src.core.file_converter import _open_image, tiff_first_page_note
+            from src.core.file_converter import (
+                SUPPORTED_OUTPUT_FORMATS, _image_metadata, _open_image, tiff_first_page_note,
+            )
+
+            def metadata_labels(image):
+                labels = []
+                try:
+                    exif = image.getexif()
+                    storage_tags = {
+                        254, 255, 256, 257, 258, 259, 262, 266, 273, 277, 278, 279,
+                        284, 288, 289, 292, 293, 297, 301, 317, 320, 322, 323, 324,
+                        325, 330, 338, 339, 347, 34675, 40962, 40963,
+                    }
+                    if any(tag not in storage_tags for tag in exif):
+                        labels.append("EXIF")
+                except Exception:
+                    if "exif" in image.info:
+                        labels.append("EXIF")
+                if "icc_profile" in image.info:
+                    labels.append("ICC")
+                if "dpi" in image.info:
+                    labels.append("DPI")
+                return ", ".join(labels)
 
             img = _open_image(self._path)
             orig_mode = img.mode
             orig_w, orig_h = img.size
             src_file_size = os.path.getsize(self._path)
+            source_metadata = metadata_labels(img)
             page_note = tiff_first_page_note(img.info.get("tiff_page_count", 1))
             if page_note and self._target_fmt == "TIFF":
                 count = img.info.get("tiff_page_count")
@@ -1257,6 +1281,12 @@ class _ConverterPreviewLoader(QThread):
                 img.close()
                 img = None
                 return
+            metadata_kwargs = {}
+            if self._keep_metadata:
+                output_extension = SUPPORTED_OUTPUT_FORMATS.get(self._target_fmt, "")
+                metadata_kwargs = _image_metadata(
+                    img, img, output_extension, True, output_size=self._resize,
+                )
 
             # --- Source side ---
             src_thumb = img.copy()
@@ -1270,6 +1300,8 @@ class _ConverterPreviewLoader(QThread):
                 f"{orig_w} × {orig_h}  ·  {orig_mode}\n"
                 f"{_fmt_size(src_file_size)}"
             )
+            if source_metadata:
+                src_meta += f"\nMetadata: {source_metadata}"
             if page_note:
                 src_meta += "\n" + page_note
 
@@ -1305,6 +1337,11 @@ class _ConverterPreviewLoader(QThread):
             save_kwargs: dict = {}
             if fmt in _QUALITY_FORMATS:
                 save_kwargs["quality"] = self._quality
+            if not self._keep_metadata:
+                for key in ("exif", "icc_profile", "dpi", "xmp", "Raw profile type exif"):
+                    save_img.info.pop(key, None)
+            else:
+                save_kwargs.update(metadata_kwargs)
 
             # Allocate the buffer outside the try so it is always in scope for
             # the except block and can be closed on both success and error paths.
@@ -1352,6 +1389,7 @@ class _ConverterPreviewLoader(QThread):
             img = None
             out_mode = out_img.mode
             out_w, out_h = out_img.size
+            output_metadata = metadata_labels(out_img) if self._keep_metadata else ""
             out_thumb = None
             try:
                 out_thumb = out_img.copy()
@@ -1368,6 +1406,10 @@ class _ConverterPreviewLoader(QThread):
                 f"Preview as {fmt}{quality_note}\n"
                 f"~{_fmt_size(converted_size)}"
             )
+            if output_metadata:
+                out_meta += f"\nMetadata: {output_metadata}"
+            elif source_metadata:
+                out_meta += "\nMetadata: not preserved"
             if page_note:
                 out_meta += "\n" + page_note
             if self._abort:

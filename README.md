@@ -890,9 +890,11 @@ interoperability tags, TIFF metadata/storage-tag separation, AVIF ICC copying
 and disabled-metadata stripping. Applied TIFF decoder orientation is normalized
 without transposing unapplied JPEG pixels again. Generated roundtrips cover five
 output formats; legacy TIFF behavior is simulated, not tested in a Pillow 10
-runtime. LZW-to-TIFF output now uses detached pages with rebuilt storage tags;
-metadata-aware TIFF preview parity remains follow-up work, alongside real-corpus
-and packaged-codec coverage.
+runtime. LZW-to-TIFF output now uses detached pages with rebuilt storage tags.
+Converter previews now apply the selected metadata-preservation policy and report
+supported EXIF/ICC/DPI present on the source and simulated output. For multipage
+TIFF, the preview still shows page 1 only while TIFF export preserves all pages
+and their supported metadata. Real-corpus and packaged-codec coverage remain open.
 
 Bounded Linux X11 qualification used Qt's `xcb` platform with Xvfb/Openbox at
 verified device-pixel ratios 1, 1.5 and 2. Sixteen existing Alpha, Converter, GIF

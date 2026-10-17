@@ -793,6 +793,7 @@ class ConverterTab(QWidget):
         self._keep_metadata_check.toggled.connect(
             lambda v: self._settings.set("converter_keep_metadata", v)
         )
+        self._keep_metadata_check.toggled.connect(lambda _value: self._preview_debounce.start())
         self._advanced_toggle.toggled.connect(self._set_advanced_expanded)
         for signal in (self._quality_spin.valueChanged,
                        self._dds_variant_combo.currentIndexChanged,
@@ -1495,7 +1496,10 @@ class ConverterTab(QWidget):
             (self._width_spin.value(), self._height_spin.value())
             if self._resize_check.isChecked() else None
         )
-        self._preview_loader = _ConverterPreviewLoader(path, target_fmt, quality, resize=resize)
+        self._preview_loader = _ConverterPreviewLoader(
+            path, target_fmt, quality, resize=resize,
+            keep_metadata=self._keep_metadata_check.isChecked(),
+        )
         self._preview_loader.ready.connect(
             lambda src_qi, out_qi, src_meta, out_meta, rid=request_id, expected_path=path:
             self._on_preview_ready_if_current(rid, expected_path, src_qi, out_qi, src_meta, out_meta)

@@ -2623,6 +2623,61 @@ class TestMultipageTiffBoundary(unittest.TestCase):
             self.assertEqual(len(thumbnails), 1)
             self.assertIn("page 1 of 3 only", thumbnails[0][1])
 
+    def test_metadata_aware_tiff_preview_matches_export_policy(self):
+        from src.ui.preview_pane import _ConverterPreviewLoader, _pil_to_qimage
+
+        with tempfile.TemporaryDirectory(dir=".") as directory:
+            source, profile = self._make_source(directory)
+            for fmt in ("TIFF", "PNG"):
+                for keep_metadata in (False, True):
+                    with self.subTest(fmt=fmt, keep_metadata=keep_metadata):
+                        results, errors = [], []
+                        loader = _ConverterPreviewLoader(
+                            str(source), fmt, 90, resize=(12, 20),
+                            keep_metadata=keep_metadata,
+                        )
+                        loader.ready.connect(lambda *args: results.append(args))
+                        loader.failed.connect(errors.append)
+                        loader.run()
+                        self.assertFalse(errors)
+                        self.assertEqual(len(results), 1)
+                        _, out_qi, source_meta, output_meta = results[0]
+                        self.assertIn("Metadata: EXIF, ICC, DPI", source_meta)
+                        self.assertIn(
+                            "Metadata: EXIF, ICC, DPI" if keep_metadata
+                            else "Metadata: not preserved",
+                            output_meta,
+                        )
+                        self.assertIn("page 1 of 3 only", output_meta)
+
+                        output = Path(directory) / f"preview-{fmt}-{keep_metadata}.{fmt.lower()}"
+                        with (self.assertWarnsRegex(UserWarning, "page 1 of 3 only")
+                              if fmt != "TIFF" else nullcontext()):
+                            convert_file(
+                                str(source), str(output), fmt, resize=(12, 20),
+                                keep_metadata=keep_metadata,
+                            )
+                        with Image.open(output) as saved:
+                            self.assertEqual(getattr(saved, "n_frames", 1), 3 if fmt == "TIFF" else 1)
+                            self.assertEqual(out_qi, _pil_to_qimage(saved))
+                            self.assertEqual(
+                                saved.getexif().get(305),
+                                "page-1-metadata" if keep_metadata else None,
+                            )
+                            self.assertEqual(
+                                saved.info.get("icc_profile"),
+                                profile if keep_metadata else None,
+                            )
+                            saved_dpi = (
+                                tuple(map(float, saved.info["dpi"])) if "dpi" in saved.info else None
+                            )
+                            if keep_metadata:
+                                self.assertTrue(all(abs(value - 100.0) < 0.01 for value in saved_dpi))
+                            else:
+                                self.assertNotEqual(saved_dpi, (100.0, 100.0))
+                            if keep_metadata:
+                                self.assertEqual((saved.getexif()[256], saved.getexif()[257]), (12, 20))
+
     def test_worker_tiff_success_preserves_all_pages_without_page_loss_note(self):
         with tempfile.TemporaryDirectory(dir=".") as directory:
             source, _ = self._make_source(directory)

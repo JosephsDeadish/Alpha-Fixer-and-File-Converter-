@@ -797,7 +797,8 @@ def _ensure_rgba(img: Image.Image) -> Image.Image:
 
 
 def _image_metadata(src_img: Image.Image, img: Image.Image, fmt_ext: str,
-                    keep_metadata: bool) -> dict:
+                    keep_metadata: bool,
+                    output_size: Optional[tuple[int, int]] = None) -> dict:
     if not keep_metadata:
         return {}
     kw: dict = {}
@@ -814,19 +815,20 @@ def _image_metadata(src_img: Image.Image, img: Image.Image, fmt_ext: str,
         if source_exif:
             exif = Image.Exif()
             exif.load(source_exif.tobytes())
+            output_width, output_height = output_size or img.size
             # Rebuild storage/layout tags for the output raster.
             for tag in (254, 255, 258, 259, 262, 266, 273, 277, 278,
                         279, 284, 288, 289, 292, 293, 297, 301, 317, 320,
                         322, 323, 324, 325, 330, 338, 339, 347, 34675):
                 exif.pop(tag, None)
-            for tag, value in ((256, img.width), (257, img.height),
-                               (40962, img.width), (40963, img.height)):
+            for tag, value in ((256, output_width), (257, output_height),
+                               (40962, output_width), (40963, output_height)):
                 if tag in exif:
                     exif[tag] = value
             if 34665 in exif:
                 # Keep offsets until nested interoperability IFDs are cached.
                 details = exif.get_ifd(34665)
-                for tag, value in ((40962, img.width), (40963, img.height)):
+                for tag, value in ((40962, output_width), (40963, output_height)):
                     if tag in details:
                         details[tag] = value
                 if fmt_ext in (".tiff", ".tif") and 40965 in details:

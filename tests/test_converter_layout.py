@@ -19,6 +19,12 @@ from src.ui.theme_engine import DEFAULT_THEME, LIGHT_THEME, build_stylesheet
 
 
 class ImmediatePreview(_ConverterPreviewLoader):
+    last_created = None
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        type(self).last_created = self
+
     def start(self):
         self.run()
 
@@ -373,6 +379,16 @@ def test_disclosure_counts_only_current_format_processors(
             assert converter._advanced_toggle.text() == (
                 "▼  Advanced" + (f" · {count} on" if count else ""))
             converter._advanced_toggle.setChecked(False)
+
+
+def test_metadata_toggle_refreshes_preview_with_current_setting(converter):
+    converter._keep_metadata_check.setChecked(False)
+    converter._preview_debounce.stop()
+    converter._keep_metadata_check.setChecked(True)
+    assert converter._preview_debounce.isActive()
+    converter._preview_debounce.stop()
+    converter._update_converted_preview()
+    assert ImmediatePreview.last_created._keep_metadata
 
 
 @pytest.mark.parametrize("resize_enabled", [False, True], ids=["basic", "retained-resize"])
