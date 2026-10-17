@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 from PyQt6 import sip
-from PyQt6.QtCore import QCoreApplication, QEvent, QPoint, Qt
+from PyQt6.QtCore import QCoreApplication, QEvent, QPoint, QTimer, Qt
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QMenu, QMessageBox, QWidget
 from PIL import Image
@@ -606,6 +606,117 @@ def test_main_window_converter_stop_records_unprocessed_inputs(app, tmp_path):
             assert worker.wait(15_000)
         converter._stop_preview_loader()
         window.close()
+        sip.delete(window)
+        settings.sync()
+        sip.delete(settings._qs)
+        app.processEvents()
+        app.setFont(original_font)
+        app.setStyleSheet(original_stylesheet)
+
+
+def test_main_window_gif_media_picker_selects_stream_and_reports_decode_failure(
+        app, tmp_path):
+    from src.ui import editor_project
+    from src.ui.gif_builder import _GifStreamPickerDialog
+
+    original_font, original_stylesheet = app.font(), app.styleSheet()
+    selected_path = tmp_path / "selected.mkv"
+    failed_path = tmp_path / "failed.mkv"
+    selected_path.touch()
+    failed_path.touch()
+    probe = {
+        "video_stream_index": 1,
+        "audio_stream_index": 2,
+        "video_stream_count": 2,
+        "audio_stream_count": 2,
+        "video_stream_choices": [
+            {"index": 1, "codec_name": "h264", "width": 640, "height": 360},
+            {"index": 3, "codec_name": "hevc", "width": 1280, "height": 720},
+        ],
+        "audio_stream_choices": [
+            {"index": 2, "codec_name": "aac", "tags": {"language": "eng"}},
+            {"index": 4, "codec_name": "opus", "tags": {"language": "jpn"}},
+        ],
+    }
+    selections = []
+
+    def choose_streams():
+        picker = next(
+            (
+                widget for widget in app.topLevelWidgets()
+                if isinstance(widget, _GifStreamPickerDialog) and widget.isVisible()
+            ),
+            None,
+        )
+        if picker is None:
+            if time.monotonic() < choose_streams.deadline:
+                QTimer.singleShot(10, choose_streams)
+            else:
+                modal = app.activeModalWidget()
+                if modal is not None:
+                    modal.reject()
+            return
+        picker._video_combo.setCurrentIndex(2)
+        picker._audio_combo.setCurrentIndex(2)
+        selections.append((
+            picker.selected_video_stream_index,
+            picker.selected_audio_stream_index,
+        ))
+        if len(selections) < 2:
+            QTimer.singleShot(0, choose_streams)
+        picker.accept()
+    choose_streams.deadline = time.monotonic() + 10
+
+    def decode(path, **_kwargs):
+        if path == str(failed_path):
+            raise ValueError("selected stream decode failed")
+        return [Image.new("RGBA", (7, 5), "teal")], 25.0
+
+    with patch(
+        "src.core.settings_manager._settings_ini_path",
+        return_value=str(tmp_path / "settings.ini"),
+    ):
+        settings = SettingsManager()
+        window = MainWindow(settings)
+    try:
+        window.show()
+        window._open_or_focus_gif_builder()
+        builder = window._gif_builder_dlg
+        QTimer.singleShot(0, choose_streams)
+        with patch(
+            "src.ui.gif_builder.QFileDialog.getOpenFileNames",
+            return_value=([str(selected_path), str(failed_path)], ""),
+        ), patch(
+            "src.ui.gif_builder._probe_media_details", return_value=probe
+        ), patch(
+            "src.ui.gif_builder._load_video_frames", side_effect=decode
+        ) as load_video, patch(
+            "src.ui.gif_builder._video_load_failure_hint",
+            return_value="Selected video stream #3 could not be decoded.",
+        ), patch(
+            "src.ui.gif_builder._visual_still_fallback_note",
+            return_value="No still frame was recoverable.",
+        ), patch(
+            "src.ui.gif_builder._extract_visual_still_frame", return_value=None
+        ):
+            builder._btn_add.click()
+
+        assert selections == [(3, 4), (3, 4)]
+        assert [call.kwargs["preferred_video_stream_index"] for call in load_video.call_args_list] == [3, 3]
+        assert [call.kwargs["preferred_audio_stream_index"] for call in load_video.call_args_list] == [4, 4]
+        assert len(builder._frames) == 1
+        assert "1 failed" in builder._import_status_lbl.text()
+        details = builder._import_detail_box.toPlainText()
+        assert "selected.mkv" in details and "video stream #3" in details
+        assert "failed.mkv: selected stream decode failed" in details
+        assert "Selected video stream #3 could not be decoded." in details
+    finally:
+        with patch.object(
+            editor_project.QMessageBox,
+            "question",
+            return_value=QMessageBox.StandardButton.Discard,
+        ):
+            window.close()
         sip.delete(window)
         settings.sync()
         sip.delete(settings._qs)
