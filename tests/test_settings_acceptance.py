@@ -61,6 +61,28 @@ def settings_session(tmp_path):
     app.setStyleSheet(stylesheet)
 
 
+def _run_main_window_settings(window, action):
+    outcomes = []
+
+    def interact():
+        dialog = window._settings_dialog
+        try:
+            outcomes.append((True, action(dialog)))
+        except BaseException as exc:
+            outcomes.append((False, exc))
+        finally:
+            if dialog is not None and dialog.isVisible():
+                dialog.close()
+
+    QTimer.singleShot(0, interact)
+    window._btn_settings.click()
+    assert outcomes
+    succeeded, result = outcomes[0]
+    if not succeeded:
+        raise result
+    return result
+
+
 _HISTORY_CONTROLS = [
     ("converter", "_history_max_conv_spin", "_chk_track_converter"),
     ("alpha", "_history_max_alpha_spin", "_chk_track_alpha"),
@@ -452,27 +474,6 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
     window.show()
     app.processEvents()
 
-    def run_settings(host, action):
-        outcomes = []
-
-        def interact():
-            dialog = host._settings_dialog
-            try:
-                outcomes.append((True, action(dialog)))
-            except BaseException as exc:
-                outcomes.append((False, exc))
-            finally:
-                if dialog is not None and dialog.isVisible():
-                    dialog.close()
-
-        QTimer.singleShot(0, interact)
-        host._btn_settings.click()
-        assert outcomes
-        succeeded, result = outcomes[0]
-        if not succeeded:
-            raise result
-        return result
-
     def configure_preferences(widget):
         widget._theme_preset_combo.setCurrentText("Bat Cave")
         widget._font_size_spin.setValue(12)
@@ -493,7 +494,7 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
         assert window._update_shortcut("help", "Ctrl+Alt+H")
         assert window._update_shortcut("converter_run", "Ctrl+Alt+C")
 
-    run_settings(window, configure_preferences)
+    _run_main_window_settings(window, configure_preferences)
     assert window._settings_apply_timer.isActive()
     QTest.qWait(550)
     assert manager.get_theme()["name"] == "Bat Cave"
@@ -513,7 +514,7 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
     with patch("src.ui.settings_dialog.QFileDialog.getSaveFileName",
                return_value=(str(backup), "")), \
             patch("src.ui.settings_dialog.QMessageBox.information"):
-        run_settings(window, lambda widget: widget._btn_export_theme.click())
+        _run_main_window_settings(window, lambda widget: widget._btn_export_theme.click())
     payload = json.loads(backup.read_text(encoding="utf-8"))
     assert not any(key in payload for key in histories)
     assert set(payload) == set(manager._qs.allKeys()) & set(manager.EXPORT_KEYS)
@@ -530,7 +531,7 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
         QMessageBox, "question",
         return_value=QMessageBox.StandardButton.Yes,
     ), patch.object(QMessageBox, "information"):
-        run_settings(window, lambda widget: widget._btn_reset.click())
+        _run_main_window_settings(window, lambda widget: widget._btn_reset.click())
     assert manager.get_theme()["name"] == "Panda Dark"
     assert all(manager.get(key) is None for key in histories)
     QTest.qWait(550)
@@ -544,7 +545,7 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
             assert "Restart" in notice.call_args.args[2]
             assert widget._font_size_spin.value() == 12
             assert widget._ui_scale_combo.currentText().startswith("Large")
-        run_settings(window, import_preferences)
+        _run_main_window_settings(window, import_preferences)
     assert window._settings_apply_timer.isActive()
     QTest.qWait(550)
     assert app.font().pointSize() == 14
@@ -573,7 +574,7 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
         assert not reopened._chk_track_gif.isChecked()
         for _, control, _ in _HISTORY_CONTROLS:
             assert getattr(reopened, control).value() == 3
-    run_settings(restarted, assert_reloaded_controls)
+    _run_main_window_settings(restarted, assert_reloaded_controls)
     assert reloaded.get_custom_shortcuts()["help"] == "Ctrl+Alt+H"
     assert reloaded.get_custom_shortcuts()["converter_run"] == "Ctrl+Alt+C"
     assert restarted._shortcut_map["help"]["sc"].key().toString() == "Ctrl+Alt+H"
@@ -652,12 +653,19 @@ def test_main_window_settings_dialog_applies_theme_and_persists_after_relaunch(
 
 def test_invalid_backup_preserves_every_ini_key_and_disk_after_relaunch(
         settings_session, tmp_path):
-    _, launch, open_settings, _ = settings_session
+    app, launch, open_settings, widgets = settings_session
+    from src.ui.main_window import MainWindow
+
     manager = launch()
     manager.set("font_size", "12")
     manager.set("unlock_skeleton", True)
     manager.set("converter_history", '[{"file": "retained.png"}]')
     manager.set("unknown_future_key", "retain")
+    manager.sync()
+    window = MainWindow(manager)
+    widgets.append(window)
+    window.show()
+    app.processEvents()
     manager.sync()
     disk = Path(manager._qs.fileName())
     before_disk = disk.read_bytes()
@@ -667,11 +675,12 @@ def test_invalid_backup_preserves_every_ini_key_and_disk_after_relaunch(
         "theme": "Replacement", "font_size": 20,
         "custom_shortcuts": '{"help": 42}', "unknown_future_key": "replace",
     }), encoding="utf-8")
-    widget = open_settings(manager)
     with patch("src.ui.settings_dialog.QFileDialog.getOpenFileName",
-               return_value=(str(backup), "")), \
+              return_value=(str(backup), "")), \
             patch("src.ui.settings_dialog.QMessageBox.critical") as failure:
-        widget._btn_import_theme.click()
+        _run_main_window_settings(
+            window, lambda widget: widget._btn_import_theme.click()
+        )
     failure.assert_called_once()
     assert "custom_shortcuts" in failure.call_args.args[2]
     assert disk.read_bytes() == before_disk
@@ -680,10 +689,15 @@ def test_invalid_backup_preserves_every_ini_key_and_disk_after_relaunch(
         manager.import_settings(str(backup))
     assert disk.read_bytes() == before_disk
     assert {key: manager._qs.value(key) for key in manager._qs.allKeys()} == before
+    window.close()
+    sip.delete(window)
+    widgets.remove(window)
+    manager.sync()
+    after_close = {key: manager._qs.value(key) for key in manager._qs.allKeys()}
     reloaded = launch()
+    assert {key: reloaded._qs.value(key) for key in reloaded._qs.allKeys()} == after_close
     widget = open_settings(reloaded)
     assert widget._font_size_spin.value() == 12
-    assert {key: reloaded._qs.value(key) for key in reloaded._qs.allKeys()} == before
 
 
 @pytest.mark.parametrize("tool,limit_control,track_control", _HISTORY_CONTROLS)
