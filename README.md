@@ -142,7 +142,7 @@ History views record the tools' operations. Stopping a conversion prevents new w
 Alpha/Converter stopped batches retain their actual completion percentage and report unprocessed files instead of displaying 100% “Done”. History tooltips retain that status, searchable with `status:stopped`; TXT, CSV, JSON, and HTML exports also include Status and Not processed fields.
 Original-file deletion defaults to **Keep Originals** and is offered only after a fully successful batch for recorded, existing, distinct outputs. Failed/unprocessed originals, in-place outputs, and sources sharing an output are never offered. Large batches retain an output manifest even when per-file success logging is suppressed.
 History exports follow the visible, filtered row order and preserve complete filenames, including in plain text. GIF history thumbnails pause when their view is hidden, and export destination failures provide a recovery warning instead of an unhandled error.
-Disk-backed offscreen MainWindow acceptance imports an image through the Converter UI, runs a real conversion, verifies the result in History, and exercises double-click and output/folder context-menu actions. GIF Builder and Video Builder workflows likewise import media, export animations, and open the recorded outputs from History.
+Disk-backed offscreen MainWindow acceptance imports an image through the Converter UI, runs a real conversion, verifies the result in History, and exercises double-click and output/folder context-menu actions. GIF Builder and Video Builder workflows likewise import media, export animations, and verify their recorded outputs remain actionable in History after relaunch.
 
 ## UI & Customization
 - 🐼 **18 built-in themes**: Panda Dark (default), Panda Light, Neon Panda, Gore, Bat Cave, Rainbow Chaos, Otter Cove, Galaxy, Galaxy Otter, Goth, Volcano 🌋, Arctic ❄, Fairy Garden 🧚, Mermaid 🧜, Shark Bait 🦈, Alien 🛸, Noodle 🍜, Pancake 🥞
@@ -1087,9 +1087,10 @@ Retain platform-specific evidence for these remaining gates:
   backup/import, invalid-backup rejection, confirmed/cancelled resets and relaunch;
   History Clear All confirmation/cancellation and relaunch; Converter mixed
   success/failure, fallback output, stop/retry, reports, History exports, and
-  disk-backed History restore with output actions after relaunch; and GIF/Video
-  project save, reopen, recovery and coordinated shutdown. GIF stream choice and
-  decode recovery/failure feedback are exercised through MainWindow's Add Media flow.
+  disk-backed History restore with output actions after relaunch; GIF/Video export
+  history and output actions after relaunch; and builder project save, reopen,
+  recovery and coordinated shutdown. GIF stream choice and decode recovery/failure
+  feedback are exercised through MainWindow's Add Media flow.
 - **End-to-end/native acceptance remains open:** first launch through every
   tool's successful export, including Painter editing, clipboard, undo/redo and
   saving; native visual checks and retained results. Diagnose all failures and
