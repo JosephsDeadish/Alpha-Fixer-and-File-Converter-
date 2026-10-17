@@ -1902,17 +1902,17 @@ class SelectiveAlphaTool(QWidget):
         # ── Workflow group: Open → Paint → Save ───────────────────────────
         # All primary actions are grouped here at the top so the workflow
         # is immediately obvious.
-        wf_box = QGroupBox("Workflow: Open → Import → Paint → Save")
+        wf_box = QGroupBox("Workflow: Open → Import Shared Zones → Paint → Save")
         wf_box.setAccessibleName("Alpha Painter workflow")
         wf_box.setAccessibleDescription(
             "Keeps the open, import, paint, clipboard, and save actions together so the main workflow is easy to scan."
         )
         wf_box.setToolTip(
-            "Open an image, import shared zones if you have them, paint or edit the alpha zones, use the clipboard helpers when needed, and save the result."
+            "Open an image first, import shared zones if you already copied them in Alpha & RGBA Adjuster, paint or edit the alpha zones, use the clipboard helpers when needed, and save the result."
         )
         wf_lay = QVBoxLayout(wf_box)
         wf_lay.setContentsMargins(10, 8, 10, 8)
-        wf_lay.setSpacing(6)
+        wf_lay.setSpacing(8)
 
         # Row 1: Open image
         self._btn_open = QPushButton("\U0001f4c2  Open Image\u2026")
@@ -1934,7 +1934,7 @@ class SelectiveAlphaTool(QWidget):
         )
         wf_lay.addWidget(self._session_status_lbl)
         self._next_step_lbl = QLabel(
-            "Next step: open an image, or import shared zones from Alpha & RGBA Adjuster if you already copied them."
+            "Next step: open an image to start painting, or import shared zones from Alpha & RGBA Adjuster if you already copied them."
         )
         self._next_step_lbl.setWordWrap(True)
         self._next_step_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1974,7 +1974,7 @@ class SelectiveAlphaTool(QWidget):
         self._btn_save = QPushButton("\U0001f4be Save\u2026")
         self._btn_save.setMinimumHeight(26)
         self._btn_save.setToolTip(
-            "Apply the painted zones and save the result to disk  (Ctrl+S)\n"
+            "Apply the painted zones and save the result to disk (Ctrl+S)\n"
             "Alpha zones are applied automatically — no separate Apply step needed."
         )
         self._btn_save.setAccessibleName("Save edited image")

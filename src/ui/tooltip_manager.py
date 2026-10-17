@@ -2465,6 +2465,7 @@ _NORMAL: dict[str, list[str]] = {
         "Copies this zone's painted shape for pasting into any other zone.",
         "One zone clipboard. One copied zone. Use it wisely.",
         "Copy now, paste later. The zone clipboard keeps the last zone you copied.",
+        "Shared-zone tip: copy one painted zone, then reuse it elsewhere without redrawing the whole layout.",
     ],
     "sa_zone_paste_mask": [
         "Paste the zone clipboard into this zone, replacing the current paint. Copy a zone first to enable Paste.",
@@ -2478,6 +2479,7 @@ _NORMAL: dict[str, list[str]] = {
         "Pastes the zone clipboard into this zone, replacing whatever was painted here.",
         "Original zone is unchanged. You're copying, not moving. The source stays intact.",
         "Zone-to-zone shape transfer, complete.",
+        "Paste the shared zone into the active zone when you want to reuse a copied layout. The source stays untouched.",
     ],
     "sa_undo": [
         "Undo the last drawing or erase action on the canvas.",
@@ -4608,6 +4610,7 @@ _DUMBED: dict[str, list[str]] = {
         "Copies this zone's painted shape for pasting into any other zone.",
         "Congratulations on copying a zone. Paste it into any zone with the Paste button.",
         "One zone clipboard. One copied zone. Use it wisely.",
+        "Copy one painted zone, then reuse it elsewhere instead of redrawing the whole thing.",
     ],
     "sa_zone_paste_mask": [
         "Paste the clipboard into this zone. It replaces what was here.",
@@ -4618,6 +4621,7 @@ _DUMBED: dict[str, list[str]] = {
         "Pastes the zone clipboard into this zone, replacing whatever was painted here.",
         "Congratulations on finding Paste Zone. Zone-to-zone shape transfer, complete.",
         "Original zone is unchanged. You're copying, not moving. The source stays intact.",
+        "Paste the copied zone here when you want to reuse a shared layout. The source zone survives.",
     ],
     "sa_undo": [
         "Undo! Takes back the last drawing action.",
@@ -6826,6 +6830,7 @@ _VULGAR: dict[str, list[str]] = {
         "The zone clipboard keeps one zone image at a time.",
         "Replicate your painting pattern without repainting it.",
         "Same painted area, different zone, different alpha value. That's the killer use case for Copy/Paste Zone.",
+        "Copy the shared zone once and reuse that damn thing anywhere else instead of tracing it again.",
     ],
     "sa_zone_paste_mask": [
         "Paste the clipboard into this zone, replacing everything here. No filter, no fluff.",
@@ -6836,6 +6841,7 @@ _VULGAR: dict[str, list[str]] = {
         "Replaces this zone's entire area with the zone clipboard contents.",
         "One zone's pattern, infinite zones worth of application potential.",
         "Copy once, paste everywhere.",
+        "Paste the copied zone into this one when you want the same shape with a different alpha. The source stays intact.",
     ],
     "sa_undo": [
         "Undo the last drawing action. Ctrl+Z also works, you Ctrl+Z addict.",

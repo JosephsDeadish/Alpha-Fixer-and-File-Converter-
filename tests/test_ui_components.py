@@ -8164,6 +8164,14 @@ class TestSelectiveAlphaToolSlots(unittest.TestCase):
         self.assertIn("Copy a zone first to enable Paste", _NORMAL["sa_zone_paste_mask"][0])
         self.assertIn("replaces what was here", _DUMBED["sa_zone_paste_mask"][0].lower())
         self.assertIn("no fluff", _VULGAR["sa_zone_paste_mask"][0].lower())
+        self.assertGreaterEqual(len(_NORMAL["sa_zone_copy_mask"]), 10)
+        self.assertGreaterEqual(len(_NORMAL["sa_zone_paste_mask"]), 10)
+        self.assertIn("shared-zone tip", " ".join(_NORMAL["sa_zone_copy_mask"]).lower())
+        self.assertIn("redrawing the whole thing", " ".join(_DUMBED["sa_zone_copy_mask"]).lower())
+        self.assertIn("reuse that damn thing", " ".join(_VULGAR["sa_zone_copy_mask"]).lower())
+        self.assertIn("copied layout", " ".join(_NORMAL["sa_zone_paste_mask"]).lower())
+        self.assertIn("shared layout", " ".join(_DUMBED["sa_zone_paste_mask"]).lower())
+        self.assertIn("different alpha", " ".join(_VULGAR["sa_zone_paste_mask"]).lower())
 
     def test_saved_mask_slots_grow_to_configured_limit(self):
         self.assertEqual(self._widget._slot_combo.count(), self._widget._MASK_SLOT_INIT)
