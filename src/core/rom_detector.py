@@ -233,8 +233,11 @@ def _detect_dir(d: Path) -> RomDetectionResult:
 
     try:
         names_lower = {n.lower() for n in os.listdir(d)}
-    except PermissionError:
-        logger.debug("ROM detection: skipping '%s' — permission denied", d)
+    except PermissionError as exc:
+        logger.warning("ROM detection: skipping '%s' — %s", d, exc)
+        return RomDetectionResult()
+    except OSError as exc:
+        logger.warning("ROM detection: unable to scan '%s' — %s", d, exc)
         return RomDetectionResult()
 
     # 1) Check file/folder signatures
@@ -294,8 +297,8 @@ def _extract_ps2_id(d: Path) -> tuple[str, str]:
             # Insert hyphen: SLUS20626 → SLUS-20626
             norm = re.sub(r"([A-Z]+)(\d+)", r"\1-\2", raw)
             return norm.upper(), ""
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("ROM detection: failed to parse SYSTEM.CNF in '%s' — %s", d, exc)
     return "", ""
 
 
@@ -354,7 +357,8 @@ def _find_cover_art(disc_id: str, console: str) -> str:
                         candidate = entry.parent / (entry.stem + ext)
                         if candidate.is_file():
                             return str(candidate)
-        except (PermissionError, NotADirectoryError):
+        except (PermissionError, NotADirectoryError) as exc:
+            logger.warning("ROM detection: unable to inspect cover art under '%s' — %s", root, exc)
             continue
 
     return ""

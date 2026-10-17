@@ -1,0 +1,130 @@
+{
+  "base_dir": ".",
+  "entries": [
+    {
+      "platform": "PSP",
+      "group": "umd disc image",
+      "sample_id": "umd-main-movie",
+      "path": "psp/sample.umd.iso",
+      "required": true,
+      "expect": "load_or_explain",
+      "preferred_video_stream_index": 0,
+      "expect_probe_has_video": true,
+      "expect_video_codec_contains": [
+        "mpeg"
+      ],
+      "min_frames": 10,
+      "hint_contains": [
+        "Disc-image video inputs are experimental"
+      ],
+      "notes": "Actual PSP UMD / ISO sample. Replace with a real local path or add a download_url + sha256 if you have a legally shareable sample. Add expect_frame_size, min_duration_seconds, expect_has_audio, expect_probe_has_audio, expect_audio_codec_contains, expect_probe_frame_size, expect_video_stream_count, expect_audio_stream_count, or expect_load_note_contains as needed for stricter corpus validation."
+    },
+    {
+      "platform": "PSP",
+      "group": "raw umd container",
+      "sample_id": "umd-raw-container",
+      "path": "psp/sample.umd",
+      "required": false,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "hint_contains": [
+        "Disc-image video inputs are experimental"
+      ],
+      "notes": "Optional raw .umd sample path for environments where the movie data is exposed as a .umd container instead of .iso. Use this to validate the extension-specific .umd probe/recovery path separately from .umd.iso images."
+    },
+    {
+      "platform": "PSP",
+      "group": "pmf movie asset",
+      "sample_id": "pmf-movie",
+      "path": "psp/sample.pmf",
+      "required": false,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "expect_video_codec_contains": [
+        "mpeg"
+      ],
+      "notes": "Optional extracted PSP PMF movie asset. Use this when you have a legally shareable standalone PMF file so odd-container probing and recovery can be validated on the raw console-era asset itself, not only on whole-disc images."
+    },
+    {
+      "platform": "PS1",
+      "group": "bin/cue disc image",
+      "sample_id": "bin-cue-stream",
+      "path": "ps1/sample.bin",
+      "required": true,
+      "companions": [
+        {
+          "path": "ps1/sample.cue",
+          "notes": "Optional companion cue sheet for BIN-based PlayStation samples. Keeping it alongside the BIN lets the packaged self-test and local odd-container retries exercise cue/bin track-layout recovery."
+        }
+      ],
+      "expect": "load_or_explain",
+      "expect_format_name_contains": [
+        "bin"
+      ],
+      "expect_probe_has_video": true,
+      "hint_contains": [
+        "Disc-image video inputs are experimental"
+      ],
+      "notes": "Actual PS1 BIN/CUE-style disc-image sample. Point the main path at the BIN and add the matching cue sheet as a companion so cue/bin retries can exercise real track-layout recovery. Use require_recovery plus expect_load_note_contains when you specifically want to prove the cue/bin recovery path stayed active, and add expect_probe_frame_size / expect_audio_codec_contains / expect_preferred_* stream assertions when you want a stricter stream-selection check."
+    },
+    {
+      "platform": "PS2",
+      "group": "dvd disc image",
+      "sample_id": "dvd-pss-stream",
+      "path": "ps2/sample.iso",
+      "required": true,
+      "expect": "load_or_explain",
+      "preferred_video_stream_index": 0,
+      "expect_probe_has_video": true,
+      "hint_contains": [
+        "Disc-image video inputs are experimental"
+      ],
+      "notes": "Actual PS2 DVD ISO sample. Add preferred stream indexes or expected failure/load tokens per sample if needed. The validator now also supports expect_probe_has_audio, expect_probe_frame_size, expect_video_stream_count, expect_audio_stream_count, expect_video_stream_index, expect_audio_stream_index, expect_frame_size, require_recovery, and expect_preferred_* stream assertions."
+    },
+    {
+      "platform": "PS2",
+      "group": "pss movie asset",
+      "sample_id": "pss-movie",
+      "path": "ps2/sample.pss",
+      "required": false,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "expect_video_codec_contains": [
+        "mpeg"
+      ],
+      "notes": "Optional extracted PS2 PSS movie asset for validating the raw console program-stream file directly. Add expect_audio_codec_contains, require_recovery, or expect_load_note_contains when a real sample depends on alternate-track, audio-drop, or remux/transcode recovery."
+    },
+    {
+      "platform": "PS2",
+      "group": "bin/cue disc image",
+      "sample_id": "bin-cue-pss-stream",
+      "path": "ps2/sample.bin",
+      "required": false,
+      "companions": [
+        {
+          "path": "ps2/sample.cue",
+          "notes": "Optional companion cue sheet for BIN-based PS2 samples so cue/bin retry logic can rebuild track layout during validation."
+        }
+      ],
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "hint_contains": [
+        "Disc-image video inputs are experimental"
+      ],
+      "notes": "Optional PS2 BIN/CUE-style sample for validating .bin handling separately from DVD .iso files. Add expect_audio_codec_contains, require_recovery, and expect_load_note_contains when you want to confirm cue/bin or audio-drop recovery paths on a real sample."
+    },
+    {
+      "platform": "PS1",
+      "group": "str movie asset",
+      "sample_id": "str-movie",
+      "path": "ps1/sample.str",
+      "required": false,
+      "expect": "load_or_explain",
+      "expect_probe_has_video": true,
+      "expect_video_codec_contains": [
+        "mpeg"
+      ],
+      "notes": "Optional extracted PS1 STR movie asset for validating the raw console video file directly. Use expect_audio_codec_contains, require_recovery, and expect_load_note_contains when you want stricter assertions for alternate-track or audio-drop recovery on a real sample."
+    }
+  ]
+}
