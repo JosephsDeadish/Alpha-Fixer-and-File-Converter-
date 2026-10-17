@@ -634,6 +634,75 @@ def test_confirmed_dialog_resets_survive_relaunch_with_intended_scope(
     _run_main_window_settings(restarted, assert_reset_scope)
 
 
+@pytest.mark.parametrize("reset_all", [False, True])
+def test_cancelled_settings_resets_preserve_preferences_after_relaunch(
+        settings_session, reset_all):
+    app, launch, _, widgets = settings_session
+    from src.ui.main_window import MainWindow
+
+    manager = launch()
+    manager.set("font_size", 18)
+    manager.set("custom_shortcuts", json.dumps({"help": "Ctrl+Alt+H"}))
+    histories = {}
+    for tool, _, _ in _HISTORY_CONTROLS:
+        histories[f"{tool}_history"] = json.dumps([{"file": f"{tool}.png"}])
+    for key, value in histories.items():
+        manager.set(key, value)
+    progress = [
+        key for key in manager._DEFAULTS
+        if key.startswith("unlock_") or key.endswith("_once")
+        or key in ("total_clicks", "alpha_fixes_total", "conversions_total")
+    ]
+    for key in progress:
+        manager.set(key, 42 if type(manager._DEFAULTS[key]) is int else True)
+    manager.set("unknown_future_key", "retain")
+    manager.sync()
+
+    window = MainWindow(manager)
+    widgets.append(window)
+    window.show()
+    app.processEvents()
+    manager.sync()
+    before = {key: manager._qs.value(key) for key in manager._qs.allKeys()}
+
+    def decline_reset(dialog):
+        button = dialog._btn_reset if reset_all else dialog._btn_reset_unlocks
+        with patch.object(
+            QMessageBox, "question",
+            return_value=QMessageBox.StandardButton.No,
+        ) as confirmation, patch.object(
+            QMessageBox, "information"
+        ) as notice:
+            button.click()
+        confirmation.assert_called_once()
+        notice.assert_not_called()
+        assert dialog.isVisible()
+        assert {key: manager._qs.value(key) for key in manager._qs.allKeys()} == before
+
+    _run_main_window_settings(window, decline_reset)
+    window.close()
+    sip.delete(window)
+    widgets.remove(window)
+    manager.sync()
+
+    reloaded = launch()
+    assert {key: reloaded._qs.value(key) for key in before} == before
+    assert reloaded.get("unknown_future_key") == "retain"
+    assert reloaded.get_custom_shortcuts() == {"help": "Ctrl+Alt+H"}
+    for key, value in histories.items():
+        assert reloaded.get(key) == value
+    assert all(reloaded.get(key) == before[key] for key in progress)
+    restarted = MainWindow(reloaded)
+    widgets.append(restarted)
+    restarted.show()
+    app.processEvents()
+
+    def assert_preferences_remain(dialog):
+        assert dialog._font_size_spin.value() == 18
+
+    _run_main_window_settings(restarted, assert_preferences_remain)
+
+
 def test_main_window_settings_dialog_applies_theme_and_persists_after_relaunch(
         settings_session):
     from src.ui.main_window import MainWindow
