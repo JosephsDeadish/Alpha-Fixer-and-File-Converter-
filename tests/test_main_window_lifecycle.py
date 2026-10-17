@@ -1036,6 +1036,46 @@ def test_main_window_gif_export_is_recorded_and_actionable_in_history(app, tmp_p
             QTest.mouseDClick(tree.viewport(), Qt.MouseButton.LeftButton, pos=row_click)
         open_url.assert_called_once()
         assert open_url.call_args.args[0].toLocalFile() == str(output_path)
+
+        settings.sync()
+        with patch.object(
+            editor_project.QMessageBox,
+            "question",
+            return_value=QMessageBox.StandardButton.Discard,
+        ):
+            assert window.close()
+        builder = None
+        sip.delete(window)
+        sip.delete(settings._qs)
+        app.processEvents()
+
+        with patch(
+            "src.core.settings_manager._settings_ini_path",
+            return_value=str(tmp_path / "settings.ini"),
+        ):
+            settings = SettingsManager()
+            window = MainWindow(settings)
+        window.show()
+        history = window._history_tab
+        window._tabs.setCurrentIndex(window._tabs.indexOf(history))
+        history._sub_tabs.setCurrentIndex(3)
+        app.processEvents()
+        assert settings.get_gif_builder_history() == records
+        assert output_path.is_file()
+        tree = history._gif_tree
+        assert tree.topLevelItemCount() == 1
+        item = tree.topLevelItem(0)
+        assert item.text(1) == output_path.name
+        row = tree.visualItemRect(item)
+        row_click = QPoint(30, row.center().y())
+        assert row.isValid() and tree.viewport().rect().contains(row_click)
+        with patch(
+            "src.ui.history_tab.QDesktopServices.openUrl", return_value=True
+        ) as open_url:
+            QTest.mouseClick(tree.viewport(), Qt.MouseButton.LeftButton, pos=row_click)
+            QTest.mouseDClick(tree.viewport(), Qt.MouseButton.LeftButton, pos=row_click)
+        open_url.assert_called_once()
+        assert open_url.call_args.args[0].toLocalFile() == str(output_path)
     finally:
         if builder is not None and builder._export_worker is not None:
             builder._export_worker.wait(15_000)
@@ -1109,6 +1149,47 @@ def test_main_window_video_builder_gif_export_is_actionable_in_history(app, tmp_
         assert item.text(1) == output_path.name
         assert item.text(2) == "GIF"
         assert item.text(3) == "1"
+        assert item.text(13) == "OK"
+        row = tree.visualItemRect(item)
+        row_click = QPoint(30, row.center().y())
+        assert row.isValid() and tree.viewport().rect().contains(row_click)
+        with patch(
+            "src.ui.history_tab.QDesktopServices.openUrl", return_value=True
+        ) as open_url:
+            QTest.mouseClick(tree.viewport(), Qt.MouseButton.LeftButton, pos=row_click)
+            QTest.mouseDClick(tree.viewport(), Qt.MouseButton.LeftButton, pos=row_click)
+        open_url.assert_called_once()
+        assert open_url.call_args.args[0].toLocalFile() == str(output_path)
+
+        settings.sync()
+        with patch.object(
+            editor_project.QMessageBox,
+            "question",
+            return_value=QMessageBox.StandardButton.Discard,
+        ):
+            assert window.close()
+        builder = None
+        sip.delete(window)
+        sip.delete(settings._qs)
+        app.processEvents()
+
+        with patch(
+            "src.core.settings_manager._settings_ini_path",
+            return_value=str(tmp_path / "settings.ini"),
+        ):
+            settings = SettingsManager()
+            window = MainWindow(settings)
+        window.show()
+        history = window._history_tab
+        window._tabs.setCurrentIndex(window._tabs.indexOf(history))
+        history._sub_tabs.setCurrentIndex(4)
+        app.processEvents()
+        assert settings.get_video_builder_history() == records
+        assert output_path.is_file()
+        tree = history._vid_tree
+        assert tree.topLevelItemCount() == 1
+        item = tree.topLevelItem(0)
+        assert item.text(1) == output_path.name
         assert item.text(13) == "OK"
         row = tree.visualItemRect(item)
         row_click = QPoint(30, row.center().y())
