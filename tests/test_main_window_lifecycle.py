@@ -286,7 +286,9 @@ def test_main_window_shutdown_preserves_dirty_builder_sessions_until_approved(ap
         app.setStyleSheet(original_stylesheet)
 
 
-def test_main_window_history_refreshes_and_opens_converter_output(app, tmp_path):
+@pytest.mark.parametrize("delete_originals", [False, True])
+def test_main_window_history_refreshes_and_opens_converter_output(
+        app, tmp_path, delete_originals):
     original_font, original_stylesheet = app.font(), app.styleSheet()
 
     with patch(
@@ -320,28 +322,59 @@ def test_main_window_history_refreshes_and_opens_converter_output(app, tmp_path)
         assert fmt_index >= 0
         converter._fmt_combo.setCurrentIndex(fmt_index)
 
-        deletion_prompts = []
+        deletion_prompts, prompt_errors = [], []
+        prompt_deadline = time.monotonic() + 15
 
-        def keep_originals_by_default(dialog):
-            deletion_prompts.append(dialog)
-            assert "delete the original source file" in dialog.text().lower()
-            assert str(source_path.resolve()) in dialog.detailedText()
-            assert dialog.defaultButton().text() == "Keep Originals"
-            assert dialog.escapeButton() is dialog.defaultButton()
-            return QMessageBox.DialogCode.Rejected
+        def answer_deletion_prompt():
+            dialog = app.activeModalWidget()
+            if not isinstance(dialog, QMessageBox):
+                if time.monotonic() < prompt_deadline:
+                    QTimer.singleShot(10, answer_deletion_prompt)
+                else:
+                    prompt_errors.append(AssertionError("Deletion prompt did not appear"))
+                return
+            prompt = {
+                "text": dialog.text(),
+                "details": dialog.detailedText(),
+                "default": dialog.defaultButton().text() if dialog.defaultButton() else "",
+                "escape": dialog.escapeButton().text() if dialog.escapeButton() else "",
+            }
+            deletion_prompts.append(prompt)
+            try:
+                assert "delete the original source file" in prompt["text"].lower()
+                assert str(source_path.resolve()) in prompt["details"]
+                assert prompt["default"] == "Keep Originals"
+                assert prompt["escape"] == "Keep Originals"
+                if delete_originals:
+                    button = next(
+                        (candidate for candidate in dialog.buttons()
+                         if candidate.text() == "🗑  Delete Originals"),
+                        None,
+                    )
+                    assert button
+                    button.click()
+                    assert dialog.clickedButton() is button
+                else:
+                    QTest.keyClick(dialog, Qt.Key.Key_Return)
+                    assert dialog.clickedButton() is dialog.defaultButton()
+                prompt["selected"] = dialog.clickedButton().text()
+            except BaseException as exc:
+                prompt_errors.append(exc)
+                dialog.reject()
 
-        with patch(
-            "src.ui.converter_tool.QMessageBox.exec",
-            keep_originals_by_default,
-        ):
-            converter._btn_run.click()
-            deadline = time.monotonic() + 15
-            while not settings.get_converter_history() and time.monotonic() < deadline:
-                app.processEvents()
-                time.sleep(0.01)
+        QTimer.singleShot(0, answer_deletion_prompt)
+        converter._btn_run.click()
+        deadline = time.monotonic() + 15
+        while not settings.get_converter_history() and time.monotonic() < deadline:
             app.processEvents()
+            time.sleep(0.01)
+        app.processEvents()
+        assert not prompt_errors, prompt_errors
         assert len(deletion_prompts) == 1
-        assert source_path.is_file()
+        assert deletion_prompts[0]["selected"] == (
+            "🗑  Delete Originals" if delete_originals else "Keep Originals"
+        )
+        assert source_path.is_file() is not delete_originals
         records = settings.get_converter_history()
         assert records
         result = records[0]["results"][0]
@@ -418,7 +451,7 @@ def test_main_window_history_refreshes_and_opens_converter_output(app, tmp_path)
         window._tabs.setCurrentIndex(window._tabs.indexOf(history))
         app.processEvents()
         assert settings.get_converter_history() == records
-        assert source_path.is_file()
+        assert source_path.is_file() is not delete_originals
         assert output_path.is_file()
         tree = history._conv_tree
         assert tree.topLevelItemCount() == 1
