@@ -341,6 +341,7 @@ class TestOfflineVerification(unittest.TestCase):
             "ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS": "1",
             "ALPHA_FIXER_VALIDATION_JSON_OUT": "/host/result.json",
             "ALPHA_FIXER_VALIDATION_LOG_OUT": "/host/result.log",
+            "ALPHA_FIXER_GUI_ACCEPTANCE_OUT": "/host/gui-acceptance",
             "ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS": "1",
             "ALPHA_FIXER_ALLOW_SAMPLE_DOWNLOADS": "1",
         }
@@ -395,6 +396,97 @@ class TestOfflineVerification(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, "cannot be combined"):
                     self.verifier.main([str(target), "--offline", "--allow-sample-downloads"])
                 run.assert_not_called()
+
+    def test_gui_acceptance_uses_requested_scales_and_requires_external_clean_exit(self):
+        capabilities = subprocess.CompletedProcess(["app"], 0, stdout='ALPHA_FIXER_RUNTIME_CAPABILITIES={}\n')
+        smoke = subprocess.CompletedProcess(["app"], 0, stdout="")
+        launches = []
+        gui_envs = []
+
+        def run(command, *, env, timeout):
+            launches.append((command, timeout))
+            if env.get("ALPHA_FIXER_GUI_ACCEPTANCE_OUT"):
+                gui_envs.append(dict(env))
+                report = {
+                    "gui_assertions_passed": True,
+                    "overall_acceptance": "pending_external_clean_exit",
+                }
+                Path(env["ALPHA_FIXER_GUI_ACCEPTANCE_OUT"], "gui-acceptance.json").write_text(
+                    json.dumps(report), encoding="utf-8",
+                )
+                return subprocess.CompletedProcess(command, 0, stdout="")
+            if "ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP" in env:
+                return capabilities
+            return smoke
+
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "app"
+            target.touch()
+            report_path = Path(directory) / "report.json"
+            gui_output_dir = Path(directory) / "gui"
+            with patch.dict(os.environ, {"QT_QPA_PLATFORM": "offscreen"}):
+                with patch.object(self.verifier, "_run_and_echo", side_effect=run):
+                    with patch("sys.stdout"):
+                        result = self.verifier.main([
+                            str(target), "--run-gui-acceptance",
+                            "--gui-scale-factor", "1", "--gui-scale-factor", "2",
+                            "--gui-acceptance-timeout", "75", "--gui-output-dir", str(gui_output_dir),
+                            "--json-out", str(report_path),
+                        ])
+            self.assertEqual(result, 0)
+            self.assertEqual([entry["scale_factor"] for entry in
+                              json.loads(report_path.read_text(encoding="utf-8"))["gui_acceptance_runs"]],
+                             [1.0, 2.0])
+            self.assertTrue((gui_output_dir / "scale-01" / "gui-acceptance.json").is_file())
+            self.assertTrue((gui_output_dir / "scale-02" / "gui-acceptance.json").is_file())
+        self.assertEqual(len(launches), 4)
+        self.assertEqual([env["QT_SCALE_FACTOR"] for env in gui_envs], ["1.0", "2.0"])
+        self.assertTrue(all(env["QT_SCALE_FACTOR_ROUNDING_POLICY"] == "PassThrough" for env in gui_envs))
+        self.assertTrue(all("ALPHA_FIXER_GUI_ACCEPTANCE_OUT" in env for env in gui_envs))
+        self.assertTrue(all("QT_QPA_PLATFORM" not in env for env in gui_envs))
+        self.assertEqual([timeout for _, timeout in launches[2:]], [75, 75])
+
+    def test_gui_acceptance_rejects_clean_exit_without_passed_assertions(self):
+        def run(command, *, env, timeout):
+            if env.get("ALPHA_FIXER_GUI_ACCEPTANCE_OUT"):
+                Path(env["ALPHA_FIXER_GUI_ACCEPTANCE_OUT"], "gui-acceptance.json").write_text(
+                    json.dumps({"gui_assertions_passed": False}), encoding="utf-8",
+                )
+                return subprocess.CompletedProcess(command, 0, stdout="")
+            if "ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP" in env:
+                return subprocess.CompletedProcess(
+                    command, 0, stdout="ALPHA_FIXER_RUNTIME_CAPABILITIES={}\n",
+                )
+            return subprocess.CompletedProcess(command, 0, stdout="")
+
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "app"
+            target.touch()
+            with patch.object(self.verifier, "_run_and_echo", side_effect=run):
+                with patch("sys.stdout"):
+                    with self.assertRaisesRegex(SystemExit, "assertions failed"):
+                        self.verifier.main([str(target), "--run-gui-acceptance", "--gui-scale-factor", "2"])
+
+    def test_gui_acceptance_treats_crashing_exit_as_failure_even_with_a_report(self):
+        def run(command, *, env, timeout):
+            if env.get("ALPHA_FIXER_GUI_ACCEPTANCE_OUT"):
+                Path(env["ALPHA_FIXER_GUI_ACCEPTANCE_OUT"], "gui-acceptance.json").write_text(
+                    json.dumps({"gui_assertions_passed": True}), encoding="utf-8",
+                )
+                return subprocess.CompletedProcess(command, -11, stdout="")
+            if "ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP" in env:
+                return subprocess.CompletedProcess(
+                    command, 0, stdout="ALPHA_FIXER_RUNTIME_CAPABILITIES={}\n",
+                )
+            return subprocess.CompletedProcess(command, 0, stdout="")
+
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "app"
+            target.touch()
+            with patch.object(self.verifier, "_run_and_echo", side_effect=run):
+                with patch("sys.stdout"):
+                    with self.assertRaisesRegex(SystemExit, "exited with code -11"):
+                        self.verifier.main([str(target), "--run-gui-acceptance", "--gui-scale-factor", "2"])
 
     def test_all_advertised_dds_exports_are_required_by_release_check(self):
         from types import SimpleNamespace

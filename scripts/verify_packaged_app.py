@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import argparse
+from contextlib import nullcontext
 import json
+import math
 import os
 import signal
 import subprocess
@@ -154,6 +156,7 @@ def _verification_environment(offline: bool) -> dict[str, str]:
         "ALPHA_FIXER_RUNTIME_DISC_GROUP_CHECKS", "ALPHA_FIXER_RUNTIME_DDS_GROUP_CHECKS",
         "ALPHA_FIXER_RUNTIME_FORMAT_GROUP_CHECKS", "ALPHA_FIXER_RUNTIME_SAMPLE_CACHE_DIR",
         "ALPHA_FIXER_VALIDATION_JSON_OUT", "ALPHA_FIXER_VALIDATION_LOG_OUT",
+        "ALPHA_FIXER_GUI_ACCEPTANCE_OUT",
     ):
         env.pop(name, None)
     env["ALPHA_FIXER_RUNTIME_ALLOW_SAMPLE_DOWNLOADS"] = "0"
@@ -660,6 +663,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-selftest-rss-growth-mb", type=float, help="Optional upper bound for last-minus-first peak RSS across repeated self-test runs.")
     parser.add_argument("--max-selftest-rss-spread-mb", type=float, help="Optional upper bound for max-minus-min peak RSS across repeated self-test runs.")
     parser.add_argument("--require-selftest-check", action="append", default=[], help="Specific packaged self-test check key that must report ok=true. Repeat for multiple checks.")
+    parser.add_argument("--run-gui-acceptance", action="store_true", help="Run the actual packaged GUI acceptance checks and externally verify clean process exit.")
+    parser.add_argument("--gui-scale-factor", action="append", type=float, help="Qt scale factor for --run-gui-acceptance. Repeat for multiple scales; defaults to 1, 1.5, and 2.")
+    parser.add_argument("--gui-acceptance-timeout", type=int, default=120, help="Per-scale timeout in seconds for --run-gui-acceptance.")
+    parser.add_argument("--gui-output-dir", help="Optional directory to preserve per-scale GUI acceptance reports and screenshots.")
     parser.add_argument("--require-core-selftest-checks", action="store_true", help="Fail unless the built-in PNG/GIF/DDS and generated-video self-test checks all report ok=true.")
     parser.add_argument("--require-output-codec-checks", action="store_true", help="Fail unless every advertised output has a successful generated encode/decode check (no missing or skipped checks).")
     parser.add_argument("--require-video-selftest-checks", action="store_true", help="Fail unless generated MP4, MPEG-TS, and odd-container BIN self-test checks all report ok=true.")
@@ -688,6 +695,13 @@ def main(argv: list[str] | None = None) -> int:
     launch_target = Path(args.launch_target).resolve()
     if not launch_target.exists():
         raise SystemExit(f"Launch target not found: {launch_target}")
+    if args.gui_scale_factor and not args.run_gui_acceptance:
+        raise SystemExit("--gui-scale-factor requires --run-gui-acceptance.")
+    gui_scale_factors = args.gui_scale_factor or [1.0, 1.5, 2.0]
+    if args.run_gui_acceptance and any(not math.isfinite(scale) or scale <= 0 for scale in gui_scale_factors):
+        raise SystemExit("GUI acceptance scale factors must be finite positive numbers.")
+    if args.run_gui_acceptance and args.gui_acceptance_timeout < 1:
+        raise SystemExit("--gui-acceptance-timeout must be at least 1 second.")
     bundle_kind = _validation_bundle_kind(getattr(args, "bundle_kind", ""))
     if args.use_public_sample_manifests:
         if not args.disc_video_manifest:
@@ -1046,6 +1060,63 @@ def main(argv: list[str] | None = None) -> int:
                 raise SystemExit(
                     f"Packaged runtime self-test RSS spread exceeded limit: {spread} MiB > {args.max_selftest_rss_spread_mb} MiB"
                 )
+    gui_acceptance_runs: list[dict[str, object]] = []
+    if args.run_gui_acceptance:
+        output_root = Path(args.gui_output_dir).expanduser().resolve() if args.gui_output_dir else None
+        for run_index, scale_factor in enumerate(gui_scale_factors, start=1):
+            print(f"Running packaged GUI acceptance at Qt scale factor {scale_factor:g}…")
+            if output_root is None:
+                acceptance_output_context = tempfile.TemporaryDirectory(prefix="alpha_fixer_gui_acceptance_")
+            else:
+                run_output = output_root / f"scale-{run_index:02d}"
+                run_output.mkdir(parents=True, exist_ok=True)
+                acceptance_output_context = nullcontext(str(run_output))
+            with acceptance_output_context as directory:
+                gui_env = dict(base_env)
+                gui_env.pop("ALPHA_FIXER_SMOKE_TEST", None)
+                gui_env.pop("ALPHA_FIXER_RUNTIME_CAPABILITY_DUMP", None)
+                gui_env.pop("ALPHA_FIXER_RUNTIME_SELFTEST", None)
+                gui_env.pop("QT_QPA_PLATFORM", None)
+                gui_env["ALPHA_FIXER_GUI_ACCEPTANCE_OUT"] = directory
+                gui_env["QT_SCALE_FACTOR"] = str(scale_factor)
+                gui_env["QT_SCALE_FACTOR_ROUNDING_POLICY"] = "PassThrough"
+                try:
+                    gui_result = _run_and_echo(
+                        command,
+                        env=gui_env,
+                        timeout=args.gui_acceptance_timeout,
+                    )
+                except subprocess.TimeoutExpired:
+                    raise SystemExit(
+                        f"Packaged GUI acceptance timed out at scale factor {scale_factor:g} "
+                        f"after {args.gui_acceptance_timeout} seconds."
+                    ) from None
+                if gui_result.returncode != 0:
+                    raise SystemExit(
+                        f"Packaged GUI acceptance at scale factor {scale_factor:g} "
+                        f"exited with code {gui_result.returncode}."
+                    )
+                acceptance_report_path = Path(directory) / "gui-acceptance.json"
+                try:
+                    acceptance_report = json.loads(acceptance_report_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    raise SystemExit(
+                        f"Packaged GUI acceptance at scale factor {scale_factor:g} "
+                        "exited cleanly but did not produce a valid report."
+                    ) from None
+                if not isinstance(acceptance_report, dict) or acceptance_report.get("gui_assertions_passed") is not True:
+                    raise SystemExit(
+                        f"Packaged GUI acceptance assertions failed at scale factor {scale_factor:g}."
+                    )
+                gui_acceptance_runs.append(
+                    dict(
+                        scale_factor=scale_factor,
+                        returncode=gui_result.returncode,
+                        overall_acceptance="passed",
+                        report=acceptance_report,
+                        **({"output_directory": directory} if output_root is not None else {}),
+                    )
+                )
     if args.json_out:
         json_out = Path(args.json_out)
         json_out.parent.mkdir(parents=True, exist_ok=True)
@@ -1069,6 +1140,8 @@ def main(argv: list[str] | None = None) -> int:
             final_payload["runtime_selftest_runs"] = selftest_runs
             final_payload["runtime_selftest_repeat_summary"] = _selftest_repeat_summary(selftest_runs)
             final_payload["runtime_selftest_check_repeat_summary"] = _selftest_check_repeat_summary(selftest_runs)
+        if gui_acceptance_runs:
+            final_payload["gui_acceptance_runs"] = gui_acceptance_runs
         json_out.write_text(json.dumps(final_payload, indent=2, sort_keys=True), encoding="utf-8")
     print("✅  Packaged runtime capability audit verified.")
     return 0

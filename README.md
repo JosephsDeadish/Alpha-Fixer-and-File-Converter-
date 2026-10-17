@@ -772,6 +772,22 @@ application window and writes screenshots/assertion results using private settin
 Its report cannot certify teardown: acceptance also requires an externally observed
 zero process exit; a signal, timeout or missing report is failure.
 
+Run the packaged GUI acceptance matrix under a real display server (for example,
+Xvfb on Linux) with:
+
+```bash
+xvfb-run -a python scripts/verify_packaged_app.py dist/AlphaFixerConverter/AlphaFixerConverter \
+  --run-gui-acceptance --gui-scale-factor 1 --gui-scale-factor 1.5 --gui-scale-factor 2 \
+  --gui-output-dir dist/validation-reports/gui-acceptance \
+  --json-out dist/validation-reports/gui-acceptance-summary.json
+```
+
+Without explicit scale options, the verifier uses 1, 1.5 and 2. It fails each
+scale if GUI assertions fail, the acceptance report is absent/invalid, the launch
+times out, or the packaged process exits nonzero. The output directory preserves
+each scale's report and screenshots; GUI acceptance requires an available native
+display and does not use the offscreen smoke-test platform.
+
 A Linux folder bundle built from these changes passed 28 runtime checks and
 eight packaged Alpha/Converter GUI cases at scale 1 on Xvfb/X11, with Dark/Light
 themes, 900×700/1200×800 windows, 16 screenshots and a clean external exit.
