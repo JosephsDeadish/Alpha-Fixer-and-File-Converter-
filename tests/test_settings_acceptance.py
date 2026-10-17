@@ -444,35 +444,56 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
         settings_session, tmp_path, legacy):
     from src.ui.main_window import MainWindow
 
-    app, launch, open_settings, widgets = settings_session
+    app, launch, _, widgets = settings_session
     manager = launch()
     assert manager._qs.allKeys() == []
     window = MainWindow(manager)
     widgets.append(window)
-    widget = open_settings(manager, window)
-    widget.settings_changed.connect(window._on_settings_changed)
-    widget.theme_changed.connect(lambda _: window._on_settings_changed())
-    widget.show()
+    window.show()
+    app.processEvents()
 
-    widget._theme_preset_combo.setCurrentText("Bat Cave")
-    widget._font_size_spin.setValue(12)
-    widget._ui_scale_combo.setCurrentIndex(widget._ui_scale_combo.findText("Large  (115%)"))
-    widget._btn_height_combo.setCurrentIndex(2)  # Comfortable
-    widget._widget_spacing_combo.setCurrentIndex(0)  # Tight
-    widget._border_radius_combo.setCurrentIndex(3)  # Rounded
-    widget._panel_padding_combo.setCurrentIndex(2)  # Spacious
-    widget._click_effects_theme_check.setChecked(True)
-    widget._use_theme_effect_check.setChecked(False)
-    widget._hold_effects_check.setChecked(True)
-    widget._use_theme_hold_check.setChecked(False)
-    widget._hold_key_combo.setCurrentIndex(widget._hold_key_combo.findData("blood"))
-    widget._history_max_spin.setValue(20)
-    for _, control, _ in _HISTORY_CONTROLS:
-        getattr(widget, control).setValue(3)
-    widget._chk_track_gif.setChecked(False)
-    assert window._update_shortcut("help", "Ctrl+Alt+H")
-    assert window._update_shortcut("converter_run", "Ctrl+Alt+C")
-    widget.close()  # Flush the real dialog's pending theme/combo changes.
+    def run_settings(host, action):
+        outcomes = []
+
+        def interact():
+            dialog = host._settings_dialog
+            try:
+                outcomes.append((True, action(dialog)))
+            except BaseException as exc:
+                outcomes.append((False, exc))
+            finally:
+                if dialog is not None and dialog.isVisible():
+                    dialog.close()
+
+        QTimer.singleShot(0, interact)
+        host._btn_settings.click()
+        assert outcomes
+        succeeded, result = outcomes[0]
+        if not succeeded:
+            raise result
+        return result
+
+    def configure_preferences(widget):
+        widget._theme_preset_combo.setCurrentText("Bat Cave")
+        widget._font_size_spin.setValue(12)
+        widget._ui_scale_combo.setCurrentIndex(widget._ui_scale_combo.findText("Large  (115%)"))
+        widget._btn_height_combo.setCurrentIndex(2)  # Comfortable
+        widget._widget_spacing_combo.setCurrentIndex(0)  # Tight
+        widget._border_radius_combo.setCurrentIndex(3)  # Rounded
+        widget._panel_padding_combo.setCurrentIndex(2)  # Spacious
+        widget._click_effects_theme_check.setChecked(True)
+        widget._use_theme_effect_check.setChecked(False)
+        widget._hold_effects_check.setChecked(True)
+        widget._use_theme_hold_check.setChecked(False)
+        widget._hold_key_combo.setCurrentIndex(widget._hold_key_combo.findData("blood"))
+        widget._history_max_spin.setValue(20)
+        for _, control, _ in _HISTORY_CONTROLS:
+            getattr(widget, control).setValue(3)
+        widget._chk_track_gif.setChecked(False)
+        assert window._update_shortcut("help", "Ctrl+Alt+H")
+        assert window._update_shortcut("converter_run", "Ctrl+Alt+C")
+
+    run_settings(window, configure_preferences)
     assert window._settings_apply_timer.isActive()
     QTest.qWait(550)
     assert manager.get_theme()["name"] == "Bat Cave"
@@ -489,11 +510,10 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
     manager.sync()
     backup = tmp_path / "preferences.json"
 
-    widget.show()
     with patch("src.ui.settings_dialog.QFileDialog.getSaveFileName",
                return_value=(str(backup), "")), \
             patch("src.ui.settings_dialog.QMessageBox.information"):
-        widget._btn_export_theme.click()
+        run_settings(window, lambda widget: widget._btn_export_theme.click())
     payload = json.loads(backup.read_text(encoding="utf-8"))
     assert not any(key in payload for key in histories)
     assert set(payload) == set(manager._qs.allKeys()) & set(manager.EXPORT_KEYS)
@@ -506,26 +526,26 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
         payload["future_setting"] = {"ignored": True}
         backup.write_text(json.dumps(payload), encoding="utf-8")
 
-    widget.show()
     with patch.object(
         QMessageBox, "question",
         return_value=QMessageBox.StandardButton.Yes,
     ), patch.object(QMessageBox, "information"):
-        widget._btn_reset.click()
+        run_settings(window, lambda widget: widget._btn_reset.click())
     assert manager.get_theme()["name"] == "Panda Dark"
     assert all(manager.get(key) is None for key in histories)
     QTest.qWait(550)
     assert app.font().pointSize() == 10
     assert not window._click_effects._enabled
-    widget.show()
     with patch("src.ui.settings_dialog.QFileDialog.getOpenFileName",
                return_value=(str(backup), "")), \
          patch("src.ui.settings_dialog.QMessageBox.information") as notice:
-        widget._btn_import_theme.click()
-    assert "Restart" in notice.call_args.args[2]
+        def import_preferences(widget):
+            widget._btn_import_theme.click()
+            assert "Restart" in notice.call_args.args[2]
+            assert widget._font_size_spin.value() == 12
+            assert widget._ui_scale_combo.currentText().startswith("Large")
+        run_settings(window, import_preferences)
     assert window._settings_apply_timer.isActive()
-    assert widget._font_size_spin.value() == 12
-    assert widget._ui_scale_combo.currentText().startswith("Large")
     QTest.qWait(550)
     assert app.font().pointSize() == 14
     assert window._click_effects._enabled
@@ -535,23 +555,27 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
     window.close()
 
     reloaded = launch()
-    reopened = open_settings(reloaded)
-    assert reopened._theme_preset_combo.currentText() == "Bat Cave"
-    assert reopened._font_size_spin.value() == 12
-    assert reopened._ui_scale_combo.currentText().startswith("Large")
-    assert reopened._btn_height_combo.currentIndex() == 2
-    assert reopened._widget_spacing_combo.currentIndex() == 0
-    assert reopened._border_radius_combo.currentIndex() == 3
-    assert reopened._panel_padding_combo.currentIndex() == 2
-    assert reopened._click_effects_theme_check.isChecked()
-    assert reopened._hold_key_combo.currentData() == "blood"
-    for _, control, _ in _HISTORY_CONTROLS:
-        assert getattr(reopened, control).value() == 3
-    assert not reopened._chk_track_gif.isChecked()
-    assert reloaded.get_custom_shortcuts()["help"] == "Ctrl+Alt+H"
-    assert reloaded.get_custom_shortcuts()["converter_run"] == "Ctrl+Alt+C"
     restarted = MainWindow(reloaded)
     widgets.append(restarted)
+    restarted.show()
+    app.processEvents()
+
+    def assert_reloaded_controls(reopened):
+        assert reopened._theme_preset_combo.currentText() == "Bat Cave"
+        assert reopened._font_size_spin.value() == 12
+        assert reopened._ui_scale_combo.currentText().startswith("Large")
+        assert reopened._btn_height_combo.currentIndex() == 2
+        assert reopened._widget_spacing_combo.currentIndex() == 0
+        assert reopened._border_radius_combo.currentIndex() == 3
+        assert reopened._panel_padding_combo.currentIndex() == 2
+        assert reopened._click_effects_theme_check.isChecked()
+        assert reopened._hold_key_combo.currentData() == "blood"
+        assert not reopened._chk_track_gif.isChecked()
+        for _, control, _ in _HISTORY_CONTROLS:
+            assert getattr(reopened, control).value() == 3
+    run_settings(restarted, assert_reloaded_controls)
+    assert reloaded.get_custom_shortcuts()["help"] == "Ctrl+Alt+H"
+    assert reloaded.get_custom_shortcuts()["converter_run"] == "Ctrl+Alt+C"
     assert restarted._shortcut_map["help"]["sc"].key().toString() == "Ctrl+Alt+H"
     assert restarted._converter_tab._shortcut_objects["converter_run"].key().toString() == "Ctrl+Alt+C"
     assert app.font().pointSize() == 14
