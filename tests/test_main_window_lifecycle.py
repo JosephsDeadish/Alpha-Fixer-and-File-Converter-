@@ -12,6 +12,7 @@ from PIL import Image
 
 from src.core.settings_manager import SettingsManager
 from src.ui.main_window import MainWindow
+from tests.video_export_helpers import wait_for_video_export
 
 
 @pytest.fixture(scope="module")
@@ -377,6 +378,91 @@ def test_main_window_gif_export_is_recorded_and_actionable_in_history(app, tmp_p
     finally:
         if builder is not None and builder._export_worker is not None:
             builder._export_worker.wait(15_000)
+        with patch.object(
+            editor_project.QMessageBox,
+            "question",
+            return_value=QMessageBox.StandardButton.Discard,
+        ):
+            window.close()
+        sip.delete(window)
+        settings.sync()
+        sip.delete(settings._qs)
+        app.processEvents()
+        app.setFont(original_font)
+        app.setStyleSheet(original_stylesheet)
+
+
+def test_main_window_video_builder_gif_export_is_actionable_in_history(app, tmp_path):
+    from src.ui import editor_project
+
+    original_font, original_stylesheet = app.font(), app.styleSheet()
+    source_path = tmp_path / "still.png"
+    with Image.new("RGBA", (18, 20), "green") as source:
+        source.save(source_path)
+
+    with patch(
+        "src.core.settings_manager._settings_ini_path",
+        return_value=str(tmp_path / "settings.ini"),
+    ):
+        settings = SettingsManager()
+        window = MainWindow(settings)
+    builder = None
+    try:
+        window.show()
+        window._open_or_focus_video_builder()
+        builder = window._video_tool_dlg
+        with patch(
+            "src.ui.video_tool.QFileDialog.getOpenFileNames",
+            return_value=([str(source_path)], ""),
+        ):
+            builder._btn_add_img.click()
+        assert len(builder._clips) == 1
+
+        gif_index = builder._export_fmt_combo.findData("gif")
+        assert gif_index >= 0
+        builder._export_fmt_combo.setCurrentIndex(gif_index)
+        output_path = tmp_path / "video-builder.gif"
+        with patch(
+            "src.ui.video_tool.QFileDialog.getSaveFileName",
+            return_value=(str(output_path), "GIF Files (*.gif)"),
+        ), patch("src.ui.video_tool.QMessageBox.information"):
+            builder._btn_export.click()
+            wait_for_video_export(builder)
+        assert output_path.is_file()
+        with Image.open(output_path) as exported:
+            assert exported.n_frames >= 1
+
+        records = settings.get_video_builder_history()
+        assert len(records) == 1
+        assert records[0]["output"] == str(output_path)
+        assert records[0]["format"] == "GIF"
+        assert records[0]["clip_count"] == 1
+
+        history = window._history_tab
+        window._tabs.setCurrentIndex(window._tabs.indexOf(history))
+        history._sub_tabs.setCurrentIndex(4)
+        app.processEvents()
+        tree = history._vid_tree
+        assert tree.topLevelItemCount() == 1
+        item = tree.topLevelItem(0)
+        assert item.text(1) == output_path.name
+        assert item.text(2) == "GIF"
+        assert item.text(3) == "1"
+        assert item.text(13) == "OK"
+        row = tree.visualItemRect(item)
+        row_click = QPoint(30, row.center().y())
+        assert row.isValid() and tree.viewport().rect().contains(row_click)
+        with patch(
+            "src.ui.history_tab.QDesktopServices.openUrl", return_value=True
+        ) as open_url:
+            QTest.mouseClick(tree.viewport(), Qt.MouseButton.LeftButton, pos=row_click)
+            QTest.mouseDClick(tree.viewport(), Qt.MouseButton.LeftButton, pos=row_click)
+        open_url.assert_called_once()
+        assert open_url.call_args.args[0].toLocalFile() == str(output_path)
+    finally:
+        if builder is not None and builder.is_exporting():
+            builder.request_export_cancel()
+            wait_for_video_export(builder)
         with patch.object(
             editor_project.QMessageBox,
             "question",
