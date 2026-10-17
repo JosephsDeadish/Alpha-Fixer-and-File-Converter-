@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 from PyQt6 import sip
-from PyQt6.QtCore import QCoreApplication, QEvent, Qt
+from PyQt6.QtCore import QCoreApplication, QEvent, QPoint, Qt
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QMenu, QMessageBox, QWidget
 from PIL import Image
@@ -297,6 +297,92 @@ def test_main_window_history_refreshes_and_opens_converter_output(app, tmp_path)
         if worker is not None:
             assert worker.wait(15_000)
         window.close()
+        sip.delete(window)
+        settings.sync()
+        sip.delete(settings._qs)
+        app.processEvents()
+        app.setFont(original_font)
+        app.setStyleSheet(original_stylesheet)
+
+
+def test_main_window_gif_export_is_recorded_and_actionable_in_history(app, tmp_path):
+    from src.ui import editor_project
+
+    original_font, original_stylesheet = app.font(), app.styleSheet()
+    frame_paths = []
+    for index, color in enumerate(("red", "blue")):
+        path = tmp_path / f"frame-{index}.png"
+        with Image.new("RGB", (10, 8), color) as frame:
+            frame.save(path)
+        frame_paths.append(str(path))
+
+    with patch(
+        "src.core.settings_manager._settings_ini_path",
+        return_value=str(tmp_path / "settings.ini"),
+    ):
+        settings = SettingsManager()
+        window = MainWindow(settings)
+    builder = None
+    try:
+        window.show()
+        window._open_or_focus_gif_builder()
+        builder = window._gif_builder_dlg
+        with patch(
+            "src.ui.gif_builder.QFileDialog.getOpenFileNames",
+            return_value=(frame_paths, ""),
+        ):
+            builder._btn_add.click()
+        assert len(builder._frames) == 2
+
+        output_path = tmp_path / "animation.gif"
+        with patch(
+            "src.ui.gif_builder.QFileDialog.getSaveFileName",
+            return_value=(str(output_path), "GIF Files (*.gif)"),
+        ), patch("src.ui.gif_builder.QMessageBox.information"):
+            builder._btn_export.click()
+            deadline = time.monotonic() + 15
+            while builder._export_worker is not None and time.monotonic() < deadline:
+                app.processEvents()
+                time.sleep(0.01)
+            app.processEvents()
+        assert builder._export_worker is None
+        assert output_path.is_file()
+        with Image.open(output_path) as exported:
+            assert exported.n_frames == 2
+
+        records = settings.get_gif_builder_history()
+        assert len(records) == 1
+        assert records[0]["output"] == str(output_path)
+        assert records[0]["frame_count"] == 2
+
+        history = window._history_tab
+        window._tabs.setCurrentIndex(window._tabs.indexOf(history))
+        history._sub_tabs.setCurrentIndex(3)
+        app.processEvents()
+        tree = history._gif_tree
+        assert tree.topLevelItemCount() == 1
+        item = tree.topLevelItem(0)
+        assert item.text(1) == output_path.name
+        assert item.text(2) == "2"
+        row = tree.visualItemRect(item)
+        row_click = QPoint(30, row.center().y())
+        assert row.isValid() and tree.viewport().rect().contains(row_click)
+        with patch(
+            "src.ui.history_tab.QDesktopServices.openUrl", return_value=True
+        ) as open_url:
+            QTest.mouseClick(tree.viewport(), Qt.MouseButton.LeftButton, pos=row_click)
+            QTest.mouseDClick(tree.viewport(), Qt.MouseButton.LeftButton, pos=row_click)
+        open_url.assert_called_once()
+        assert open_url.call_args.args[0].toLocalFile() == str(output_path)
+    finally:
+        if builder is not None and builder._export_worker is not None:
+            builder._export_worker.wait(15_000)
+        with patch.object(
+            editor_project.QMessageBox,
+            "question",
+            return_value=QMessageBox.StandardButton.Discard,
+        ):
+            window.close()
         sip.delete(window)
         settings.sync()
         sip.delete(settings._qs)
