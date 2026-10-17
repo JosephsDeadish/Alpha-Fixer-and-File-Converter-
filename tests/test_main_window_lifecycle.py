@@ -4,8 +4,9 @@ from unittest.mock import patch
 
 import pytest
 from PyQt6 import sip
-from PyQt6.QtCore import QCoreApplication, QEvent
-from PyQt6.QtWidgets import QApplication, QMessageBox, QWidget
+from PyQt6.QtCore import QCoreApplication, QEvent, Qt
+from PyQt6.QtTest import QTest
+from PyQt6.QtWidgets import QApplication, QMenu, QMessageBox, QWidget
 from PIL import Image
 
 from src.core.settings_manager import SettingsManager
@@ -189,3 +190,90 @@ def test_main_window_project_save_reopen_and_recovery_ui_workflow(app, tmp_path,
             app.processEvents()
             app.setFont(original_font)
             app.setStyleSheet(original_stylesheet)
+
+
+def test_main_window_history_refreshes_and_opens_converter_output(app, tmp_path):
+    original_font, original_stylesheet = app.font(), app.styleSheet()
+    output_path = tmp_path / "converted.png"
+    Image.new("RGB", (8, 6), "navy").save(output_path)
+
+    with patch(
+        "src.core.settings_manager._settings_ini_path",
+        return_value=str(tmp_path / "settings.ini"),
+    ):
+        settings = SettingsManager()
+        window = MainWindow(settings)
+    try:
+        window.show()
+        app.processEvents()
+        history = window._history_tab
+        tree = history._conv_tree
+        assert tree.topLevelItemCount() == 0
+
+        settings.add_converter_history({
+            "timestamp": "2026-10-17T03:00:00",
+            "format": "PNG",
+            "file_count": 1,
+            "success": 1,
+            "errors": 0,
+            "files": ["source.png"],
+            "results": [{
+                "source": str(tmp_path / "source.png"),
+                "output": str(output_path),
+                "output_format": "png",
+                "status": "success",
+            }],
+        })
+
+        window._tabs.setCurrentIndex(window._tabs.indexOf(window._converter_tab))
+        window._tabs.setCurrentIndex(window._tabs.indexOf(history))
+        app.processEvents()
+        assert tree.topLevelItemCount() == 1
+        item = tree.topLevelItem(0)
+        assert "converted.png" in item.text(6)
+
+        row = tree.visualItemRect(item)
+        assert row.isValid()
+        assert tree.isVisible()
+        assert tree.viewport().rect().contains(row.center())
+        with patch(
+            "src.ui.history_tab.QDesktopServices.openUrl", return_value=True
+        ) as open_url:
+            QTest.mouseClick(
+                tree.viewport(),
+                Qt.MouseButton.LeftButton,
+                pos=row.center(),
+            )
+            QTest.mouseDClick(
+                tree.viewport(),
+                Qt.MouseButton.LeftButton,
+                pos=row.center(),
+            )
+        app.processEvents()
+        open_url.assert_called_once()
+        assert open_url.call_args.args[0].toLocalFile() == str(output_path)
+
+        def choose_output_and_folder(menu, *_args):
+            actions = {action.text(): action for action in menu.actions()}
+            output_actions = actions["Open output"].menu().actions()
+            folder_actions = actions["Show output folder"].menu().actions()
+            assert [action.text() for action in output_actions] == ["converted.png"]
+            assert len(folder_actions) == 1
+            output_actions[0].trigger()
+            folder_actions[0].trigger()
+
+        with patch(
+            "src.ui.history_tab.QDesktopServices.openUrl", return_value=True
+        ) as open_url, patch.object(QMenu, "exec", new=choose_output_and_folder):
+            tree.customContextMenuRequested.emit(row.center())
+        assert [
+            call.args[0].toLocalFile() for call in open_url.call_args_list
+        ] == [str(output_path), str(tmp_path)]
+    finally:
+        window.close()
+        sip.delete(window)
+        settings.sync()
+        sip.delete(settings._qs)
+        app.processEvents()
+        app.setFont(original_font)
+        app.setStyleSheet(original_stylesheet)
