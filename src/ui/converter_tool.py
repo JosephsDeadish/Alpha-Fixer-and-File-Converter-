@@ -893,6 +893,7 @@ class ConverterTab(QWidget):
         return available < max(760, self.fontMetrics().height() * 38)
 
     def _reflow_controls(self):
+        available = self._content_scroll.viewport().width()
         compact = self._is_compact_layout()
         self._grp_fmt.setTitle(
             "Format" if compact else self._grp_fmt_full_title
