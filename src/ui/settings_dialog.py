@@ -2993,8 +2993,8 @@ class SettingsDialog(QDialog):
         self._theme_search.textChanged.connect(self._on_theme_search_changed)
         self._btn_save_theme.clicked.connect(self._save_custom_theme)
         self._btn_delete_theme.clicked.connect(self._delete_custom_theme)
-        self._btn_export_theme.clicked.connect(self._export_theme)
-        self._btn_import_theme.clicked.connect(self._import_theme)
+        self._btn_export_theme.clicked.connect(self._export_preferences_backup)
+        self._btn_import_theme.clicked.connect(self._import_preferences_backup)
         self._btn_close.clicked.connect(self.accept)
         self._btn_reset.clicked.connect(self._reset_all_settings)
         self._btn_reset_unlocks.clicked.connect(self._reset_unlocks_only)
@@ -3899,6 +3899,60 @@ class SettingsDialog(QDialog):
             if self._active_theme_selection == ("saved", raw_name):
                 self._active_theme_selection = None
             self._rebuild_theme_combo(filter_text=self._current_filter_text())
+
+    def _export_preferences_backup(self) -> None:
+        self._flush_pending_preferences()
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Preferences Backup", "alpha_fixer_settings.json",
+            "JSON Files (*.json);;All Files (*)",
+        )
+        if not path:
+            return
+        chosen_path = path
+        if not path.lower().endswith(".json"):
+            path += ".json"
+        from ._ui_utils import confirm_normalized_save_path
+        if not confirm_normalized_save_path(self, chosen_path, path):
+            return
+        try:
+            self._settings.export_settings(path)
+            QMessageBox.information(
+                self, "Export Preferences Backup",
+                f"Preferences exported to:\n{path}",
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Export Failed", str(exc))
+
+    def _import_preferences_backup(self) -> None:
+        self._flush_pending_preferences()
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import Preferences Backup", "",
+            "JSON Files (*.json);;All Files (*)",
+        )
+        if not path:
+            return
+        try:
+            keys = self._settings.import_settings(path)
+            self._theme = self._settings.get_theme()
+            name = self._theme.get("name", "")
+            saved = self._settings.get_saved_themes()
+            self._active_theme_selection = (
+                ("saved", name) if saved.get(name) == self._theme else
+                ("preset", name) if name in PRESET_THEMES else
+                ("hidden", name) if name in HIDDEN_THEMES else None
+            )
+            self._theme_search.clear()
+            self._rebuild_theme_combo(filter_text=self._current_filter_text())
+            self._load_values()
+            self.theme_changed.emit(self._theme)
+            self.settings_changed.emit()
+            QMessageBox.information(
+                self, "Import Preferences Backup",
+                f"Imported {len(keys)} preferences from:\n{path}\n\n"
+                "Restart the app to fully apply all changes.",
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Import Failed", str(exc))
 
     def _export_theme(self):
         """Export the current theme to a JSON file chosen by the user."""

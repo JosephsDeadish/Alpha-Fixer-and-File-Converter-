@@ -489,22 +489,14 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
     manager.sync()
     backup = tmp_path / "preferences.json"
 
-    def trigger_help_action(label):
-        def execute(menu, *_args):
-            action = next(
-                action for action in menu.actions() if label in action.text()
-            )
-            action.trigger()
-        return execute
-
-    with patch("src.ui.main_window.QFileDialog.getSaveFileName",
-               return_value=(str(backup), "")), \
-            patch("src.ui.main_window.QMessageBox.information"):
-        with patch("src.ui.main_window.QMenu.exec",
-                   new=trigger_help_action("Export Preferences Backup")):
-            window._btn_help.click()
+    widget.show()
+    with patch("src.ui.settings_dialog.QFileDialog.getSaveFileName",
+              return_value=(str(backup), "")), \
+            patch("src.ui.settings_dialog.QMessageBox.information"):
+        widget._btn_export_theme.click()
     payload = json.loads(backup.read_text(encoding="utf-8"))
     assert not any(key in payload for key in histories)
+    assert set(payload) == set(manager._qs.allKeys()) & set(manager.EXPORT_KEYS)
     if legacy:
         for key, value in payload.items():
             if type(value) is bool:
@@ -514,21 +506,26 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
         payload["future_setting"] = {"ignored": True}
         backup.write_text(json.dumps(payload), encoding="utf-8")
 
-    manager.reset_all()
+    widget.show()
+    with patch.object(
+        QMessageBox, "question",
+        return_value=QMessageBox.StandardButton.Yes,
+    ), patch.object(QMessageBox, "information"):
+        widget._btn_reset.click()
     assert manager.get_theme()["name"] == "Panda Dark"
     assert all(manager.get(key) is None for key in histories)
-    window._on_settings_changed()
     QTest.qWait(550)
     assert app.font().pointSize() == 10
     assert not window._click_effects._enabled
-    with patch("src.ui.main_window.QFileDialog.getOpenFileName",
+    widget.show()
+    with patch("src.ui.settings_dialog.QFileDialog.getOpenFileName",
                return_value=(str(backup), "")), \
-         patch("src.ui.main_window.QMessageBox.information") as notice:
-        with patch("src.ui.main_window.QMenu.exec",
-                   new=trigger_help_action("Import Preferences Backup")):
-            window._btn_help.click()
+         patch("src.ui.settings_dialog.QMessageBox.information") as notice:
+        widget._btn_import_theme.click()
     assert "Restart" in notice.call_args.args[2]
     assert window._settings_apply_timer.isActive()
+    assert widget._font_size_spin.value() == 12
+    assert widget._ui_scale_combo.currentText().startswith("Large")
     QTest.qWait(550)
     assert app.font().pointSize() == 14
     assert window._click_effects._enabled
