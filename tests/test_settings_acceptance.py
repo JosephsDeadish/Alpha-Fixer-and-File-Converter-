@@ -488,10 +488,21 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
         manager.set(key, histories[key])
     manager.sync()
     backup = tmp_path / "preferences.json"
+
+    def trigger_help_action(label):
+        def execute(menu, *_args):
+            action = next(
+                action for action in menu.actions() if label in action.text()
+            )
+            action.trigger()
+        return execute
+
     with patch("src.ui.main_window.QFileDialog.getSaveFileName",
                return_value=(str(backup), "")), \
             patch("src.ui.main_window.QMessageBox.information"):
-        window._export_settings()
+        with patch("src.ui.main_window.QMenu.exec",
+                   new=trigger_help_action("Export Preferences Backup")):
+            window._btn_help.click()
     payload = json.loads(backup.read_text(encoding="utf-8"))
     assert not any(key in payload for key in histories)
     if legacy:
@@ -513,7 +524,9 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
     with patch("src.ui.main_window.QFileDialog.getOpenFileName",
                return_value=(str(backup), "")), \
          patch("src.ui.main_window.QMessageBox.information") as notice:
-        window._import_settings()
+        with patch("src.ui.main_window.QMenu.exec",
+                   new=trigger_help_action("Import Preferences Backup")):
+            window._btn_help.click()
     assert "Restart" in notice.call_args.args[2]
     assert window._settings_apply_timer.isActive()
     QTest.qWait(550)

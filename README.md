@@ -558,8 +558,10 @@ outstanding.
 GIF project/recovery loading preserves an explicit absence of imported source
 timing instead of inventing a source hold from an edited delay. Generated-image
 roundtrips cover reopening, resaving and undo, alongside bounded failed-load and
-storage/source-identity regressions. Physical storage/power-loss recovery and full
-native project/settings acceptance remain outstanding.
+storage/source-identity regressions. Disk-backed offscreen MainWindow tests also
+exercise GIF and Video Builder import, project save/reopen, autosave across relaunch
+and UI recovery. Physical storage/power-loss and packaged/native-desktop acceptance
+remain outstanding.
 
 Standard-image previews, conversion and Alpha loading normalize EXIF/XMP
 orientation before resizing or exporting. Retained metadata no longer reapplies
@@ -874,7 +876,9 @@ their own undo behavior. History retains references rather than copying pixels
 and is capped at 50 edits and 32 million history-only pixels. Older edits may be
 released. Global export settings are not part of this history. Generated-frame
 regressions cover history branching, resource cleanup and project replacement;
-Native workflow acceptance remains outstanding.
+disk-backed offscreen MainWindow acceptance covers GIF Builder import,
+save/reopen and recovery through its UI. Packaged/native-desktop acceptance
+remains outstanding.
 
 Converter metadata checks now cover EXIF dimensions after resize, nested
 interoperability tags, TIFF metadata/storage-tag separation, AVIF ICC copying
@@ -997,7 +1001,9 @@ Settings backup imports and resets refresh registered keyboard shortcuts in the
 running application and open tools through the existing deferred settings apply.
 Restoration does not rewrite shortcut preferences or reload unsaved Painter media,
 masks or editing history. Bounded tests use real tool widgets with a lightweight
-host; complete native MainWindow reset/restore acceptance remains outstanding.
+host. Disk-backed offscreen relaunch tests exercise Settings reset buttons and
+MainWindow preference export/import through the Help menu actions; packaged/native
+desktop qualification remains outstanding.
 
 Video splits preserve the original sampled frame sequence and rounded timeline
 length, including nested splits at non-unit speeds. Frozen exports retain the
