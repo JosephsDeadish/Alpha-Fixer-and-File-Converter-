@@ -1,5 +1,6 @@
 import json
 import time
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -194,8 +195,6 @@ def test_main_window_project_save_reopen_and_recovery_ui_workflow(app, tmp_path,
 
 def test_main_window_history_refreshes_and_opens_converter_output(app, tmp_path):
     original_font, original_stylesheet = app.font(), app.styleSheet()
-    output_path = tmp_path / "converted.png"
-    Image.new("RGB", (8, 6), "navy").save(output_path)
 
     with patch(
         "src.core.settings_manager._settings_ini_path",
@@ -209,28 +208,47 @@ def test_main_window_history_refreshes_and_opens_converter_output(app, tmp_path)
         history = window._history_tab
         tree = history._conv_tree
         assert tree.topLevelItemCount() == 0
-
-        settings.add_converter_history({
-            "timestamp": "2026-10-17T03:00:00",
-            "format": "PNG",
-            "file_count": 1,
-            "success": 1,
-            "errors": 0,
-            "files": ["source.png"],
-            "results": [{
-                "source": str(tmp_path / "source.png"),
-                "output": str(output_path),
-                "output_format": "png",
-                "status": "success",
-            }],
-        })
-
         window._tabs.setCurrentIndex(window._tabs.indexOf(window._converter_tab))
+        converter = window._converter_tab
+        source_path = tmp_path / "source.png"
+        with Image.new("RGB", (8, 6), "navy") as source:
+            source.save(source_path)
+        output_dir = tmp_path / "converted"
+        with patch(
+            "src.ui.converter_tool.QFileDialog.getOpenFileNames",
+            return_value=([str(source_path)], ""),
+        ):
+            converter._btn_add_files.click()
+        converter._out_dir_edit.setText(str(output_dir))
+        fmt_index = next(
+            index for index in range(converter._fmt_combo.count())
+            if converter._fmt_combo.itemData(index)[0] == "JPEG"
+        )
+        assert fmt_index >= 0
+        converter._fmt_combo.setCurrentIndex(fmt_index)
+        with patch(
+            "src.ui.converter_tool.QMessageBox.exec",
+            return_value=QMessageBox.DialogCode.Rejected,
+        ):
+            converter._btn_run.click()
+            deadline = time.monotonic() + 15
+            while not settings.get_converter_history() and time.monotonic() < deadline:
+                app.processEvents()
+                time.sleep(0.01)
+            app.processEvents()
+        records = settings.get_converter_history()
+        assert records
+        result = records[0]["results"][0]
+        output_path = Path(result["output"])
+        assert output_path.is_file()
+        assert result["status"] == "success"
+        assert result["output_format"] == "jpg"
+
         window._tabs.setCurrentIndex(window._tabs.indexOf(history))
         app.processEvents()
         assert tree.topLevelItemCount() == 1
         item = tree.topLevelItem(0)
-        assert "converted.png" in item.text(6)
+        assert output_path.name in item.text(6)
 
         row = tree.visualItemRect(item)
         assert row.isValid()
@@ -257,7 +275,7 @@ def test_main_window_history_refreshes_and_opens_converter_output(app, tmp_path)
             actions = {action.text(): action for action in menu.actions()}
             output_actions = actions["Open output"].menu().actions()
             folder_actions = actions["Show output folder"].menu().actions()
-            assert [action.text() for action in output_actions] == ["converted.png"]
+            assert [action.text() for action in output_actions] == [output_path.name]
             assert len(folder_actions) == 1
             output_actions[0].trigger()
             folder_actions[0].trigger()
@@ -268,8 +286,16 @@ def test_main_window_history_refreshes_and_opens_converter_output(app, tmp_path)
             tree.customContextMenuRequested.emit(row.center())
         assert [
             call.args[0].toLocalFile() for call in open_url.call_args_list
-        ] == [str(output_path), str(tmp_path)]
+        ] == [str(output_path), str(output_dir)]
     finally:
+        converter = window._converter_tab
+        preview_loader = converter._preview_loader
+        converter._stop_preview_loader()
+        if preview_loader is not None:
+            assert preview_loader.wait(15_000)
+        worker = converter._worker
+        if worker is not None:
+            assert worker.wait(15_000)
         window.close()
         sip.delete(window)
         settings.sync()

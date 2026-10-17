@@ -142,7 +142,7 @@ History views record the tools' operations. Stopping a conversion prevents new w
 Alpha/Converter stopped batches retain their actual completion percentage and report unprocessed files instead of displaying 100% “Done”. History tooltips retain that status, searchable with `status:stopped`; TXT, CSV, JSON, and HTML exports also include Status and Not processed fields.
 Original-file deletion defaults to **Keep Originals** and is offered only after a fully successful batch for recorded, existing, distinct outputs. Failed/unprocessed originals, in-place outputs, and sources sharing an output are never offered. Large batches retain an output manifest even when per-file success logging is suppressed.
 History exports follow the visible, filtered row order and preserve complete filenames, including in plain text. GIF history thumbnails pause when their view is hidden, and export destination failures provide a recovery warning instead of an unhandled error.
-Disk-backed offscreen MainWindow acceptance also verifies that selecting History refreshes Converter records and double-clicking a recorded output opens that file.
+Disk-backed offscreen MainWindow acceptance imports an image through the Converter UI, runs a real conversion, verifies the result in History, and exercises double-click and output/folder context-menu actions.
 
 ## UI & Customization
 - 🐼 **18 built-in themes**: Panda Dark (default), Panda Light, Neon Panda, Gore, Bat Cave, Rainbow Chaos, Otter Cove, Galaxy, Galaxy Otter, Goth, Volcano 🌋, Arctic ❄, Fairy Garden 🧚, Mermaid 🧜, Shark Bait 🦈, Alien 🛸, Noodle 🍜, Pancake 🥞
