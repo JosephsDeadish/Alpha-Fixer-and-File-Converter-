@@ -1089,8 +1089,18 @@ class GifBuilderDialog(QDialog):
             except Exception as exc:
                 detail = str(exc)
                 if treat_as_video:
-                    recovery_note = _visual_still_fallback_note(probe)
-                    still_frame = _extract_visual_still_frame(path, probe)
+                    fallback_probe = probe
+                    if (
+                        preferred_video_stream_index is not None
+                        or preferred_audio_stream_index is not None
+                    ):
+                        fallback_probe = _probe_media_details(
+                            path,
+                            preferred_video_stream_index=preferred_video_stream_index,
+                            preferred_audio_stream_index=preferred_audio_stream_index,
+                        ) or probe
+                    recovery_note = _visual_still_fallback_note(fallback_probe)
+                    still_frame = _extract_visual_still_frame(path, fallback_probe)
                     if still_frame is not None:
                         pil_frames = [still_frame]
                         frame_delay_ms = None

@@ -106,6 +106,7 @@ def test_gif_multistream_import_applies_manual_selection_or_skips_cleanly(
         app, builder, tmp_path, accepted):
     source = tmp_path / "multi.mkv"
     source.touch()
+
     class Picker:
         def __init__(self, *_args):
             self.selected_video_stream_index = 3
@@ -134,6 +135,52 @@ def test_gif_multistream_import_applies_manual_selection_or_skips_cleanly(
         load_video.assert_not_called()
         assert not builder._frames
         assert "stream selection cancelled" in builder._import_detail_box.toPlainText()
+
+
+def test_gif_selected_stream_still_fallback_keeps_manual_selection(builder, tmp_path):
+    source = tmp_path / "multi.mkv"
+    source.touch()
+    probe = _multi_stream_probe()
+    selected_probe = {**probe, "video_stream_index": 3, "audio_stream_index": 4}
+
+    class Picker:
+        def __init__(self, *_args):
+            self.selected_video_stream_index = 3
+            self.selected_audio_stream_index = 4
+
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+
+    still = Image.new("RGBA", (4, 3), "green")
+    with patch(
+        "src.ui.gif_builder._probe_media_details",
+        side_effect=[probe, selected_probe],
+    ) as probe_media, patch(
+        "src.ui.gif_builder._GifStreamPickerDialog", Picker
+    ), patch(
+        "src.ui.gif_builder._load_video_frames",
+        side_effect=ValueError("selected stream decode failed"),
+    ) as load_video, patch(
+        "src.ui.gif_builder._visual_still_fallback_note",
+        return_value="still-frame recovery used",
+    ), patch(
+        "src.ui.gif_builder._extract_visual_still_frame",
+        return_value=still,
+    ) as extract_still:
+        builder._import_paths([str(source)])
+
+    assert probe_media.call_args.kwargs == {
+        "preferred_video_stream_index": 3,
+        "preferred_audio_stream_index": 4,
+    }
+    assert load_video.call_args.kwargs == {
+        "preferred_video_stream_index": 3,
+        "preferred_audio_stream_index": 4,
+        "load_note": [],
+    }
+    extract_still.assert_called_once_with(str(source), selected_probe)
+    assert len(builder._frames) == 1
+    assert "still-frame recovery used" in builder._import_detail_box.toPlainText()
 
 
 def test_selected_video_stream_decoder_uses_video_recovery_path_and_releases_clip(tmp_path):
