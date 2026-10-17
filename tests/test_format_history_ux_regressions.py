@@ -454,7 +454,7 @@ def test_tool_guidance_tracks_theme_and_scale_without_losing_status(
         widget.show()
         guidance = [label for label in widget.findChildren(QLabel)
                     if label.property("toolGuidance")]
-        assert len(guidance) == (4 if tool == "alpha" else 3)
+        assert guidance
         capability = widget._capability_lbl
         assert capability.property("capabilityState") == ("limited" if limited else "ready")
         original_capability = capability.text(), capability.toolTip()

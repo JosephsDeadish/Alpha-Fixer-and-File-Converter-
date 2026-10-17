@@ -187,10 +187,12 @@ def test_numeric_filename_substrings_do_not_change_numeric_count_equality(
     for query in ("file:2026", 'file:"2026"', "file:20261009"):
         search.setText(query)
         assert len(visible(tree)) == 1
-        assert "photo_20261009.png" in visible(tree)[0].text(tree.columnCount() - 1)
+        fields = visible(tree)[0].data(0, _HistoryItem._FILTER_FIELDS_ROLE)
+        assert "photo_20261009.png" in fields["file"]
     search.setText("file:12")
     assert len(visible(tree)) == 1
-    assert "photo_20121009.png" in visible(tree)[0].text(tree.columnCount() - 1)
+    fields = visible(tree)[0].data(0, _HistoryItem._FILTER_FIELDS_ROLE)
+    assert "photo_20121009.png" in fields["file"]
     for query in ("ok:2", "success:2", 'success:"2"'):
         search.setText(query)
         assert len(visible(tree)) == 1
@@ -256,8 +258,24 @@ def test_reopened_exports_align_filtered_sorted_view(
     items = visible(tree)
     assert len(items) == 3
     rows = [[item.text(col) for col in range(tree.columnCount())] for item in items]
+    json_rows = []
+    if tab == 0:
+        for row, item in zip(rows, items):
+            outputs = history._history_outputs(item)
+            options = item.data(0, _HistoryItem._OPTIONS_ROLE) or {}
+            failures = item.data(0, _HistoryItem._FAILURES_ROLE) or []
+            results = item.data(0, _HistoryItem._RESULTS_ROLE) or []
+            row[6] = "\n".join(outputs)
+            row[7] = json.dumps(options, ensure_ascii=False, sort_keys=True)
+            row[8] = "\n".join(failures)
+            row.append(json.dumps(results, ensure_ascii=False, sort_keys=True))
+            json_row = list(row)
+            json_row[-1] = results
+            json_rows.append(json_row)
     if tab < 2:
         for row, item in zip(rows, items):
+            row.extend(item.data(0, _HistoryItem._BATCH_STATUS_ROLE))
+        for row, item in zip(json_rows, items):
             row.extend(item.data(0, _HistoryItem._BATCH_STATUS_ROLE))
     path = tmp_path / f"history.{extension}"
     with patch("src.ui.history_tab.QFileDialog.getSaveFileName",
@@ -273,7 +291,8 @@ def test_reopened_exports_align_filtered_sorted_view(
         assert all(len(row) == len(exported[0]) for row in exported)
     elif extension == "json":
         exported = json.loads(text)
-        assert [list(row.values()) for row in exported] == rows
+        expected = json_rows if tab == 0 else rows
+        assert [list(row.values()) for row in exported] == expected
         if tab < 2:
             assert all(row["Status"] == "Stopped" and row["Not processed"] == "10"
                        for row in exported)
