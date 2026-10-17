@@ -397,14 +397,17 @@ def test_tiff_pages_enter_editor_as_independently_editable_frames(builder, folde
 
 def test_animated_webp_enters_editor_with_source_timing_and_undo_redo(builder, folder):
     path = make_animated_webp(folder)
-    builder.add_media_paths([str(path)])
+    still_path = folder / "still.webp"
+    with Image.new("RGBA", (3, 2), (40, 50, 60, 255)) as still:
+        still.save(still_path, format="WEBP", lossless=True)
+    builder.add_media_paths([str(path), str(still_path)])
     entries = tuple(builder._frames)
-    assert len(entries) == builder._frame_list.count() == 3
-    assert [entry.frame_index for entry in entries] == [0, 1, 2]
-    assert [entry.delay_ms for entry in entries] == [80, 140, 230]
-    assert [entry.source_delay_ms for entry in entries] == [80, 140, 230]
+    assert len(entries) == builder._frame_list.count() == 4
+    assert [entry.frame_index for entry in entries] == [0, 1, 2, 0]
+    assert [entry.delay_ms for entry in entries] == [80, 140, 230, None]
+    assert [entry.source_delay_ms for entry in entries] == [80, 140, 230, None]
     assert [entry._pil.getpixel((1, 1)) for entry in entries] == [
-        (255, 0, 0, 255), (0, 255, 0, 128), (0, 0, 255, 255),
+        (255, 0, 0, 255), (0, 255, 0, 128), (0, 0, 255, 255), (40, 50, 60, 255),
     ]
     builder._undo()
     assert builder._frames == []
