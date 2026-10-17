@@ -319,9 +319,20 @@ def test_main_window_history_refreshes_and_opens_converter_output(app, tmp_path)
         )
         assert fmt_index >= 0
         converter._fmt_combo.setCurrentIndex(fmt_index)
+
+        deletion_prompts = []
+
+        def keep_originals_by_default(dialog):
+            deletion_prompts.append(dialog)
+            assert "delete the original source file" in dialog.text().lower()
+            assert str(source_path.resolve()) in dialog.detailedText()
+            assert dialog.defaultButton().text() == "Keep Originals"
+            assert dialog.escapeButton() is dialog.defaultButton()
+            return QMessageBox.DialogCode.Rejected
+
         with patch(
             "src.ui.converter_tool.QMessageBox.exec",
-            return_value=QMessageBox.DialogCode.Rejected,
+            keep_originals_by_default,
         ):
             converter._btn_run.click()
             deadline = time.monotonic() + 15
@@ -329,6 +340,8 @@ def test_main_window_history_refreshes_and_opens_converter_output(app, tmp_path)
                 app.processEvents()
                 time.sleep(0.01)
             app.processEvents()
+        assert len(deletion_prompts) == 1
+        assert source_path.is_file()
         records = settings.get_converter_history()
         assert records
         result = records[0]["results"][0]
@@ -380,6 +393,54 @@ def test_main_window_history_refreshes_and_opens_converter_output(app, tmp_path)
         assert [
             call.args[0].toLocalFile() for call in open_url.call_args_list
         ] == [str(output_path), str(output_dir)]
+
+        settings.sync()
+        converter._stop_preview_loader()
+        preview_loader = converter._preview_loader
+        if preview_loader is not None:
+            assert preview_loader.wait(15_000)
+        worker = converter._worker
+        if worker is not None:
+            assert worker.wait(15_000)
+        window.close()
+        sip.delete(window)
+        sip.delete(settings._qs)
+        app.processEvents()
+
+        with patch(
+            "src.core.settings_manager._settings_ini_path",
+            return_value=str(tmp_path / "settings.ini"),
+        ):
+            settings = SettingsManager()
+            window = MainWindow(settings)
+        window.show()
+        history = window._history_tab
+        window._tabs.setCurrentIndex(window._tabs.indexOf(history))
+        app.processEvents()
+        assert settings.get_converter_history() == records
+        assert source_path.is_file()
+        assert output_path.is_file()
+        tree = history._conv_tree
+        assert tree.topLevelItemCount() == 1
+        item = tree.topLevelItem(0)
+        assert output_path.name in item.text(6)
+        row = tree.visualItemRect(item)
+        assert row.isValid() and tree.viewport().rect().contains(row.center())
+        with patch(
+            "src.ui.history_tab.QDesktopServices.openUrl", return_value=True
+        ) as open_url:
+            QTest.mouseClick(
+                tree.viewport(),
+                Qt.MouseButton.LeftButton,
+                pos=row.center(),
+            )
+            QTest.mouseDClick(
+                tree.viewport(),
+                Qt.MouseButton.LeftButton,
+                pos=row.center(),
+            )
+        open_url.assert_called_once()
+        assert open_url.call_args.args[0].toLocalFile() == str(output_path)
     finally:
         converter = window._converter_tab
         preview_loader = converter._preview_loader
