@@ -85,9 +85,9 @@ _TUTORIAL_STEPS = [
         "icon": "🎞",
         "title": "GIF Builder",
         "body": (
-            "The <b>GIF Builder</b> lets you assemble animated GIFs from a "
-            "collection of images.\n\n"
-            "1. Add frames from files or folders.\n"
+            "The <b>GIF Builder</b> lets you assemble animated GIFs from still "
+            "images, animated GIFs, animated WebP files, and video.\n\n"
+            "1. Add frames from files or folders; animations contribute all their frames.\n"
             "2. Drag them to reorder the sequence.\n"
             "3. Set the frame delay (speed) and loop count.\n"
             "4. Click <b>Build GIF</b> to generate the animated file.\n\n"

@@ -1,8 +1,9 @@
 from unittest.mock import patch
 
 import pytest
-from PIL import Image
+from PIL import Image, features
 from PyQt6 import sip
+from PyQt6.QtCore import QCoreApplication, QEvent
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
 
@@ -22,8 +23,13 @@ def builder(app):
     if widget.is_exporting():
         widget._cancel_export()
         wait_for_gif_export(widget)
+    widget._project.timer.stop()
+    widget._project._closing_approved = True
+    widget._project._release_session()
     widget.close()
     sip.delete(widget)
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    app.processEvents()
 
 
 def make_sources(folder, durations=(80, 140, 230)):
@@ -40,6 +46,30 @@ def make_sources(folder, durations=(80, 140, 230)):
             frame.close()
 
 
+def make_animated_webp(folder, durations=(80, 140, 230)):
+    if not features.check("webp"):
+        pytest.skip("Pillow WebP support unavailable")
+    frames = [Image.new("RGBA", (12, 8), color) for color in ("red", "green", "blue")]
+    path = folder / "source.webp"
+    try:
+        frames[0].save(
+            path,
+            format="WEBP",
+            save_all=True,
+            append_images=frames[1:],
+            duration=list(durations),
+            loop=0,
+            lossless=True,
+            exact=True,
+        )
+    except (OSError, ValueError):
+        pytest.skip("Pillow animated WebP encoding unavailable")
+    finally:
+        for frame in frames:
+            frame.close()
+    return path
+
+
 def decoded_delays(path):
     with Image.open(path) as image:
         delays = []
@@ -53,6 +83,21 @@ def export(builder, path):
     with patch("src.ui.gif_builder.QFileDialog.getSaveFileName", return_value=(str(path), "")), \
             patch("src.ui.gif_builder.QMessageBox.information"), \
             patch("src.ui.gif_builder.QMessageBox.critical") as error:
+        builder._export()
+        wait_for_gif_export(builder)
+        error.assert_not_called()
+    return decoded_delays(path)
+
+
+def export_inline(builder, path):
+    def run_worker_inline(worker):
+        worker.run()
+        worker.finished.emit()
+
+    with patch("src.ui.gif_builder.QFileDialog.getSaveFileName", return_value=(str(path), "")), \
+            patch("src.ui.gif_builder.QMessageBox.information"), \
+            patch("src.ui.gif_builder.QMessageBox.critical") as error, \
+    patch("src.ui.gif_builder.GifExportWorker.start", new=run_worker_inline):
         builder._export()
         wait_for_gif_export(builder)
         error.assert_not_called()
@@ -88,6 +133,24 @@ def test_import_preview_export_preserve_variable_gif_timing(builder, tmp_path):
         builder._advance_preview()
     assert builder._preview_idx == 0
     assert export(builder, tmp_path / "roundtrip.gif") == [80, 140, 230, 170]
+    assert not builder._preview_timer.isActive()
+
+
+def test_import_preview_export_preserve_variable_animated_webp_timing(builder, tmp_path):
+    source = make_animated_webp(tmp_path)
+    builder.add_media_paths([str(source)])
+    assert [frame.source_delay_ms for frame in builder._frames] == [80, 140, 230]
+    builder._frame_list.setCurrentRow(0)
+    assert builder._pf_check.isChecked()
+    assert builder._pf_slider.value() == 80
+    assert "80 ms (source timing)" in builder._frame_diag_lbl.text()
+    builder._btn_play.setChecked(True)
+    for index, delay in enumerate((80, 140, 230)):
+        assert builder._preview_idx == index
+        assert builder._preview_timer.interval() == delay
+        builder._advance_preview()
+    assert builder._preview_idx == 0
+    assert export_inline(builder, tmp_path / "webp-roundtrip.gif") == [80, 140, 230]
     assert not builder._preview_timer.isActive()
 
 

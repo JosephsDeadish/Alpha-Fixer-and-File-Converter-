@@ -249,7 +249,7 @@ def _gif_builder_capability_details() -> str:
         lines.extend([
             "",
             "Current behavior:",
-            "• Image and animated-GIF imports are fully available.",
+            "• Images, all frames in animated GIFs, and all frames in animated WebP files are available.",
             "• Video imports expand decoded visual frames into GIF frames automatically; audio is ignored on import/export.",
             "• Odd-container probing/recovery is best-effort when ffmpeg can expose a playable stream or salvageable still frame.",
         ])
@@ -262,7 +262,7 @@ def _gif_builder_capability_details() -> str:
         lines.extend([
             "",
             "Limited mode details:",
-            "• Image and animated-GIF workflows remain available.",
+            "• Image, animated-GIF, and animated-WebP workflows remain available.",
             "• Video-source imports and odd-container probing need imageio, imageio-ffmpeg, and ffmpeg.",
             "• Manual multi-stream selection is not available yet.",
         ])
@@ -610,7 +610,8 @@ class GifBuilderDialog(QDialog):
         self._btn_add = QPushButton("➕  Add Media")
         self._btn_add.setToolTip(
             "Add one or more images or video files to the GIF timeline.\n"
-            "Supports PNG, JPEG, WEBP, BMP, TIFF, GIF (all frames), MP4, WEBM, AVI, MOV, and more.\n"
+            "Supports PNG, JPEG, WEBP (including all animation frames), BMP, TIFF, GIF (all frames), "
+            "MP4, WEBM, AVI, MOV, and more.\n"
             "You can also drag supported media files directly onto the grid below."
         )
         self._btn_add.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
