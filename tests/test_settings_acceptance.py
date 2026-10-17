@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 from PIL import Image
 from PyQt6 import sip
-from PyQt6.QtCore import QSettings
+from PyQt6.QtCore import QSettings, QTimer
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
@@ -593,6 +593,40 @@ def test_confirmed_dialog_resets_survive_relaunch_with_intended_scope(
     assert reloaded.get_custom_shortcuts() == ({} if reset_all else {"help": "Ctrl+Alt+H"})
     for key, value in histories.items():
         assert reloaded.get(key) == (None if reset_all else value)
+
+
+def test_main_window_settings_dialog_applies_theme_and_persists_after_relaunch(
+        settings_session):
+    from src.ui.main_window import MainWindow
+
+    app, launch, _, widgets = settings_session
+    original_stylesheet = app.styleSheet()
+    manager = launch()
+    window = MainWindow(manager)
+    widgets.append(window)
+    window.show()
+
+    def change_settings_through_dialog():
+        dialog = window._settings_dialog
+        assert dialog is not None
+        assert dialog.parent() is window
+        dialog._theme_preset_combo.setCurrentText("Bat Cave")
+        dialog._font_size_spin.setValue(12)
+        dialog._btn_close.click()
+
+    QTimer.singleShot(0, change_settings_through_dialog)
+    window._open_settings()
+
+    assert manager.get_theme()["name"] == "Bat Cave"
+    assert manager.get("font_size") == 12
+    assert window._settings_apply_timer.isActive()
+    QTest.qWait(550)
+    assert app.styleSheet() != original_stylesheet
+
+    window.close()
+    reloaded = launch()
+    assert reloaded.get_theme()["name"] == "Bat Cave"
+    assert reloaded.get("font_size") == 12
 
 
 def test_invalid_backup_preserves_every_ini_key_and_disk_after_relaunch(

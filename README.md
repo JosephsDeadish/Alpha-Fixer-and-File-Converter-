@@ -1002,8 +1002,9 @@ running application and open tools through the existing deferred settings apply.
 Restoration does not rewrite shortcut preferences or reload unsaved Painter media,
 masks or editing history. Bounded tests use real tool widgets with a lightweight
 host. Disk-backed offscreen relaunch tests exercise Settings reset buttons and
-MainWindow preference export/import through the Help menu actions; packaged/native
-desktop qualification remains outstanding.
+MainWindow preference export/import through the Help menu actions. They also open
+Settings through MainWindow, apply a theme live, and verify it survives relaunch;
+packaged/native desktop qualification remains outstanding.
 
 Video splits preserve the original sampled frame sequence and rounded timeline
 length, including nested splits at non-unit speeds. Frozen exports retain the
