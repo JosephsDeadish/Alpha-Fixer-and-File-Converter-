@@ -401,6 +401,7 @@ def test_main_window_history_refreshes_and_opens_converter_output(app, tmp_path)
 def test_main_window_converter_fallback_batch_failure_retry_and_history_export(
         app, tmp_path):
     original_font, original_stylesheet = app.font(), app.styleSheet()
+    settings_path = tmp_path / "settings.ini"
     valid_path = tmp_path / "valid.png"
     broken_path = tmp_path / "broken.png"
     with Image.new("RGBA", (9, 7), (30, 80, 140, 180)) as source:
@@ -411,7 +412,7 @@ def test_main_window_converter_fallback_batch_failure_retry_and_history_export(
 
     with patch(
         "src.core.settings_manager._settings_ini_path",
-        return_value=str(tmp_path / "settings.ini"),
+        return_value=str(settings_path),
     ):
         settings = SettingsManager()
         window = MainWindow(settings)
@@ -519,16 +520,97 @@ def test_main_window_converter_fallback_batch_failure_retry_and_history_export(
         assert json.loads(exported_initial["Run options"]) == first["options"]
         assert exported_initial["Per-file outcomes"] == first["results"]
         assert str(broken_path) in exported_initial["Failure details"]
-    finally:
-        converter._stop_preview_loader()
-        worker = converter._worker
-        if worker is not None and worker.isRunning():
-            worker.stop()
-            assert worker.wait(15_000)
+
+        settings.sync()
         window.close()
         sip.delete(window)
-        settings.sync()
         sip.delete(settings._qs)
+        app.processEvents()
+
+        with patch(
+            "src.core.settings_manager._settings_ini_path",
+            return_value=str(settings_path),
+        ):
+            settings = SettingsManager()
+            window = MainWindow(settings)
+        window.show()
+        history = window._history_tab
+        window._tabs.setCurrentIndex(window._tabs.indexOf(history))
+        history.refresh()
+        app.processEvents()
+
+        persisted = settings.get_converter_history()
+        assert persisted[0] == retry
+        assert persisted[1] == first
+        tree = history._conv_tree
+        assert tree.topLevelItemCount() == 2
+        mixed_item = next(
+            item for item in (
+                tree.topLevelItem(index) for index in range(tree.topLevelItemCount())
+            )
+            if len(item.data(0, item._RESULTS_ROLE)) == 2
+        )
+        assert mixed_item.data(0, mixed_item._BATCH_STATUS_ROLE) == ["Issues", "0"]
+        assert str(output_path) in mixed_item.toolTip(0)
+        assert "actual_batch_format: PNG" in mixed_item.toolTip(0)
+        assert "broken.png:" in mixed_item.toolTip(0)
+        row = tree.visualItemRect(mixed_item)
+        row_click = QPoint(30, row.center().y())
+        assert row.isValid() and tree.viewport().rect().contains(row_click)
+        with patch(
+            "src.ui.history_tab.QDesktopServices.openUrl", return_value=True
+        ) as open_url:
+            QTest.mouseClick(tree.viewport(), Qt.MouseButton.LeftButton, pos=row_click)
+            QTest.mouseDClick(tree.viewport(), Qt.MouseButton.LeftButton, pos=row_click)
+        open_url.assert_called_once()
+        assert open_url.call_args.args[0].toLocalFile() == str(output_path)
+
+        def choose_reloaded_output_and_folder(menu, *_args):
+            actions = {action.text(): action for action in menu.actions()}
+            output_actions = actions["Open output"].menu().actions()
+            folder_actions = actions["Show output folder"].menu().actions()
+            assert [action.text() for action in output_actions] == [output_path.name]
+            assert [action.text() for action in folder_actions] == [output_dir.name]
+            output_actions[0].trigger()
+            folder_actions[0].trigger()
+
+        with patch(
+            "src.ui.history_tab.QDesktopServices.openUrl", return_value=True
+        ) as open_url, patch.object(
+            QMenu, "exec", new=choose_reloaded_output_and_folder
+        ):
+            tree.customContextMenuRequested.emit(row_click)
+        assert [
+            call.args[0].toLocalFile() for call in open_url.call_args_list
+        ] == [str(output_path), str(output_dir)]
+
+        relaunch_export = tmp_path / "reloaded-converter-history.json"
+        with patch(
+            "src.ui.history_tab.QFileDialog.getSaveFileName",
+            return_value=(str(relaunch_export), "JSON Files (*.json)"),
+        ), patch("src.ui.history_tab.QMessageBox.information"):
+            history._btn_export.click()
+        reloaded_exports = json.loads(relaunch_export.read_text(encoding="utf-8"))
+        reloaded_mixed = next(
+            item for item in reloaded_exports
+            if len(item["Per-file outcomes"]) == 2
+        )
+        assert json.loads(reloaded_mixed["Run options"]) == first["options"]
+        assert reloaded_mixed["Per-file outcomes"] == first["results"]
+        assert str(output_path) in reloaded_mixed["Output files"]
+    finally:
+        if not sip.isdeleted(window):
+            converter = window._converter_tab
+            converter._stop_preview_loader()
+            worker = converter._worker
+            if worker is not None and worker.isRunning():
+                worker.stop()
+                assert worker.wait(15_000)
+            window.close()
+            sip.delete(window)
+        if not sip.isdeleted(settings._qs):
+            settings.sync()
+            sip.delete(settings._qs)
         app.processEvents()
         app.setFont(original_font)
         app.setStyleSheet(original_stylesheet)

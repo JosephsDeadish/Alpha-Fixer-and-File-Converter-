@@ -1077,9 +1077,10 @@ Retain platform-specific evidence for these remaining gates:
   qualify installers, upgrades/uninstall, signing and macOS notarization.
 - **Automated UI acceptance:** offscreen MainWindow workflows cover Settings
   backup/import/reset and relaunch; Converter mixed success/failure, fallback
-  output, stop/retry, reports and History exports; and GIF/Video project save,
-  reopen, recovery and coordinated shutdown. GIF stream choice and decode
-  recovery/failure feedback are exercised through MainWindow's Add Media flow.
+  output, stop/retry, reports, History exports, and disk-backed History restore
+  with output actions after relaunch; and GIF/Video project save, reopen,
+  recovery and coordinated shutdown. GIF stream choice and decode recovery/
+  failure feedback are exercised through MainWindow's Add Media flow.
 - **End-to-end/native acceptance remains open:** first launch through every
   tool's successful export, including Painter editing, clipboard, undo/redo and
   saving; native visual checks and retained results. Diagnose all failures and
