@@ -621,6 +621,7 @@ def test_main_window_converter_stop_records_unprocessed_inputs(app, tmp_path):
     from src.core.file_converter import convert_file as real_convert_file
 
     original_font, original_stylesheet = app.font(), app.styleSheet()
+    settings_path = tmp_path / "settings.ini"
     source_paths = []
     for index in range(4):
         path = tmp_path / f"stop-{index}.png"
@@ -631,7 +632,7 @@ def test_main_window_converter_stop_records_unprocessed_inputs(app, tmp_path):
 
     with patch(
         "src.core.settings_manager._settings_ini_path",
-        return_value=str(tmp_path / "settings.ini"),
+        return_value=str(settings_path),
     ):
         settings = SettingsManager()
         window = MainWindow(settings)
@@ -680,17 +681,69 @@ def test_main_window_converter_stop_records_unprocessed_inputs(app, tmp_path):
             result["status"] == "not processed"
             for result in stopped["results"][1:]
         )
-    finally:
-        release.set()
+
         worker = converter._worker
-        if worker is not None and worker.isRunning():
-            worker.stop()
-            assert worker.wait(15_000)
-        converter._stop_preview_loader()
+        assert worker is not None and worker.wait(15_000)
+        settings.sync()
         window.close()
         sip.delete(window)
-        settings.sync()
         sip.delete(settings._qs)
+        app.processEvents()
+
+        with patch(
+            "src.core.settings_manager._settings_ini_path",
+            return_value=str(settings_path),
+        ):
+            settings = SettingsManager()
+            window = MainWindow(settings)
+        window.show()
+        history = window._history_tab
+        window._tabs.setCurrentIndex(window._tabs.indexOf(history))
+        history.refresh()
+        app.processEvents()
+
+        persisted = settings.get_converter_history()
+        assert len(persisted) == 1
+        assert persisted[0]["stopped"] is True
+        assert persisted[0]["not_processed"] == len(source_paths) - 1
+        assert persisted[0]["results"] == stopped["results"]
+        tree = history._conv_tree
+        assert tree.topLevelItemCount() == 1
+        item = tree.topLevelItem(0)
+        assert item.data(0, item._BATCH_STATUS_ROLE) == [
+            "Stopped",
+            str(len(source_paths) - 1),
+        ]
+        assert f"Not processed: {len(source_paths) - 1}" in item.toolTip(0)
+        assert str(output_dir / "stop-0.png") in item.toolTip(0)
+        history._conv_search.setText("status:stopped")
+        assert not item.isHidden()
+
+        export_path = tmp_path / "stopped-history.json"
+        with patch(
+            "src.ui.history_tab.QFileDialog.getSaveFileName",
+            return_value=(str(export_path), "JSON Files (*.json)"),
+        ), patch("src.ui.history_tab.QMessageBox.information"):
+            history._btn_export.click()
+        exported = json.loads(export_path.read_text(encoding="utf-8"))
+        assert len(exported) == 1
+        assert exported[0]["Status"] == "Stopped"
+        assert exported[0]["Not processed"] == str(len(source_paths) - 1)
+        assert exported[0]["Per-file outcomes"] == stopped["results"]
+    finally:
+        release.set()
+        if not sip.isdeleted(window):
+            converter = window._converter_tab
+            worker = converter._worker
+            if worker is not None and worker.isRunning():
+                worker.stop()
+                assert worker.wait(15_000)
+            converter._stop_preview_loader()
+            window.close()
+            sip.delete(window)
+        if not sip.isdeleted(settings._qs):
+            settings.sync()
+            sip.delete(settings._qs)
         app.processEvents()
         app.setFont(original_font)
         app.setStyleSheet(original_stylesheet)
