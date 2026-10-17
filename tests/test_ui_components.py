@@ -4839,6 +4839,34 @@ class TestVideoProbeFallbacks(unittest.TestCase):
         self.assertIn("Selected Stream panel can reload a clip from manually chosen video and audio streams", details)
         self.assertIn("ffprobe detail/probing ready", details)
 
+    def test_extract_visual_still_frame_runs_ffmpeg_and_decodes_output(self):
+        try:
+            from src.ui import video_tool as vt
+        except ImportError as exc:
+            self.skipTest(f"video_tool import unavailable in test env: {exc}")
+
+        import subprocess
+        from pathlib import Path
+        from PIL import Image
+
+        commands = []
+
+        def run_ffmpeg(command, **kwargs):
+            commands.append(command)
+            Image.new("RGB", (3, 2), (12, 34, 56)).save(command[-1], format="PNG")
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        with patch.object(vt, "_get_ffmpeg_exe", return_value="/tmp/ffmpeg"):
+            with patch.object(vt.subprocess, "run", side_effect=run_ffmpeg):
+                still = vt._extract_visual_still_frame("/tmp/source.mp4")
+
+        self.assertIsNotNone(still)
+        self.assertEqual(still.size, (3, 2))
+        self.assertEqual(still.getpixel((0, 0)), (12, 34, 56, 255))
+        self.assertEqual(commands[0][commands[0].index("-fflags") + 1], "+discardcorrupt")
+        self.assertFalse(Path(commands[0][-1]).exists())
+        still.close()
+
     def test_load_video_clip_uses_still_frame_fallback_when_recovery_paths_fail(self):
         try:
             from src.ui import video_tool as vt

@@ -1456,7 +1456,7 @@ def _extract_visual_still_frame(path: str, details: Optional[dict[str, object]] 
                 "-v",
                 "error",
                 "-fflags",
-                "+genpts+igndts+discardcorrupt" if rebuild_timestamps else "+discardcorrupt",
+                "+discardcorrupt",
                 "-err_detect",
                 "ignore_err",
                 *_FFMPEG_DEEP_ANALYSIS_ARGS,
