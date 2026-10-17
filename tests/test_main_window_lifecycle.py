@@ -398,6 +398,113 @@ def test_main_window_history_refreshes_and_opens_converter_output(app, tmp_path)
         app.setStyleSheet(original_stylesheet)
 
 
+def test_main_window_clear_all_history_confirmation_and_relaunch(app, tmp_path):
+    original_font, original_stylesheet = app.font(), app.styleSheet()
+    settings_path = tmp_path / "settings.ini"
+    history_tools = (
+        "converter", "alpha", "selective_alpha", "gif_builder", "video_builder",
+    )
+
+    with patch(
+        "src.core.settings_manager._settings_ini_path",
+        return_value=str(settings_path),
+    ):
+        settings = SettingsManager()
+        for tool in history_tools:
+            settings.set(
+                f"{tool}_history",
+                json.dumps([{
+                    "timestamp": "2026-10-17T12:00:00",
+                    "format": "PNG",
+                    "file_count": 1,
+                    "success": 1,
+                    "errors": 0,
+                    "files": [f"{tool}.png"],
+                }]),
+            )
+        settings.set("font_size", 14)
+        settings.set("custom_shortcuts", json.dumps({"help": "Ctrl+Alt+H"}))
+        settings.sync()
+        window = MainWindow(settings)
+
+    try:
+        window.show()
+        app.processEvents()
+        history = window._history_tab
+        trees = (
+            history._conv_tree, history._alpha_tree, history._sel_tree,
+            history._gif_tree, history._vid_tree,
+        )
+        assert all(tree.topLevelItemCount() == 1 for tree in trees)
+
+        with patch.object(
+            QMessageBox, "question",
+            return_value=QMessageBox.StandardButton.No,
+        ) as confirmation:
+            history._btn_clear.click()
+        confirmation.assert_called_once()
+        assert all(
+            getattr(settings, f"get_{tool}_history")()
+            for tool in history_tools
+        )
+        assert all(tree.topLevelItemCount() == 1 for tree in trees)
+
+        with patch.object(
+            QMessageBox, "question",
+            return_value=QMessageBox.StandardButton.Yes,
+        ) as confirmation:
+            history._btn_clear.click()
+        confirmation.assert_called_once()
+        assert all(
+            getattr(settings, f"get_{tool}_history")() == []
+            for tool in history_tools
+        )
+        assert all(tree.topLevelItemCount() == 0 for tree in trees)
+        assert settings.get("font_size") == 14
+        assert settings.get_custom_shortcuts() == {"help": "Ctrl+Alt+H"}
+
+        settings.sync()
+        window.close()
+        sip.delete(window)
+        sip.delete(settings._qs)
+        app.processEvents()
+
+        with patch(
+            "src.core.settings_manager._settings_ini_path",
+            return_value=str(settings_path),
+        ):
+            settings = SettingsManager()
+            window = MainWindow(settings)
+        window.show()
+        app.processEvents()
+        assert all(
+            getattr(settings, f"get_{tool}_history")() == []
+            for tool in history_tools
+        )
+        assert all(
+            tree.topLevelItemCount() == 0
+            for tree in (
+                window._history_tab._conv_tree,
+                window._history_tab._alpha_tree,
+                window._history_tab._sel_tree,
+                window._history_tab._gif_tree,
+                window._history_tab._vid_tree,
+            )
+        )
+        assert settings.get("font_size") == 14
+        assert settings.get_custom_shortcuts() == {"help": "Ctrl+Alt+H"}
+    finally:
+        if not sip.isdeleted(window):
+            window.close()
+            sip.delete(window)
+        if not sip.isdeleted(settings._qs):
+            settings.sync()
+            sip.delete(settings._qs)
+        app.processEvents()
+        app.setFont(original_font)
+        app.setStyleSheet(original_stylesheet)
+
+
 def test_main_window_converter_fallback_batch_failure_retry_and_history_export(
         app, tmp_path):
     original_font, original_stylesheet = app.font(), app.styleSheet()
