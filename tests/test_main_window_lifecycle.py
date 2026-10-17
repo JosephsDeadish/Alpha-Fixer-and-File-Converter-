@@ -1,4 +1,7 @@
 import json
+import gc
+import os
+import threading
 import time
 from pathlib import Path
 from unittest.mock import patch
@@ -66,6 +69,63 @@ def test_real_builders_and_queued_status_survive_window_teardown(app, tmp_path, 
         sip.delete(settings._qs)
         app.processEvents()
         app.setStyleSheet(original_stylesheet)
+
+
+@pytest.mark.skipif(not Path("/proc/self/fd").is_dir(),
+                    reason="resource plateau check requires Linux /proc metrics")
+def test_repeated_main_window_builder_teardown_resource_plateau(app, tmp_path):
+    from PyQt6.QtCore import QThreadPool
+
+    samples = []
+    for iteration in range(15):
+        with patch(
+            "src.core.settings_manager._settings_ini_path",
+            return_value=str(tmp_path / f"stress-settings-{iteration}.ini"),
+        ):
+            settings = SettingsManager()
+            window = MainWindow(settings)
+        window.show()
+        app.processEvents()
+        window._open_or_focus_gif_builder()
+        window._open_or_focus_video_builder()
+        app.processEvents()
+        for dialog in (window._gif_builder_dlg, window._video_tool_dlg):
+            dialog.hide()
+            dialog.show()
+            app.processEvents()
+        assert window.close()
+        sip.delete(window)
+        app.processEvents()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        app.processEvents()
+        settings.sync()
+        sip.delete(settings._qs)
+        app.processEvents()
+        gc.collect()
+
+        rss_kib = next(
+            int(line.split()[1])
+            for line in Path("/proc/self/status").read_text().splitlines()
+            if line.startswith("VmRSS:")
+        )
+        samples.append({
+            "fds": len(os.listdir("/proc/self/fd")),
+            "python_threads": threading.active_count(),
+            "qt_pool_threads": QThreadPool.globalInstance().activeThreadCount(),
+            "rss_kib": rss_kib,
+        })
+
+    measured = samples[3:]
+    assert max(sample["fds"] for sample in measured) - min(
+        sample["fds"] for sample in measured
+    ) <= 1, samples
+    assert max(sample["python_threads"] for sample in measured) <= min(
+        sample["python_threads"] for sample in measured
+    ) + 1, samples
+    assert max(sample["qt_pool_threads"] for sample in measured) <= 1, samples
+    assert max(sample["rss_kib"] for sample in measured) - min(
+        sample["rss_kib"] for sample in measured
+    ) <= 32 * 1024, samples
 
 
 @pytest.mark.parametrize("kind", ["gif", "video"])
