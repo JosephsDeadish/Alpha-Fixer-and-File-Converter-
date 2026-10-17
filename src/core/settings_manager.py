@@ -39,6 +39,12 @@ _UI_SCALE_FACTORS = {key: factor for key, _label, factor, _tip in UI_SCALE_PRESE
 _UI_SCALE_LABELS = {key: label for key, label, _factor, _tip in UI_SCALE_PRESETS}
 _UI_SCALE_TIPS = {key: tip for key, _label, _factor, tip in UI_SCALE_PRESETS}
 
+_CONVERTER_HISTORY_ITEM_LIMIT = 500
+_CONVERTER_HISTORY_RESULTS_BYTE_LIMIT = 96 * 1024
+_CONVERTER_HISTORY_FAILURES_BYTE_LIMIT = 32 * 1024
+_CONVERTER_HISTORY_REASON_LIMIT = 512
+_CONVERTER_HISTORY_DETAIL_LIMIT = 2048
+
 
 def _is_valid_qcolor(value: str) -> bool:
     """Return True when *value* looks like a supported color string."""
@@ -94,6 +100,70 @@ def _load_json_setting(raw: object, fallback, *, label: str, expected_type: type
         )
         return fallback
     return value
+
+
+def _history_nonnegative_int(value: object) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def _compact_converter_history_records(
+    entry: dict,
+    *,
+    key: str,
+    total_key: str,
+    omitted_key: str,
+    byte_limit: int,
+    fallback_total: object = 0,
+) -> None:
+    if key not in entry:
+        return
+    raw_records = entry.get(key)
+    records = raw_records if isinstance(raw_records, list) else []
+    previous_omitted = _history_nonnegative_int(entry.get(omitted_key))
+    total = max(
+        len(records) + previous_omitted,
+        _history_nonnegative_int(entry.get(total_key)),
+        _history_nonnegative_int(fallback_total),
+    )
+    allowed_fields = (
+        {"source", "working_source", "output", "output_format", "status", "reason", "detail"}
+        if key == "results"
+        else {"source", "source_label", "reason", "detail"}
+    )
+    compacted = []
+    used_bytes = 2
+    for raw_record in records[:_CONVERTER_HISTORY_ITEM_LIMIT]:
+        if not isinstance(raw_record, dict):
+            continue
+        record = {
+            field: str(value)
+            for field, value in raw_record.items()
+            if field in allowed_fields and value is not None
+        }
+        for field, limit in (
+            ("reason", _CONVERTER_HISTORY_REASON_LIMIT),
+            ("detail", _CONVERTER_HISTORY_DETAIL_LIMIT),
+        ):
+            value = record.get(field, "")
+            if len(value) > limit:
+                record[field] = value[:limit] + "… [truncated]"
+        record_bytes = len(
+            json.dumps(record, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        ) + 1
+        if used_bytes + record_bytes > byte_limit:
+            continue
+        compacted.append(record)
+        used_bytes += record_bytes
+    entry[key] = compacted
+    entry[total_key] = total
+    entry[omitted_key] = max(0, total - len(compacted))
+    entry[f"{key}_text_truncated"] = sum(
+        any(record.get(field, "").endswith("… [truncated]") for field in ("reason", "detail"))
+        for record in compacted
+    )
 
 
 def get_ui_scale_presets() -> tuple[tuple[str, str, float, str], ...]:
@@ -556,7 +626,41 @@ class SettingsManager:
 
     def add_converter_history(self, entry: dict, max_entries: int = 50):
         history = self.get_converter_history()
-        history.insert(0, entry)
+        bounded_entry = dict(entry)
+        _compact_converter_history_records(
+            bounded_entry,
+            key="results",
+            total_key="results_total",
+            omitted_key="results_omitted",
+            byte_limit=_CONVERTER_HISTORY_RESULTS_BYTE_LIMIT,
+            fallback_total=bounded_entry.get("file_count", 0),
+        )
+        _compact_converter_history_records(
+            bounded_entry,
+            key="failure_details",
+            total_key="failure_details_total",
+            omitted_key="failure_details_omitted",
+            byte_limit=_CONVERTER_HISTORY_FAILURES_BYTE_LIMIT,
+        )
+        history.insert(0, bounded_entry)
+        for existing in history[1:]:
+            if not isinstance(existing, dict):
+                continue
+            _compact_converter_history_records(
+                existing,
+                key="results",
+                total_key="results_total",
+                omitted_key="results_omitted",
+                byte_limit=_CONVERTER_HISTORY_RESULTS_BYTE_LIMIT,
+                fallback_total=existing.get("file_count", 0),
+            )
+            _compact_converter_history_records(
+                existing,
+                key="failure_details",
+                total_key="failure_details_total",
+                omitted_key="failure_details_omitted",
+                byte_limit=_CONVERTER_HISTORY_FAILURES_BYTE_LIMIT,
+            )
         # Per-tool limit takes priority over global limit when > 0 (item 8)
         per_tool = int(self.get("history_max_entries_converter", 0))
         limit = per_tool if per_tool > 0 else int(self.get("history_max_entries", max_entries))

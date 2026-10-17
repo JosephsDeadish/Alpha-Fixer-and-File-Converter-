@@ -3251,6 +3251,81 @@ class TestConverterHistory(unittest.TestCase):
         history = self._mgr.get_converter_history()
         self.assertEqual(history[0]["timestamp"], "B")  # most recent first
 
+    def test_large_converter_details_are_bounded_with_omission_counts(self):
+        import src.core.settings_manager as settings_module
+
+        details = "decoder detail " * 1000
+        entry = {
+            "timestamp": "2026-10-17T00:00:00",
+            "format": "PNG",
+            "file_count": 800,
+            "success": 600,
+            "errors": 200,
+            "results": [
+                {
+                    "source": f"/input/source-{index}.png",
+                    "output": f"/output/source-{index}.png",
+                    "status": "success" if index < 600 else "failed",
+                    "reason": "decode failed",
+                    "detail": details,
+                }
+                for index in range(800)
+            ],
+            "failure_details": [
+                {
+                    "source": f"/input/source-{index}.png",
+                    "reason": "decode failed",
+                    "detail": details,
+                }
+                for index in range(200)
+            ],
+        }
+        self._mgr.add_converter_history(entry)
+        saved = self._mgr.get_converter_history()[0]
+
+        self.assertEqual(saved["results_total"], 800)
+        self.assertEqual(saved["results_omitted"], 800 - len(saved["results"]))
+        self.assertEqual(saved["failure_details_total"], 200)
+        self.assertEqual(
+            saved["failure_details_omitted"],
+            200 - len(saved["failure_details"]),
+        )
+        self.assertGreater(saved["results_text_truncated"], 0)
+        self.assertTrue(saved["results"][0]["detail"].endswith("… [truncated]"))
+        self.assertLessEqual(
+            len(json.dumps(saved["results"], separators=(",", ":")).encode("utf-8")),
+            settings_module._CONVERTER_HISTORY_RESULTS_BYTE_LIMIT,
+        )
+        self.assertLessEqual(
+            len(json.dumps(saved["failure_details"], separators=(",", ":")).encode("utf-8")),
+            settings_module._CONVERTER_HISTORY_FAILURES_BYTE_LIMIT,
+        )
+        self.assertEqual(len(entry["results"]), 800)
+        self.assertEqual(len(entry["results"][0]["detail"]), len(details))
+
+    def test_adding_history_compacts_existing_unbounded_records(self):
+        legacy = {
+            "timestamp": "2026-10-16T00:00:00",
+            "file_count": 700,
+            "success": 700,
+            "results": [
+                {"source": f"/input/{index}.png", "output": f"/output/{index}.png",
+                 "status": "success"}
+                for index in range(700)
+            ],
+            "failure_details": [],
+        }
+        self._store["converter_history"] = json.dumps([legacy])
+        self._mgr.add_converter_history({"timestamp": "2026-10-17T00:00:00", "format": "PNG"})
+
+        saved_legacy = self._mgr.get_converter_history()[1]
+        self.assertEqual(saved_legacy["results_total"], 700)
+        self.assertGreater(saved_legacy["results_omitted"], 0)
+        self.assertEqual(
+            saved_legacy["results_omitted"],
+            700 - len(saved_legacy["results"]),
+        )
+
 
 # ---------------------------------------------------------------------------
 # SettingsManager – alpha fixer history

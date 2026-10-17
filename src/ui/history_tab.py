@@ -58,6 +58,7 @@ class _HistoryItem(QTreeWidgetItem):
     _OUTPUTS_ROLE = Qt.ItemDataRole.UserRole + 6
     _OPTIONS_ROLE = Qt.ItemDataRole.UserRole + 7
     _FAILURES_ROLE = Qt.ItemDataRole.UserRole + 8
+    _RESULTS_ROLE = Qt.ItemDataRole.UserRole + 9
 
     def __lt__(self, other) -> bool:
         tree = self.treeWidget()
@@ -458,6 +459,13 @@ def _gif_history_status(errors: object) -> str:
         return "OK"
 
 
+def _history_count(value: object) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
 def _history_status_mix(statuses: list[str]) -> str:
     if not statuses:
         return ""
@@ -591,7 +599,7 @@ class HistoryTab(QWidget):
         self._conv_search = self._make_search_field("converter")
         conv_layout.addWidget(self._conv_search)
         self._conv_tree = _make_tree(
-            ["Time", "Format", "Files", "✔ OK", "✘ Err", "File names", "Outputs", "Run options", "Failures"],
+            ["Time", "Format", "Files", "✔ OK", "✘ Err", "File names", "Outputs", "Run options", "Failures", "Retention"],
             col_tips=[
                 "When the conversion batch was started.",
                 "Output format chosen for this batch (e.g. PNG, WEBP, DDS).",
@@ -601,7 +609,8 @@ class HistoryTab(QWidget):
                 "Input filenames in this batch.",
                 "Recorded output paths. Right-click a row to open available outputs or reveal their folders.",
                 "Settings captured when this batch started.",
-                "Per-file failure diagnostics recorded for this batch.",
+                "Per-file failure diagnostics retained for this batch; total errors are shown in the Errors column.",
+                "How many per-file outcomes and diagnostics were retained in the bounded history record.",
             ],
         )
         self._conv_tree.header().setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)
@@ -1168,9 +1177,15 @@ class HistoryTab(QWidget):
             options = entry.get("options", {})
             if not isinstance(options, dict):
                 options = {}
+            result_total = _history_count(entry.get("results_total", entry.get("file_count", 0)))
+            result_omitted = _history_count(entry.get("results_omitted", 0))
+            failure_omitted = _history_count(entry.get("failure_details_omitted", 0))
+            results_text_truncated = _history_count(entry.get("results_text_truncated", 0))
+            failures_text_truncated = _history_count(entry.get("failure_details_text_truncated", 0))
             failures = entry.get("failure_details", [])
             if not isinstance(failures, list):
                 failures = []
+            failure_total = _history_count(entry.get("failure_details_total", len(failures)))
             failure_texts = []
             for failure in failures:
                 if not isinstance(failure, dict):
@@ -1179,28 +1194,60 @@ class HistoryTab(QWidget):
                 detail = str(failure.get("detail") or failure.get("reason") or "").strip()
                 if detail:
                     failure_texts.append(f"{label}: {detail}")
+            failure_count = len(failure_texts)
+            retained_output_count = sum(
+                1 for result in results
+                if isinstance(result, dict) and result.get("output")
+            )
+            output_omitted = (
+                max(0, _history_count(entry.get("success")) - retained_output_count)
+                if "results" in entry else 0
+            )
+            retention_notes = []
+            if result_omitted:
+                retained_results = max(0, result_total - result_omitted)
+                retention_notes.append(
+                    f"{retained_results}/{result_total} per-file outcome(s) retained"
+                )
+            if output_omitted:
+                retention_notes.append(f"{output_omitted} output path(s) not retained")
+            if failure_omitted:
+                retained_failures = max(0, failure_total - failure_omitted)
+                retention_notes.append(
+                    f"{retained_failures}/{failure_total} failure detail(s) retained"
+                )
+            clipped_text = results_text_truncated + failures_text_truncated
+            if clipped_text:
+                retention_notes.append(f"{clipped_text} diagnostic(s) shortened")
+            retention_summary = "; ".join(retention_notes)
             output_summary = ""
             if output_paths:
                 output_summary = Path(output_paths[0]).name
                 if len(output_paths) > 1:
                     output_summary += f" (+{len(output_paths) - 1})"
+            if output_omitted:
+                output_summary = (
+                    f"{output_summary}; {output_omitted} not retained"
+                    if output_summary else f"{output_omitted} not retained"
+                )
             failure_summary = (
-                f"{len(failure_texts)} failure(s)" if failure_texts else ""
+                f"{failure_count} detail(s)" if failure_count else ""
             )
             item = _HistoryItem([
                 ts, fmt, n_files, n_ok, n_err, files, output_summary,
                 f"{len(options)} setting(s)" if options else "",
-                failure_summary,
+                failure_summary, retention_summary,
             ])
             item.setData(0, _HistoryItem._OPTIONS_ROLE, options)
             item.setData(0, _HistoryItem._FAILURES_ROLE, failure_texts)
+            item.setData(0, _HistoryItem._RESULTS_ROLE, results)
             self._set_history_outputs(item, output_paths)
             status = "Stopped" if entry.get("stopped") is True else _gif_history_status(entry.get("errors"))
             item.setData(0, _HistoryItem._BATCH_STATUS_ROLE, [status, str(entry.get("not_processed", 0))])
             item.setData(0, _HistoryItem._SORT_ROLE, entry.get("timestamp", ""))
             _set_filter_text(
                 item, ts, fmt, n_files, n_ok, n_err, file_list, output_paths,
-                options, failure_texts, status,
+                options, failure_texts, retention_summary, status,
             )
             _set_filter_fields(
                 item,
@@ -1210,6 +1257,7 @@ class HistoryTab(QWidget):
                 output=output_paths,
                 option=[f"{key}: {value}" for key, value in options.items()],
                 failure=failure_texts,
+                retention=retention_summary,
                 status=status,
                 success=n_ok,
                 errors=n_err,
@@ -1221,7 +1269,7 @@ class HistoryTab(QWidget):
                 item.setIcon(0, thumb)
             _set_history_tooltip(
                 item,
-                9,
+                10,
                 f"Batch: {ts}\nFormat: {fmt}\n"
                 f"Total: {n_files}  OK: {n_ok}  Errors: {n_err}\n"
                 f"Status: {status}  Not processed: {entry.get('not_processed', 0)}\n"
@@ -1230,7 +1278,10 @@ class HistoryTab(QWidget):
                 + ("\n\nRun options:\n  " + "\n  ".join(
                     f"{key}: {value}" for key, value in options.items()
                 ) if options else "")
-                + ("\n\nFailure details:\n  " + "\n  ".join(failure_texts) if failure_texts else ""),
+                + ("\n\nFailure details:\n  " + "\n  ".join(
+                    failure_texts[:failure_count]
+                ) if failure_count else "")
+                + ("\n\nHistory retention:\n  " + retention_summary if retention_summary else ""),
                 file_list,
             )
             self._conv_tree.addTopLevelItem(item)
@@ -1606,7 +1657,7 @@ class HistoryTab(QWidget):
             tab_name = "converter"
             headers = [
                 "Time", "Format", "Files", "OK", "Errors", "File names",
-                "Output files", "Run options", "Failure details",
+                "Output files", "Run options", "Failure details", "Retention",
             ]
         elif tab_idx == 1:
             tree = self._alpha_tree
@@ -1652,9 +1703,12 @@ class HistoryTab(QWidget):
             return
 
         # Collect rows in the same visible order shown to the user.
+        if tab_idx == 0:
+            headers.append("Per-file outcomes")
         if tab_idx in (0, 1):
             headers.extend(["Status", "Not processed"])
         rows = []
+        converter_results = []
         for r in range(tree.topLevelItemCount()):
             item = tree.topLevelItem(r)
             if item is None or item.isHidden():
@@ -1667,6 +1721,9 @@ class HistoryTab(QWidget):
                 row[6] = "\n".join(outputs)
                 row[7] = _json.dumps(options, ensure_ascii=False, sort_keys=True)
                 row[8] = "\n".join(failures)
+                results = item.data(0, _HistoryItem._RESULTS_ROLE) or []
+                row.append(_json.dumps(results, ensure_ascii=False, sort_keys=True))
+                converter_results.append(results)
             if tab_idx in (0, 1):
                 batch_status = item.data(0, _HistoryItem._BATCH_STATUS_ROLE)
                 row.extend(batch_status or ["Unknown", ""])
@@ -1681,6 +1738,9 @@ class HistoryTab(QWidget):
 
             elif ext == "json":
                 data = [dict(zip(headers, row)) for row in rows]
+                if tab_idx == 0:
+                    for row_data, results in zip(data, converter_results):
+                        row_data["Per-file outcomes"] = results
                 with staged_output_path(path) as staged_path, open(staged_path, "w", encoding="utf-8") as f:
                     _json.dump(data, f, indent=2, ensure_ascii=False)
 

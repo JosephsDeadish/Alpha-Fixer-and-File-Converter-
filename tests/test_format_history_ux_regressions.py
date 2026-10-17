@@ -200,6 +200,65 @@ def test_converter_history_opens_outputs_and_exports_full_details(
         sip.delete(widget)
 
 
+def test_converter_history_reports_omitted_records_and_exports_retained_outcomes(
+        app, settings, tmp_path):
+    settings.add_converter_history({
+        "timestamp": "2026-10-17T12:00:00",
+        "format": "PNG",
+        "file_count": 800,
+        "success": 600,
+        "errors": 200,
+        "files": ["source-0.png"],
+        "options": {"quality": 90},
+        "results": [
+            {
+                "source": str(tmp_path / f"source-{index}.png"),
+                "output": str(tmp_path / f"output-{index}.png") if index < 600 else "",
+                "output_format": "png",
+                "status": "success" if index < 600 else "failed",
+                "reason": "" if index < 600 else "decode failed",
+                "detail": "" if index < 600 else "corrupt input",
+            }
+            for index in range(800)
+        ],
+        "failure_details": [
+            {
+                "source": str(tmp_path / f"source-{index}.png"),
+                "source_label": f"source-{index}.png",
+                "reason": "decode failed",
+                "detail": "decoder detail " * 300,
+            }
+            for index in range(600, 800)
+        ],
+    })
+    widget = HistoryTab(settings)
+    try:
+        item = widget._conv_tree.topLevelItem(0)
+        assert "outcome(s) retained" in item.text(9)
+        assert "output path(s) not retained" in item.text(9)
+        assert "failure detail(s) retained" in item.text(9)
+        assert "diagnostic(s) shortened" in item.text(9)
+        assert "not retained" in item.text(6)
+        widget._conv_search.setText("retention:retained")
+        assert not item.isHidden()
+
+        report = tmp_path / "bounded-history.json"
+        with patch(
+            "src.ui.history_tab.QFileDialog.getSaveFileName",
+            return_value=(str(report), "JSON Files (*.json)"),
+        ), patch("src.ui.history_tab.QMessageBox.information"):
+            widget._export_history()
+        exported = json.loads(report.read_text(encoding="utf-8"))[0]
+        assert len(exported["Per-file outcomes"]) == len(
+            settings.get_converter_history()[0]["results"]
+        )
+        assert exported["Retention"] == item.text(9)
+        assert exported["OK"] == "600"
+    finally:
+        widget.close()
+        sip.delete(widget)
+
+
 @pytest.mark.parametrize("resize", [None, (24, 10), (160, 80)])
 def test_converter_preview_resize_matches_export(app, tmp_path, resize):
     source = tmp_path / "source.png"
