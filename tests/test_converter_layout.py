@@ -99,11 +99,14 @@ def controls(widget):
 @pytest.mark.parametrize("size", [(480, 400), (640, 480)])
 def test_compact_geometry_focus_resize_preserves_preview(app, converter, theme, pixels, size):
     converter.setStyleSheet(build_stylesheet(theme) + f"\nQWidget {{ font-size: {pixels}px; }}")
+    converter.update_theme(theme["name"])
     converter.resize(*size)
     converter.show()
     settle(app)
     assert (converter.width(), converter.height()) == size
     assert converter._splitter.orientation() == Qt.Orientation.Vertical
+    assert converter._grp_fmt.title() == "Format"
+    assert converter._grp_encoding.title() == "Encoding"
     for scroll in (converter._content_scroll, converter._left_scroll, converter._right_scroll):
         assert scroll.horizontalScrollBar().maximum() == 0
     snapshot = (converter._current_preview_path, converter._width_spin.value(),
@@ -119,6 +122,8 @@ def test_compact_geometry_focus_resize_preserves_preview(app, converter, theme, 
     converter.resize(2400, 1400)
     settle(app)
     assert converter._splitter.orientation() == Qt.Orientation.Horizontal
+    assert converter._grp_fmt.title() == converter._grp_fmt_full_title
+    assert converter._grp_encoding.title() == converter._grp_encoding_full_title
     converter.resize(*size)
     settle(app)
     visible(converter, converter._btn_export_failures)

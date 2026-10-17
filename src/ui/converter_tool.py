@@ -499,6 +499,7 @@ class ConverterTab(QWidget):
         # Output format
         grp_fmt = QGroupBox("Basic · Output Format")
         self._grp_fmt = grp_fmt
+        self._grp_fmt_full_title = grp_fmt.title()
         gf_layout = QGridLayout(grp_fmt)
         gf_layout.setContentsMargins(8, 12, 8, 10)
         gf_layout.setColumnStretch(0, 0)
@@ -548,6 +549,7 @@ class ConverterTab(QWidget):
         self._advanced_status.setProperty("toolGuidance", True)
         rv.addWidget(self._advanced_status)
         self._grp_encoding = QGroupBox("Encoding & Metadata")
+        self._grp_encoding_full_title = self._grp_encoding.title()
         ge_layout = QGridLayout(self._grp_encoding)
         ge_layout.setContentsMargins(8, 12, 8, 10)
         ge_layout.setHorizontalSpacing(12)
@@ -886,9 +888,18 @@ class ConverterTab(QWidget):
         if hasattr(self, "_layout_timer"):
             self._layout_timer.start(0)
 
-    def _reflow_controls(self):
+    def _is_compact_layout(self) -> bool:
         available = self._content_scroll.viewport().width()
-        compact = available < max(760, self.fontMetrics().height() * 38)
+        return available < max(760, self.fontMetrics().height() * 38)
+
+    def _reflow_controls(self):
+        compact = self._is_compact_layout()
+        self._grp_fmt.setTitle(
+            "Format" if compact else self._grp_fmt_full_title
+        )
+        self._grp_encoding.setTitle(
+            "Encoding" if compact else self._grp_encoding_full_title
+        )
         self._keep_metadata_check.setText(
             "Preserve metadata" if compact else "Preserve metadata (EXIF/ICC)"
         )
@@ -1054,7 +1065,10 @@ class ConverterTab(QWidget):
         icon = get_theme_icon(theme_name)
         self._lbl_files.setText(f"{icon}  Input Files / Folders  (drag & drop supported)")
         self._grp_out.setTitle(f"{icon}  Output")
-        self._grp_fmt.setTitle(f"{icon}  Output Format")
+        self._grp_fmt_full_title = f"{icon}  Output Format"
+        self._grp_fmt.setTitle(
+            "Format" if self._is_compact_layout() else self._grp_fmt_full_title
+        )
         self._grp_resize.setTitle(f"{icon}  Resize (optional)")
         self._preview_lbl.setText(f"{icon}  Source / Output Preview  ◀▶ drag to compare")
 
