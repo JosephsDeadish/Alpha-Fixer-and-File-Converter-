@@ -1004,10 +1004,16 @@ Settings backup imports and resets refresh registered keyboard shortcuts in the
 running application and open tools through the existing deferred settings apply.
 Restoration does not rewrite shortcut preferences or reload unsaved Painter media,
 masks or editing history. Bounded tests use real tool widgets with a lightweight
-host. Disk-backed offscreen relaunch tests exercise Settings reset buttons and
-MainWindow preference export/import through the Help menu actions. They also open
-Settings through MainWindow, apply a theme live, and verify it survives relaunch;
-packaged/native desktop qualification remains outstanding.
+host. Disk-backed offscreen tests drive Settings backup export/import and confirmed
+or cancelled full/unlock-only resets through MainWindow's modal Settings dialog,
+checking invalid-backup preservation and relaunch state. MainWindow preference
+export/import through the Help menu, live theme application and relaunch are also
+covered; packaged/native desktop qualification remains outstanding.
+
+History's Clear All confirmation is exercised through MainWindow with all five
+history categories populated. Declining preserves them; confirming clears them
+while retaining unrelated preferences after relaunch. This is offscreen persistence
+coverage, not physical storage or native-desktop qualification.
 
 Video splits preserve the original sampled frame sequence and rounded timeline
 length, including nested splits at non-unit speeds. Frozen exports retain the
@@ -1078,11 +1084,12 @@ Retain platform-specific evidence for these remaining gates:
   requirements and project licensing; retain exact reproducible build versions;
   qualify installers, upgrades/uninstall, signing and macOS notarization.
 - **Automated UI acceptance:** offscreen MainWindow workflows cover Settings
-  backup/import/reset and relaunch; Converter mixed success/failure, fallback
-  output, stop/retry, reports, History exports, and disk-backed History restore
-  with output actions after relaunch; and GIF/Video project save, reopen,
-  recovery and coordinated shutdown. GIF stream choice and decode recovery/
-  failure feedback are exercised through MainWindow's Add Media flow.
+  backup/import, invalid-backup rejection, confirmed/cancelled resets and relaunch;
+  History Clear All confirmation/cancellation and relaunch; Converter mixed
+  success/failure, fallback output, stop/retry, reports, History exports, and
+  disk-backed History restore with output actions after relaunch; and GIF/Video
+  project save, reopen, recovery and coordinated shutdown. GIF stream choice and
+  decode recovery/failure feedback are exercised through MainWindow's Add Media flow.
 - **End-to-end/native acceptance remains open:** first launch through every
   tool's successful export, including Painter editing, clipboard, undo/redo and
   saving; native visual checks and retained results. Diagnose all failures and
