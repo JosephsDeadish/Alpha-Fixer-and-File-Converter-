@@ -488,6 +488,9 @@ def test_main_window_converter_fallback_batch_failure_retry_and_history_export(
         ), patch("src.ui.converter_tool.QMessageBox.information"), patch(
             "src.ui.converter_tool.QMessageBox.question",
             return_value=QMessageBox.StandardButton.No,
+        ), patch(
+            "src.ui.converter_tool.QMessageBox.exec",
+            return_value=QMessageBox.DialogCode.Rejected,
         ):
             converter._btn_retry_failed.click()
             wait_for_history(2)
@@ -504,7 +507,7 @@ def test_main_window_converter_fallback_batch_failure_retry_and_history_export(
         with patch(
             "src.ui.history_tab.QFileDialog.getSaveFileName",
             return_value=(str(export_path), "JSON Files (*.json)"),
-        ):
+        ), patch("src.ui.history_tab.QMessageBox.information"):
             history._btn_export.click()
         exported = json.loads(export_path.read_text(encoding="utf-8"))
         exported_by_sources = {
