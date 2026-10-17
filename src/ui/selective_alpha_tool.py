@@ -1902,7 +1902,7 @@ class SelectiveAlphaTool(QWidget):
         # ── Workflow group: Open → Paint → Save ───────────────────────────
         # All primary actions are grouped here at the top so the workflow
         # is immediately obvious.
-        wf_box = QGroupBox("Workflow: Open → Import Shared Zones → Paint → Save")
+        wf_box = QGroupBox("Workflow: Open → Import → Paint → Save")
         wf_box.setAccessibleName("Alpha Painter workflow")
         wf_box.setAccessibleDescription(
             "Keeps the open, import, paint, clipboard, and save actions together so the main workflow is easy to scan."
@@ -2611,8 +2611,8 @@ class SelectiveAlphaTool(QWidget):
             "Imports shared zones from Alpha & RGBA Adjuster, then lets you bring them onto the canvas, save them to a full zone layout slot, or copy one zone to the zone clipboard for reuse."
         )
         iv = QVBoxLayout(import_box)
-        iv.setContentsMargins(8, 6, 8, 6)
-        iv.setSpacing(6)
+        iv.setContentsMargins(10, 8, 10, 8)
+        iv.setSpacing(8)
 
         import_note = QLabel(
             "Import shared zones from Alpha & RGBA Adjuster, then bring them onto the canvas, save them to a full zone layout slot, or copy one zone to the zone clipboard for quick reuse."
