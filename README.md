@@ -862,8 +862,10 @@ multi-stream routes stay silent. Playback rates outside 0.1–10× are unavailab
 Generated-media Qt decoding/seeking and deterministic timing/device/lifecycle
 tests cover the implementation, not physical audibility or cross-platform sync.
 Native audio-device, latency, codec and Windows media-handle cleanup acceptance
-remain outstanding. A generated-media compact-layout probe also retained a
-107px horizontal overflow already present on the baseline; this needs follow-up.
+remain outstanding. Offscreen compact-layout checks at 480×400 and 640×480,
+including 32px fonts in both themes, verify that the import toolbar and preview
+controls remain visible without horizontal overflow; physical/native layout
+qualification remains open.
 
 Video Builder provides Undo/Redo for timeline edits and editor settings, including
 imports, removal, reordering, splitting, trims, speed and still duration. Slider

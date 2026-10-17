@@ -682,11 +682,19 @@ def test_new_preview_controls_compact_font_geometry(video, app, pixels, size, li
     assert callbacks == ["settled"]
     assert (widget.width(), widget.height()) == size
     viewport = widget._content_scroll.viewport()
-    # At 480px/32px the pre-existing import toolbar overflows by 103px.
-    # The preview pane (including the new controls) must fit independently.
+    assert widget._content_scroll.horizontalScrollBar().maximum() == 0
+    for control in (widget._btn_add_video, widget._btn_add_img,
+                    widget._btn_remove, widget._btn_split):
+        assert control.width() >= control.minimumSizeHint().width()
+        if control.isEnabled():
+            control.setFocus()
+            for _ in range(30):
+                app.processEvents()
+            viewport = widget._content_scroll.viewport()
+            assert app.focusWidget() is control
+            assert viewport.rect().contains(control.mapTo(viewport, QPoint()))
+            assert viewport.rect().contains(control.mapTo(viewport, control.rect().bottomRight()))
     assert widget._preview_audio_check.parentWidget().minimumSizeHint().width() <= viewport.width()
-    if size != (480, 400) or pixels != 32:
-        assert widget._content_scroll.horizontalScrollBar().maximum() == 0
     for control in (widget._preview_audio_check, widget._preview_mute_check,
                     widget._preview_volume_slider, widget._preview_volume_lbl,
                     widget._preview_audio_status):
