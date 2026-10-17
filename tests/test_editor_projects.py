@@ -293,7 +293,6 @@ def test_palette_delta_gif_pixels_survive_project_and_recovery(
     assert recovered._project.dirty
 
 
-@pytest.mark.parametrize("recovery", [False, True])
 @pytest.mark.parametrize("compression", ["raw", "tiff_lzw"])
 def test_video_multipage_tiff_timeline_survives_project_roundtrip(
         dialogs, tmp_path, compression):
@@ -342,6 +341,7 @@ def test_video_multipage_tiff_timeline_survives_project_roundtrip(
             assert frame.getpixel((0, 0)) == pixel
 
 
+@pytest.mark.parametrize("recovery", [False, True])
 def test_still_frame_override_preserves_absent_source_timing(dialogs, tmp_path, recovery):
     _, still = sources(tmp_path)
     widget = dialogs("gif")
