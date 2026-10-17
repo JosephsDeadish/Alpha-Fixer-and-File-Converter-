@@ -1154,7 +1154,7 @@ class GifBuilderDialog(QDialog):
             loaded_details.append(source_note)
             for frame_idx, pil_frame in enumerate(pil_frames):
                 source_delay_ms = frame_delay_ms
-                if ext == ".gif" and not treat_as_video:
+                if ext in {".gif", ".webp"} and not treat_as_video:
                     duration = pil_frame.info.get("duration", 0)
                     if duration > 0:
                         source_delay_ms = max(10, int(duration))
