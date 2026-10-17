@@ -491,7 +491,7 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
 
     widget.show()
     with patch("src.ui.settings_dialog.QFileDialog.getSaveFileName",
-              return_value=(str(backup), "")), \
+               return_value=(str(backup), "")), \
             patch("src.ui.settings_dialog.QMessageBox.information"):
         widget._btn_export_theme.click()
     payload = json.loads(backup.read_text(encoding="utf-8"))
@@ -643,6 +643,15 @@ def test_invalid_backup_preserves_every_ini_key_and_disk_after_relaunch(
         "theme": "Replacement", "font_size": 20,
         "custom_shortcuts": '{"help": 42}', "unknown_future_key": "replace",
     }), encoding="utf-8")
+    widget = open_settings(manager)
+    with patch("src.ui.settings_dialog.QFileDialog.getOpenFileName",
+               return_value=(str(backup), "")), \
+            patch("src.ui.settings_dialog.QMessageBox.critical") as failure:
+        widget._btn_import_theme.click()
+    failure.assert_called_once()
+    assert "custom_shortcuts" in failure.call_args.args[2]
+    assert disk.read_bytes() == before_disk
+    assert {key: manager._qs.value(key) for key in manager._qs.allKeys()} == before
     with pytest.raises(ValueError, match="custom_shortcuts"):
         manager.import_settings(str(backup))
     assert disk.read_bytes() == before_disk
