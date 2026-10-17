@@ -785,6 +785,16 @@ full timecode/export presets, multipage editing and real-corpus qualification
 remain separate work, alongside installers/licensing/signing, physical DPI and
 screen readers, and broader formats with explicit supported limits.
 
+An additional Linux source-only stress check now constructs the real MainWindow,
+opens, hides and re-shows both builder dialogs, then tears the window down 15 times at
+Qt scale factors 1 and 2. After three warm-up cycles it bounds descriptor and
+Python-thread variation to one, requires at most one active global-pool thread,
+and limits RSS spread to 32 MiB. The 18-case MainWindow lifecycle suite and five
+parented GIF/Video shutdown cases pass at both scales. These offscreen source
+checks do not run the packaged executable or resolve the earlier scale-2 crash;
+the X11 GUI acceptance launch could not run here because required Qt/XCB system
+libraries are absent.
+
 Converter keeps output format and conversion actions in Basic view, with an
 explicit Advanced disclosure for quality, DDS, metadata and resizing. Collapsing
 does not disable options: a summary explains active and retained settings, and
