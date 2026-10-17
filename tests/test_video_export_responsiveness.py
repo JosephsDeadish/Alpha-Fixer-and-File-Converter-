@@ -1043,6 +1043,8 @@ def test_main_window_waits_for_both_real_gif_and_video_workers(parented_video, t
     with patch.object(vt.QFileDialog, "getSaveFileName",
                       side_effect=[(str(video_output), ""), (str(gif_output), "")]), \
             patch.object(Image.Image, "save", save), \
+            patch.object(vt.QMessageBox, "question",
+                         return_value=vt.QMessageBox.StandardButton.Discard) as project_close_question, \
             patch.object(video, "request_export_cancel", wraps=video.request_export_cancel) as cancel_video, \
             patch.object(gif, "request_export_cancel", wraps=gif.request_export_cancel) as cancel_gif, \
             patch.object(settings, "sync", wraps=settings.sync) as sync:
@@ -1075,6 +1077,7 @@ def test_main_window_waits_for_both_real_gif_and_video_workers(parented_video, t
             assert not list(tmp_path.glob("*alpha_fixer*"))
             info.assert_not_called()
             error.assert_not_called()
+            project_close_question.assert_called_once()
             sync.assert_called_once()
         finally:
             video_release.set()
