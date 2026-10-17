@@ -392,19 +392,23 @@ def test_main_window_history_refreshes_and_opens_converter_output(
         row = tree.visualItemRect(item)
         assert row.isValid()
         assert tree.isVisible()
-        assert tree.viewport().rect().contains(row.center())
+        tree.scrollToItem(item)
+        row = tree.visualItemRect(item)
+        click_point = QPoint(tree.viewport().width() // 2, row.center().y())
+        assert tree.viewport().rect().contains(click_point)
+        assert tree.itemAt(click_point) is item
         with patch(
             "src.ui.history_tab.QDesktopServices.openUrl", return_value=True
         ) as open_url:
             QTest.mouseClick(
                 tree.viewport(),
                 Qt.MouseButton.LeftButton,
-                pos=row.center(),
+                pos=click_point,
             )
             QTest.mouseDClick(
                 tree.viewport(),
                 Qt.MouseButton.LeftButton,
-                pos=row.center(),
+                pos=click_point,
             )
         app.processEvents()
         open_url.assert_called_once()
@@ -422,7 +426,7 @@ def test_main_window_history_refreshes_and_opens_converter_output(
         with patch(
             "src.ui.history_tab.QDesktopServices.openUrl", return_value=True
         ) as open_url, patch.object(QMenu, "exec", new=choose_output_and_folder):
-            tree.customContextMenuRequested.emit(row.center())
+            tree.customContextMenuRequested.emit(click_point)
         assert [
             call.args[0].toLocalFile() for call in open_url.call_args_list
         ] == [str(output_path), str(output_dir)]
@@ -457,20 +461,24 @@ def test_main_window_history_refreshes_and_opens_converter_output(
         assert tree.topLevelItemCount() == 1
         item = tree.topLevelItem(0)
         assert output_path.name in item.text(6)
+        tree.scrollToItem(item)
         row = tree.visualItemRect(item)
-        assert row.isValid() and tree.viewport().rect().contains(row.center())
+        assert row.isValid()
+        click_point = QPoint(tree.viewport().width() // 2, row.center().y())
+        assert tree.viewport().rect().contains(click_point)
+        assert tree.itemAt(click_point) is item
         with patch(
             "src.ui.history_tab.QDesktopServices.openUrl", return_value=True
         ) as open_url:
             QTest.mouseClick(
                 tree.viewport(),
                 Qt.MouseButton.LeftButton,
-                pos=row.center(),
+                pos=click_point,
             )
             QTest.mouseDClick(
                 tree.viewport(),
                 Qt.MouseButton.LeftButton,
-                pos=row.center(),
+                pos=click_point,
             )
         open_url.assert_called_once()
         assert open_url.call_args.args[0].toLocalFile() == str(output_path)
