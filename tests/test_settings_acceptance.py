@@ -585,7 +585,9 @@ def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
 @pytest.mark.parametrize("reset_all", [False, True])
 def test_confirmed_dialog_resets_survive_relaunch_with_intended_scope(
         settings_session, reset_all):
-    _, launch, open_settings, _ = settings_session
+    app, launch, _, widgets = settings_session
+    from src.ui.main_window import MainWindow
+
     manager = launch()
     manager.set("font_size", 18)
     manager.set("custom_shortcuts", json.dumps({"help": "Ctrl+Alt+H"}))
@@ -600,21 +602,36 @@ def test_confirmed_dialog_resets_survive_relaunch_with_intended_scope(
     for key in progress:
         manager.set(key, 42 if type(manager._DEFAULTS[key]) is int else True)
     manager.sync()
-    widget = open_settings(manager)
+    window = MainWindow(manager)
+    widgets.append(window)
+    window.show()
+    app.processEvents()
     with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes), \
          patch.object(QMessageBox, "information"):
-        if reset_all:
-            widget._btn_reset.click()
-        else:
-            widget._btn_reset_unlocks.click()
-    widget.close()
+        _run_main_window_settings(
+            window,
+            lambda widget: (
+                widget._btn_reset.click() if reset_all
+                else widget._btn_reset_unlocks.click()
+            ),
+        )
+    window.close()
+    sip.delete(window)
+    widgets.remove(window)
     reloaded = launch()
-    reopened = open_settings(reloaded)
     assert all(reloaded.get(key) == reloaded._DEFAULTS[key] for key in progress)
-    assert reopened._font_size_spin.value() == (10 if reset_all else 18)
     assert reloaded.get_custom_shortcuts() == ({} if reset_all else {"help": "Ctrl+Alt+H"})
     for key, value in histories.items():
         assert reloaded.get(key) == (None if reset_all else value)
+    restarted = MainWindow(reloaded)
+    widgets.append(restarted)
+    restarted.show()
+    app.processEvents()
+
+    def assert_reset_scope(widget):
+        assert widget._font_size_spin.value() == (10 if reset_all else 18)
+
+    _run_main_window_settings(restarted, assert_reset_scope)
 
 
 def test_main_window_settings_dialog_applies_theme_and_persists_after_relaunch(
