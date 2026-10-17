@@ -294,6 +294,54 @@ def test_palette_delta_gif_pixels_survive_project_and_recovery(
 
 
 @pytest.mark.parametrize("recovery", [False, True])
+@pytest.mark.parametrize("compression", ["raw", "tiff_lzw"])
+def test_video_multipage_tiff_timeline_survives_project_roundtrip(
+        dialogs, tmp_path, compression):
+    source = tmp_path / "timeline.tiff"
+    pages = [
+        Image.new("RGB", (7, 5), (220, 30, 10)),
+        Image.new("RGBA", (3, 9), (10, 70, 230, 91)),
+        Image.new("L", (11, 4), 117),
+    ]
+    pages[1].putpixel((0, 0), (33, 44, 55, 0))
+    try:
+        with TiffImagePlugin.AppendingTiffWriter(str(source), True) as writer:
+            for page in pages:
+                page.save(writer, format="TIFF", compression=compression)
+                writer.newFrame()
+    finally:
+        for page in pages:
+            page.close()
+
+    widget = dialogs("video")
+    widget._project.timer.stop()
+    widget._load_image_paths([str(source)])
+    assert len(widget._clips) == 1
+    clip = widget._clips[0]
+    assert clip.total_frames == 3
+    assert clip.fps == 25.0
+    widget._scrubber.setValue(1)
+    project = tmp_path / "timeline.videoproject.json"
+    save(widget, project)
+    assert read_project(project)["entries"][0]["frames"] == 3
+
+    restored = dialogs("video")
+    restored._project.timer.stop()
+    open_project(restored, project)
+    assert len(restored._clips) == 1
+    assert restored._clips[0].total_frames == 3
+    assert restored._scrubber.value() == 1
+    expected = [
+        ((7, 5), (220, 30, 10, 255)),
+        ((3, 9), (33, 44, 55, 0)),
+        ((11, 4), (117, 117, 117, 255)),
+    ]
+    for index, (size, pixel) in enumerate(expected):
+        with restored._clips[0].get_frame(index) as frame:
+            assert frame.size == size
+            assert frame.getpixel((0, 0)) == pixel
+
+
 def test_still_frame_override_preserves_absent_source_timing(dialogs, tmp_path, recovery):
     _, still = sources(tmp_path)
     widget = dialogs("gif")

@@ -223,7 +223,11 @@ class EditorProjectController(QObject):
                         width, height = entry.frame_size
                         if max(width, height) > 8192:
                             raise ValueError("Video project sources support dimensions up to 8192")
-                        initial_pixels += width * height * (entry.total_frames if loader == "image" else 1)
+                        initial_pixels += (
+                            entry.decoded_pixel_count
+                            if entry.decoded_pixel_count is not None
+                            else width * height * (entry.total_frames if loader == "image" else 1)
+                        )
                         if initial_pixels > MAX_TOTAL_PIXELS:
                             raise ValueError("Video project initial decoded images exceed 8,388,608 pixels")
                     entries.append(dict(source=reference, source_sha256="0" * 64,

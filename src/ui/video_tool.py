@@ -2652,7 +2652,8 @@ class _ClipEntry:
                  preferred_video_stream_index: Optional[int] = None,
                  preferred_audio_stream_index: Optional[int] = None,
                  preview_audio_probe: Optional[dict[str, object]] = None,
-                 preview_audio_selection_valid: bool = True):
+                 preview_audio_selection_valid: bool = True,
+                 decoded_pixel_count: Optional[int] = None):
         self.path = path
         self.source_path = source_path or path
         from src.core.editor_projects import _source_stamp
@@ -2665,6 +2666,7 @@ class _ClipEntry:
         self.fps = fps
         self._get_frame = get_frame_fn   # callable(frame_idx) → PIL RGBA image
         self.frame_size = frame_size
+        self.decoded_pixel_count = decoded_pixel_count
         self.clip_type = clip_type
         self.has_audio = has_audio
         self.load_note = load_note
@@ -2972,6 +2974,28 @@ def _decode_image_as_clip(path: str) -> Optional["_ClipEntry"]:
                 frame_size=frames[0].size if frames else None,
                 clip_type="gif",
             )
+
+        if ext in (".tif", ".tiff"):
+            with Image.open(path) as tiff:
+                frame_count = getattr(tiff, "n_frames", 1)
+                if tiff.format == "TIFF" and frame_count > 1:
+                    for index in range(frame_count):
+                        if index:
+                            tiff.info.clear()
+                            tiff.palette = None
+                        tiff.seek(index)
+                        frames.append(tiff.convert("RGBA"))
+                    decoded_pixel_count = sum(frame.width * frame.height for frame in frames)
+                    return _ClipEntry(
+                        path,
+                        len(frames),
+                        _SequenceFrameGetter(frames),
+                        25.0,
+                        frame_size=(max(frame.width for frame in frames),
+                                    max(frame.height for frame in frames)),
+                        clip_type="gif",
+                        decoded_pixel_count=decoded_pixel_count,
+                    )
 
         from ..core.alpha_processor import load_image
         img = load_image(path)

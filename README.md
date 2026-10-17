@@ -593,9 +593,11 @@ GIF Builder imports TIFF pages as independent RGBA images, preserving each page'
 dimensions, colors, alpha and order instead of compositing pages onto one canvas.
 Animated disposal/compositing is delegated to Pillow's decoder. Import diagnostics
 include every page size; a malformed page rejects that source atomically, and
-cancellation before publication closes decoded pages. Generated-media regressions
-cover these behaviors. Video Builder TIFF import remains a first-page still;
-dedicated multipage editing and real-corpus fidelity qualification remain pending.
+cancellation before publication closes decoded pages. Video Builder imports
+multipage TIFFs as editable 25 fps image sequences, preserving independent page
+pixels and dimensions; generated raw/LZW mixed-mode tests cover project roundtrips
+and malformed later-page rejection. Real-corpus fidelity, native, and packaged
+qualification remain pending.
 
 Bounded project/recovery acceptance covers late malformed media and cancellation
 for both builders. Forty rejected replacements preserved current edits, pixels,

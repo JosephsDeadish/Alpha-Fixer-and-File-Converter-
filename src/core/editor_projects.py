@@ -276,9 +276,22 @@ def prepare_entries(document, project_path, replacements=None):
                     from PIL import Image, UnidentifiedImageError
                     try:
                         with Image.open(source) as image:
-                            if (image.width > 8192 or image.height > 8192
-                                    or image.width * image.height * getattr(image, "n_frames", 1) > MAX_TOTAL_PIXELS
-                                    or getattr(image, "n_frames", 1) > MAX_ENTRIES):
+                            frame_count = getattr(image, "n_frames", 1)
+                            if frame_count > MAX_ENTRIES:
+                                raise ValueError(f"Image source exceeds project decode limits: {source}")
+                            if image.format == "TIFF":
+                                total_pixels = 0
+                                for page_index in range(frame_count):
+                                    image.seek(page_index)
+                                    width, height = image.size
+                                    total_pixels += width * height
+                                    if (width > 8192 or height > 8192
+                                            or width * height > MAX_PIXELS
+                                            or total_pixels > MAX_TOTAL_PIXELS):
+                                        raise ValueError(
+                                            f"Image source exceeds project decode limits: {source}")
+                            elif (image.width > 8192 or image.height > 8192
+                                  or image.width * image.height * frame_count > MAX_TOTAL_PIXELS):
                                 raise ValueError(f"Image source exceeds project decode limits: {source}")
                     except UnidentifiedImageError:
                         # App-specific formats (TIM/XNB) use the existing image loader.
@@ -298,8 +311,12 @@ def prepare_entries(document, project_path, replacements=None):
                 if clip.frame_size and (max(clip.frame_size) > 8192 or clip.frame_size[0] * clip.frame_size[1] > MAX_PIXELS):
                     raise ValueError(f"Media dimensions exceed project limits: {source}")
                 if clip.frame_size:
-                    decoded_pixels += clip.frame_size[0] * clip.frame_size[1] * (
-                        clip.total_frames if entry["loader"] == "image" else 1)
+                    decoded_pixels += (
+                        clip.decoded_pixel_count
+                        if clip.decoded_pixel_count is not None
+                        else clip.frame_size[0] * clip.frame_size[1] * (
+                            clip.total_frames if entry["loader"] == "image" else 1)
+                    )
                     if decoded_pixels > MAX_TOTAL_PIXELS:
                         raise ValueError("Project initial decoded images exceed 8,388,608 pixels")
                 if clip.total_frames != entry["frames"] or clip.clip_type != entry["type"] or abs(clip.fps - entry["fps"]) > 0.01:
