@@ -4,29 +4,202 @@ Settings manager – persists all application settings using QSettings.
 Settings are stored in an INI file next to the executable so they are easy
 to find, back-up, and delete when testing.  When running from source the INI
 file lands next to main.py; when frozen by PyInstaller it lands next to the
-.exe.
+.exe when writable, otherwise in the per-user application data directory.
 """
 import json
+import logging
 import os
 import sys
+from pathlib import Path
 from PyQt6.QtCore import QSettings
 
+from .app_paths import writable_app_directory
+from .atomic_output import staged_output_path
 
 APP_NAME = "AlphaFixerConverter"
 ORG_NAME = "PandaTools"
+logger = logging.getLogger(__name__)
 
 # Default custom emoji used when none have been configured yet
 DEFAULT_CUSTOM_EMOJI = "✨ ⭐ 💫"
+SELECTIVE_ALPHA_UI_ZONE_COUNT = 7
+
+UI_SCALE_PRESETS: tuple[tuple[str, str, float, str], ...] = (
+    ("Micro", "Micro  (60%)", 0.60, "Smallest size — dense layouts and very high DPI screens."),
+    ("Tiny", "Tiny  (70%)", 0.70, "Minimum size — tiny text and controls. For very small screens or ultra-high DPI."),
+    ("Compact", "Compact  (85%)", 0.85, "Slightly smaller text and controls — useful on small or dense-DPI screens."),
+    ("Normal", "Normal  (100%)", 1.00, "Default size. Best for most standard 1080p and larger displays."),
+    ("Large", "Large  (115%)", 1.15, "Slightly larger — good for high-DPI displays or accessibility needs."),
+    ("Extra Large", "Extra Large  (130%)", 1.30, "Large size. Great for 4K monitors or accessibility."),
+    ("Huge", "Huge  (150%)", 1.50, "Maximum size. Very large text and controls — best for 4K or low-vision users."),
+    ("Giant", "Giant  (175%)", 1.75, "Very large size — oversized controls for extremely large displays."),
+)
+
+_UI_SCALE_FACTORS = {key: factor for key, _label, factor, _tip in UI_SCALE_PRESETS}
+_UI_SCALE_LABELS = {key: label for key, label, _factor, _tip in UI_SCALE_PRESETS}
+_UI_SCALE_TIPS = {key: tip for key, _label, _factor, tip in UI_SCALE_PRESETS}
+
+_CONVERTER_HISTORY_ITEM_LIMIT = 500
+_CONVERTER_HISTORY_RESULTS_BYTE_LIMIT = 96 * 1024
+_CONVERTER_HISTORY_FAILURES_BYTE_LIMIT = 32 * 1024
+_CONVERTER_HISTORY_REASON_LIMIT = 512
+_CONVERTER_HISTORY_DETAIL_LIMIT = 2048
+
+
+def _is_valid_qcolor(value: str) -> bool:
+    """Return True when *value* looks like a supported color string."""
+    text = str(value).strip().lower()
+    if not text:
+        return False
+    if text in {"black", "white", "red", "green", "blue", "gray", "grey", "transparent"}:
+        return True
+    if text.startswith("#"):
+        hex_value = text[1:]
+        if len(hex_value) in (3, 4):
+            return all(ch in "0123456789abcdef" for ch in hex_value)
+        if len(hex_value) in (6, 8):
+            return all(ch in "0123456789abcdef" for ch in hex_value)
+        return False
+    if text.startswith("rgb(") and text.endswith(")"):
+        parts = [part.strip() for part in text[4:-1].split(",")]
+        return len(parts) == 3 and all(part.isdigit() and 0 <= int(part) <= 255 for part in parts)
+    if text.startswith("rgba(") and text.endswith(")"):
+        parts = [part.strip() for part in text[5:-1].split(",")]
+        if len(parts) != 4:
+            return False
+        if not all(part.isdigit() and 0 <= int(part) <= 255 for part in parts[:3]):
+            return False
+        try:
+            alpha = float(parts[3])
+        except ValueError:
+            return False
+        return 0.0 <= alpha <= 1.0 or 0 <= alpha <= 255
+    return False
+
+
+def _json_name(expected_type: type | tuple[type, ...]) -> str:
+    if isinstance(expected_type, tuple):
+        return " or ".join(t.__name__ for t in expected_type)
+    return expected_type.__name__
+
+
+def _load_json_setting(raw: object, fallback, *, label: str, expected_type: type | tuple[type, ...]):
+    if raw in ("", None):
+        return fallback
+    try:
+        value = json.loads(raw)
+    except (TypeError, json.JSONDecodeError) as exc:
+        logger.warning("Ignoring malformed %s setting: %s", label, exc)
+        return fallback
+    if not isinstance(value, expected_type):
+        logger.warning(
+            "Ignoring malformed %s setting: expected %s, got %s",
+            label,
+            _json_name(expected_type),
+            type(value).__name__,
+        )
+        return fallback
+    return value
+
+
+def _history_nonnegative_int(value: object) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def _compact_converter_history_records(
+    entry: dict,
+    *,
+    key: str,
+    total_key: str,
+    omitted_key: str,
+    byte_limit: int,
+    fallback_total: object = 0,
+) -> None:
+    if key not in entry:
+        return
+    raw_records = entry.get(key)
+    records = raw_records if isinstance(raw_records, list) else []
+    previous_omitted = _history_nonnegative_int(entry.get(omitted_key))
+    total = max(
+        len(records) + previous_omitted,
+        _history_nonnegative_int(entry.get(total_key)),
+        _history_nonnegative_int(fallback_total),
+    )
+    allowed_fields = (
+        {"source", "working_source", "output", "output_format", "status", "reason", "detail"}
+        if key == "results"
+        else {"source", "source_label", "reason", "detail"}
+    )
+    compacted = []
+    used_bytes = 2
+    for raw_record in records[:_CONVERTER_HISTORY_ITEM_LIMIT]:
+        if not isinstance(raw_record, dict):
+            continue
+        record = {
+            field: str(value)
+            for field, value in raw_record.items()
+            if field in allowed_fields and value is not None
+        }
+        for field, limit in (
+            ("reason", _CONVERTER_HISTORY_REASON_LIMIT),
+            ("detail", _CONVERTER_HISTORY_DETAIL_LIMIT),
+        ):
+            value = record.get(field, "")
+            if len(value) > limit:
+                record[field] = value[:limit] + "… [truncated]"
+        record_bytes = len(
+            json.dumps(record, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        ) + 1
+        if used_bytes + record_bytes > byte_limit:
+            continue
+        compacted.append(record)
+        used_bytes += record_bytes
+    entry[key] = compacted
+    entry[total_key] = total
+    entry[omitted_key] = max(0, total - len(compacted))
+    entry[f"{key}_text_truncated"] = sum(
+        any(record.get(field, "").endswith("… [truncated]") for field in ("reason", "detail"))
+        for record in compacted
+    )
+
+
+def get_ui_scale_presets() -> tuple[tuple[str, str, float, str], ...]:
+    """Return the supported UI scale presets."""
+    return UI_SCALE_PRESETS
+
+
+def get_ui_scale_factor(scale_key: str) -> float:
+    """Return the font-size multiplier for *scale_key*."""
+    return _UI_SCALE_FACTORS.get(scale_key, 1.0)
+
+
+def get_ui_scale_label(scale_key: str) -> str:
+    """Return the menu label for *scale_key*."""
+    return _UI_SCALE_LABELS.get(scale_key, scale_key)
+
+
+def get_ui_scale_tip(scale_key: str) -> str:
+    """Return the explanatory tip for *scale_key*."""
+    return _UI_SCALE_TIPS.get(scale_key, "")
 
 
 def _settings_ini_path() -> str:
     """Return the absolute path to the INI file that stores all settings.
 
-    Priority:
+    GUI acceptance mode uses a private, process-lifetime directory under its
+    report output instead, including writes made during window teardown.
+
+    Normal-launch priority:
     1. Next to the frozen executable (sys.frozen / PyInstaller).
     2. Next to main.py when running from source (three levels up from this
        file: src/core/settings_manager.py → src/core → src → project root).
     """
+    if output_directory := os.environ.get("ALPHA_FIXER_GUI_ACCEPTANCE_OUT"):
+        from .gui_acceptance import acceptance_settings_ini_path
+        return acceptance_settings_ini_path(output_directory)
     if getattr(sys, "frozen", False):
         # Running as a PyInstaller bundle – place the INI next to the .exe
         exe_dir = os.path.dirname(sys.executable)
@@ -35,7 +208,8 @@ def _settings_ini_path() -> str:
         exe_dir = os.path.normpath(
             os.path.join(os.path.dirname(__file__), "..", "..")
         )
-    return os.path.join(exe_dir, f"{APP_NAME}.ini")
+    directory = writable_app_directory(Path(exe_dir))
+    return str(directory / f"{APP_NAME}.ini")
 
 
 class SettingsManager:
@@ -95,6 +269,7 @@ class SettingsManager:
         "sound_frog_croak": False,
         "sound_batch_done": False,
         # Cursor & trail
+        "cursor_enabled": False,       # master toggle for custom cursor (off by default)
         "cursor": "Default",
         "use_theme_cursor": False,
         "cursor_anim_enabled": True,   # animate emoji cursors that have frame sequences
@@ -109,12 +284,27 @@ class SettingsManager:
         "trail_intensity": 100,   # 10–100 % max trail opacity
         # Appearance
         "font_size": 10,
+        "ui_scale": "Normal",          # Micro / Tiny / Compact / Normal / Large / Extra Large / Huge / Giant
+        "btn_height": "Normal",
+        "widget_spacing": "Normal",
+        "border_radius": "Normal",
+        "panel_padding": "Normal",
+        "notif_overlay_enabled": True,
+        "use_theme_notif": True,
+        # History settings
+        "history_max_entries": 50,      # Max history entries saved per tool
+        "history_track_converter": True,          # Record Converter history
+        "history_track_alpha": True,              # Record Alpha & RGBA Adjuster history
+        "history_track_selective_alpha": True,    # Record Selective Alpha Tool history
+        "history_track_gif_builder": True,        # Record GIF Builder history
+        "history_track_video_builder": True,      # Record Video Builder history
         # Last-used state
         "last_input_dir": "",
         "last_output_dir": "",
         "last_alpha_preset": "",
         "last_converter_format": "PNG",
         "last_converter_quality": 90,
+        "last_converter_dds_variant": "auto",
         # Batch options
         "batch_recursive": True,
         "output_suffix": "",
@@ -123,12 +313,13 @@ class SettingsManager:
         "converter_recursive": True,
         "converter_keep_metadata": False,
         # Window geometry
-        # Window geometry – default to 1100×800 which comfortably fits on a
-        # typical 1080p display and stays above the 900×700 enforced minimum.
-        "window_x": 100,
-        "window_y": 100,
-        "window_w": 1100,
-        "window_h": 800,
+        # Window geometry – default to 960×700 which fits comfortably on common
+        # laptop displays (1366×768) as well as larger 1080p monitors while
+        # staying above the 900×700 enforced minimum.
+        "window_x": 80,
+        "window_y": 60,
+        "window_w": 960,
+        "window_h": 700,
         "window_maximized": False,
         # Tooltip
         "tooltip_mode": "No Filter 🤬",
@@ -173,8 +364,8 @@ class SettingsManager:
         # Animated banner SVGs / spinning emojis (off by default for performance)
         "animated_banner_enabled": False,
         # Banner animation style when animated_banner_enabled is True.
-        # Valid values: "spin", "bounce", "shake", "pendulum", "flock".
-        # "flock" spawns themed emoji flying across the top of the window.
+        # Valid values: "spin", "bounce", "shake", "pendulum", "pulse", "float", "flip", "orbit", "glitch".
+        # (Note: "flock" has moved to Background Effects – see bg_flock_enabled.)
         "banner_anim_style": "spin",
         # When True the banner animation mode comes from the active theme's
         # _banner_anim key rather than the manual banner_anim_style setting.
@@ -202,20 +393,43 @@ class SettingsManager:
         "unlock_alien": False,
         "unlock_shark_bait": False,
         "unlock_noodle": False,
+        "unlock_anime": False,
+        "unlock_waifu": False,
         # ------------------------------------------------------------------
         # Button press animation settings
         # ------------------------------------------------------------------
-        # When True button presses are animated (off by default).
-        "button_anim_enabled": False,
+        # When True button presses are animated (on by default).
+        "button_anim_enabled": True,
         # Animation style: "none", "press", "fall", "shake", "shatter", "bounce"
         "button_anim_style": "press",
         # When True the animation mode comes from the active theme's _button_anim key.
         "use_theme_button_anim": True,
         # ------------------------------------------------------------------
+        # Background drip effects (independent of click effects)
+        # ------------------------------------------------------------------
+        # When True the drip overlay is active (off by default).
+        "bg_drip_enabled": False,
+        # Drip style: "blood" (gore red teardrops) or "water" (translucent cyan teardrops).
+        "bg_drip_type": "blood",
+        # When True the drip type is auto-selected based on the active theme.
+        "use_theme_drip": False,
+        # Background flock (independent animated flock of themed emoji)
+        "bg_flock_enabled": False,
+        "use_theme_flock": False,        # True → use theme icon emoji; False → use bg_flock_style
+        "bg_flock_style": "bats",        # emoji key: bats/fairies/fish/butterflies/birds/stars/petals
+        # Background ambient effect (independent ambient overlay)
+        "bg_ambient_enabled": False,
+        "bg_ambient_type": "none",   # snow/ember/sakura/stars/bubbles/neon/ghost/none
+        "use_theme_ambient": False,  # True → auto-select ambient from active theme
+        # Custom background media
+        "custom_bg_enabled": False,
+        "use_theme_bg": False,
+        "custom_bg_path": "",
+        # ------------------------------------------------------------------
         # Selective Alpha Tool settings
         # ------------------------------------------------------------------
-        # Zone alpha values (7 zones, defaults to 128 each – 50% transparent)
-        "sa_zone_alphas": "[128,128,128,128,128,128,128,128,128,128]",
+        # Visible zone alpha values, defaulting to 128 each – 50% transparent.
+        "sa_zone_alphas": json.dumps([128] * SELECTIVE_ALPHA_UI_ZONE_COUNT),
         # Custom zone overlay colors: list of [R,G,B,overlay_alpha] per zone.
         # Empty string = use built-in ZONE_COLORS palette.
         "sa_zone_colors": "",
@@ -230,6 +444,15 @@ class SettingsManager:
         "sa_show_alpha_labels": False,
         # Last-used drawing tool key
         "sa_last_tool": "freehand",
+        # Customizable keyboard shortcuts (item 20): JSON dict of {shortcut_id: key_sequence_str}
+        "custom_shortcuts": "{}",
+        # Hold-click effects (item 48)
+        "hold_effects_enabled": False,
+        "hold_effects_key": "bubble",    # "bubble" | "blood" | "shake"
+        "use_theme_hold_effects": False,
+        # Alpha preview helpers
+        "alpha_preview_highlight": False,
+        "alpha_preview_detect_atlas": False,
     }
 
     def __init__(self):
@@ -281,23 +504,70 @@ class SettingsManager:
         """
         self._qs.sync()
 
+    def get_custom_shortcuts(self) -> dict[str, str]:
+        """Return the persisted custom-shortcut override map."""
+        raw = self.get("custom_shortcuts", "{}")
+        try:
+            data = json.loads(raw) if raw else {}
+        except (json.JSONDecodeError, TypeError) as exc:
+            logger.warning("Ignoring malformed custom_shortcuts setting: %s", exc)
+            return {}
+        if not isinstance(data, dict):
+            logger.warning(
+                "Ignoring malformed custom_shortcuts setting: expected dict, got %s",
+                type(data).__name__,
+            )
+            return {}
+        return data
+
+    def get_shortcut_binding(self, shortcut_id: str, default: str) -> str:
+        """Return the current key sequence string for *shortcut_id*."""
+        value = self.get_custom_shortcuts().get(shortcut_id, default)
+        return value if isinstance(value, str) and value else default
+
+    def set_shortcut_binding(self, shortcut_id: str, key_sequence: str,
+                             default: str) -> None:
+        """Persist *key_sequence* for *shortcut_id* or clear it if default."""
+        custom = self.get_custom_shortcuts()
+        if key_sequence == default:
+            custom.pop(shortcut_id, None)
+        else:
+            custom[shortcut_id] = key_sequence
+        self.set("custom_shortcuts", json.dumps(custom))
+
     # ------------------------------------------------------------------
     # Theme
     # ------------------------------------------------------------------
 
+    @classmethod
+    def _normalize_theme(cls, data: dict, name: str | None = None) -> dict:
+        theme = {**cls._DEFAULT_THEME, **data}
+        for key, default in cls._DEFAULT_THEME.items():
+            value = theme[key]
+            if key == "name":
+                if not isinstance(value, str) or not value.strip():
+                    theme[key] = name or default
+            elif not key.startswith("_"):
+                if not isinstance(value, str) or not _is_valid_qcolor(value):
+                    theme[key] = default
+        for key in list(theme):
+            if key.startswith("_") and not isinstance(theme[key], str):
+                if key in cls._DEFAULT_THEME:
+                    theme[key] = cls._DEFAULT_THEME[key]
+                else:
+                    del theme[key]
+        if "_trail_color" in theme and not _is_valid_qcolor(theme["_trail_color"]):
+            del theme["_trail_color"]
+        if name is not None:
+            theme["name"] = name
+        return theme
+
     def get_theme(self) -> dict:
         raw = self.get("theme_data", json.dumps(self._DEFAULT_THEME))
-        try:
-            data = json.loads(raw)
-            # Guard against non-dict values: json.loads("null") → None,
-            # json.loads("42") → int, json.loads("[]") → list, etc.
-            if not isinstance(data, dict):
-                return dict(self._DEFAULT_THEME)
-            # Merge with defaults so all required keys are always present,
-            # even if the stored theme was saved by an older app version.
-            return {**self._DEFAULT_THEME, **data}
-        except (json.JSONDecodeError, TypeError):
-            return dict(self._DEFAULT_THEME)
+        data = _load_json_setting(raw, {}, label="theme_data", expected_type=dict)
+        # Merge with defaults so all required keys are always present, even if
+        # the stored theme was saved by an older app version.
+        return self._normalize_theme(data) if data else dict(self._DEFAULT_THEME)
 
     def set_theme(self, theme_dict: dict):
         self.set("theme_data", json.dumps(theme_dict))
@@ -306,24 +576,26 @@ class SettingsManager:
     # Named custom themes
     # ------------------------------------------------------------------
 
-    def get_saved_themes(self) -> dict:
-        """Return {name: theme_dict} for all user-saved named themes."""
+    def _saved_theme_records(self) -> dict:
         raw = self._qs.value("saved_themes", "{}")
-        try:
-            data = json.loads(raw)
-            # Protect callers that iterate over the result with .items()
-            return data if isinstance(data, dict) else {}
-        except (json.JSONDecodeError, TypeError):
-            return {}
+        return _load_json_setting(raw, {}, label="saved_themes", expected_type=dict)
+
+    def get_saved_themes(self) -> dict:
+        """Return usable themes without rewriting malformed records on disk."""
+        return {
+            name: self._normalize_theme(theme, name=name)
+            for name, theme in self._saved_theme_records().items()
+            if isinstance(theme, dict)
+        }
 
     def save_named_theme(self, name: str, theme: dict) -> None:
-        saved = self.get_saved_themes()
+        saved = self._saved_theme_records()
         saved[name] = theme
         self._qs.setValue("saved_themes", json.dumps(saved))
         self._qs.sync()
 
     def delete_named_theme(self, name: str) -> bool:
-        saved = self.get_saved_themes()
+        saved = self._saved_theme_records()
         if name in saved:
             del saved[name]
             self._qs.setValue("saved_themes", json.dumps(saved))
@@ -337,12 +609,8 @@ class SettingsManager:
 
     def get_custom_presets(self) -> list:
         raw = self._qs.value("custom_presets", "[]")
-        try:
-            data = json.loads(raw)
-            # Protect callers that call .insert() / .append() on the result
-            return data if isinstance(data, list) else []
-        except (json.JSONDecodeError, TypeError):
-            return []
+        # Protect callers that call .insert() / .append() on the result
+        return _load_json_setting(raw, [], label="custom_presets", expected_type=list)
 
     def save_custom_presets(self, presets: list):
         self._qs.setValue("custom_presets", json.dumps(presets))
@@ -354,16 +622,49 @@ class SettingsManager:
 
     def get_converter_history(self) -> list:
         raw = self._qs.value("converter_history", "[]")
-        try:
-            data = json.loads(raw)
-            return data if isinstance(data, list) else []
-        except (json.JSONDecodeError, TypeError):
-            return []
+        return _load_json_setting(raw, [], label="converter_history", expected_type=list)
 
     def add_converter_history(self, entry: dict, max_entries: int = 50):
         history = self.get_converter_history()
-        history.insert(0, entry)
-        history = history[:max_entries]
+        bounded_entry = dict(entry)
+        _compact_converter_history_records(
+            bounded_entry,
+            key="results",
+            total_key="results_total",
+            omitted_key="results_omitted",
+            byte_limit=_CONVERTER_HISTORY_RESULTS_BYTE_LIMIT,
+            fallback_total=bounded_entry.get("file_count", 0),
+        )
+        _compact_converter_history_records(
+            bounded_entry,
+            key="failure_details",
+            total_key="failure_details_total",
+            omitted_key="failure_details_omitted",
+            byte_limit=_CONVERTER_HISTORY_FAILURES_BYTE_LIMIT,
+        )
+        history.insert(0, bounded_entry)
+        for existing in history[1:]:
+            if not isinstance(existing, dict):
+                continue
+            _compact_converter_history_records(
+                existing,
+                key="results",
+                total_key="results_total",
+                omitted_key="results_omitted",
+                byte_limit=_CONVERTER_HISTORY_RESULTS_BYTE_LIMIT,
+                fallback_total=existing.get("file_count", 0),
+            )
+            _compact_converter_history_records(
+                existing,
+                key="failure_details",
+                total_key="failure_details_total",
+                omitted_key="failure_details_omitted",
+                byte_limit=_CONVERTER_HISTORY_FAILURES_BYTE_LIMIT,
+            )
+        # Per-tool limit takes priority over global limit when > 0 (item 8)
+        per_tool = int(self.get("history_max_entries_converter", 0))
+        limit = per_tool if per_tool > 0 else int(self.get("history_max_entries", max_entries))
+        history = history[:limit]
         self._qs.setValue("converter_history", json.dumps(history))
         self._qs.sync()
 
@@ -373,16 +674,15 @@ class SettingsManager:
 
     def get_alpha_history(self) -> list:
         raw = self._qs.value("alpha_history", "[]")
-        try:
-            data = json.loads(raw)
-            return data if isinstance(data, list) else []
-        except (json.JSONDecodeError, TypeError):
-            return []
+        return _load_json_setting(raw, [], label="alpha_history", expected_type=list)
 
     def add_alpha_history(self, entry: dict, max_entries: int = 50):
         history = self.get_alpha_history()
         history.insert(0, entry)
-        history = history[:max_entries]
+        # Per-tool limit takes priority over global limit when > 0 (item 8)
+        per_tool = int(self.get("history_max_entries_alpha", 0))
+        limit = per_tool if per_tool > 0 else int(self.get("history_max_entries", max_entries))
+        history = history[:limit]
         self._qs.setValue("alpha_history", json.dumps(history))
         self._qs.sync()
 
@@ -402,16 +702,15 @@ class SettingsManager:
 
     def get_selective_alpha_history(self) -> list:
         raw = self._qs.value("selective_alpha_history", "[]")
-        try:
-            data = json.loads(raw)
-            return data if isinstance(data, list) else []
-        except (json.JSONDecodeError, TypeError):
-            return []
+        return _load_json_setting(raw, [], label="selective_alpha_history", expected_type=list)
 
     def add_selective_alpha_history(self, entry: dict, max_entries: int = 50):
         history = self.get_selective_alpha_history()
         history.insert(0, entry)
-        history = history[:max_entries]
+        # Per-tool limit takes priority over global limit when > 0 (item 8)
+        per_tool = int(self.get("history_max_entries_selective_alpha", 0))
+        limit = per_tool if per_tool > 0 else int(self.get("history_max_entries", max_entries))
+        history = history[:limit]
         self._qs.setValue("selective_alpha_history", json.dumps(history))
         self._qs.sync()
 
@@ -421,25 +720,74 @@ class SettingsManager:
         self._qs.sync()
 
     # ------------------------------------------------------------------
+    # GIF Builder history (item 74)
+    # ------------------------------------------------------------------
+
+    def get_gif_builder_history(self) -> list:
+        raw = self._qs.value("gif_builder_history", "[]")
+        return _load_json_setting(raw, [], label="gif_builder_history", expected_type=list)
+
+    def add_gif_builder_history(self, entry: dict, max_entries: int = 50):
+        if not self.get("history_track_gif_builder", True):
+            return
+        history = self.get_gif_builder_history()
+        history.insert(0, entry)
+        per_tool = int(self.get("history_max_entries_gif_builder", 0))
+        limit = per_tool if per_tool > 0 else int(self.get("history_max_entries", max_entries))
+        history = history[:limit]
+        self._qs.setValue("gif_builder_history", json.dumps(history))
+        self._qs.sync()
+
+    def clear_gif_builder_history(self) -> None:
+        self._qs.setValue("gif_builder_history", "[]")
+        self._qs.sync()
+
+    # ------------------------------------------------------------------
+    # Video Builder history (item 74)
+    # ------------------------------------------------------------------
+
+    def get_video_builder_history(self) -> list:
+        raw = self._qs.value("video_builder_history", "[]")
+        return _load_json_setting(raw, [], label="video_builder_history", expected_type=list)
+
+    def add_video_builder_history(self, entry: dict, max_entries: int = 50):
+        if not self.get("history_track_video_builder", True):
+            return
+        history = self.get_video_builder_history()
+        history.insert(0, entry)
+        per_tool = int(self.get("history_max_entries_video_builder", 0))
+        limit = per_tool if per_tool > 0 else int(self.get("history_max_entries", max_entries))
+        history = history[:limit]
+        self._qs.setValue("video_builder_history", json.dumps(history))
+        self._qs.sync()
+
+    def clear_video_builder_history(self) -> None:
+        self._qs.setValue("video_builder_history", "[]")
+        self._qs.sync()
+
+    # ------------------------------------------------------------------
     # Selective Alpha Tool settings
     # ------------------------------------------------------------------
 
     def get_sa_zone_alphas(self) -> list[int]:
-        """Return the 7 zone alpha values as a list of ints (0-255)."""
+        """Return the zone alpha values as a list of ints (0-255), up to NUM_ZONES."""
         raw = self._qs.value(
             "sa_zone_alphas",
             self._DEFAULTS["sa_zone_alphas"],
         )
         try:
-            data = json.loads(raw)
-            if isinstance(data, list) and len(data) == 7:
-                return [max(0, min(255, int(v))) for v in data]
-        except (json.JSONDecodeError, TypeError, ValueError):
-            pass
-        return [128] * 7
+            data = _load_json_setting(raw, [], label="sa_zone_alphas", expected_type=list)
+            if data:
+                result = [max(0, min(255, int(v))) for v in data[:SELECTIVE_ALPHA_UI_ZONE_COUNT]]
+                if len(result) < SELECTIVE_ALPHA_UI_ZONE_COUNT:
+                    result += [128] * (SELECTIVE_ALPHA_UI_ZONE_COUNT - len(result))
+                return result
+        except (TypeError, ValueError) as exc:
+            logger.warning("Ignoring malformed sa_zone_alphas setting: %s", exc)
+        return [128] * SELECTIVE_ALPHA_UI_ZONE_COUNT
 
     def set_sa_zone_alphas(self, alphas: list[int]) -> None:
-        """Persist the 7 zone alpha values."""
+        """Persist the visible zone alpha values."""
         self._qs.setValue("sa_zone_alphas", json.dumps(
             [max(0, min(255, int(v))) for v in alphas]
         ))
@@ -458,16 +806,15 @@ class SettingsManager:
         if not raw:
             return None
         try:
-            data = json.loads(raw)
-            if (isinstance(data, list) and len(data) == 7
-                    and all(isinstance(c, list) and len(c) == 4 for c in data)):
+            data = _load_json_setting(raw, None, label="sa_zone_colors", expected_type=list)
+            if isinstance(data, list) and 1 <= len(data) <= 40 and all(isinstance(c, list) and len(c) == 4 for c in data):
                 return [[max(0, min(255, int(v))) for v in c] for c in data]
-        except (json.JSONDecodeError, TypeError, ValueError):
-            pass
+        except (TypeError, ValueError) as exc:
+            logger.warning("Ignoring malformed sa_zone_colors setting: %s", exc)
         return None
 
     def set_sa_zone_colors(self, colors: list[list[int]]) -> None:
-        """Persist 7 zone overlay colors as [[R,G,B,A], …]."""
+        """Persist zone overlay colors as [[R,G,B,A], …]."""
         self._qs.setValue("sa_zone_colors", json.dumps(
             [[max(0, min(255, int(v))) for v in c] for c in colors]
         ))
@@ -477,7 +824,7 @@ class SettingsManager:
 
         Useful for testing/debugging: removes all unlock flags, click counts,
         history, and UI preferences so easter eggs can be re-triggered.
-        Equivalent to deleting the .ini file next to the application.
+        Equivalent to deleting the active settings INI file.
         """
         self._qs.clear()
         self._qs.sync()
@@ -492,6 +839,8 @@ class SettingsManager:
         _progress_keys = [k for k in self._DEFAULTS if k in (
             "total_clicks", "alpha_fixes_total", "conversions_total",
             "alpha_fix_done_once", "conversion_done_once",
+            "theme_changed_once", "cursor_anim_used_once",
+            "trail_enabled_once", "tooltip_mode_changed_once",
         )]
         for key in _unlock_keys + _progress_keys:
             self._qs.setValue(key, self._DEFAULTS[key])
@@ -500,6 +849,23 @@ class SettingsManager:
     # ------------------------------------------------------------------
     # Export / import all settings to a JSON file
     # ------------------------------------------------------------------
+
+    _IMPORT_INTEGER_RANGES = {
+        "sound_volume": (0, 100),
+        "trail_length": (10, 200),
+        "trail_fade_speed": (1, 10),
+        "trail_intensity": (10, 100),
+        "font_size": (8, 24),
+        "history_max_entries": (10, 5000),
+        "history_max_entries_converter": (0, 5000),
+        "history_max_entries_alpha": (0, 5000),
+        "history_max_entries_selective_alpha": (0, 5000),
+        "history_max_entries_gif_builder": (0, 5000),
+        "history_max_entries_video_builder": (0, 5000),
+        "last_converter_quality": (1, 100),
+        "sa_brush_size": (1, 200),
+        "sa_eraser_size": (1, 200),
+    }
 
     EXPORT_KEYS = [
         "theme", "theme_data", "saved_themes",
@@ -512,10 +878,24 @@ class SettingsManager:
         "sound_zone_paint", "sound_mask_copy", "sound_mask_paste",
         "sound_bat_screech", "sound_cat_meow", "sound_dog_bark",
         "sound_frog_croak", "sound_batch_done",
-        "cursor", "use_theme_cursor", "cursor_anim_enabled", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
+        "cursor_enabled", "cursor", "use_theme_cursor", "cursor_anim_enabled", "trail_enabled", "trail_color", "trail_style", "use_theme_trail",
         "trail_length", "trail_fade_speed", "trail_intensity",
-        "font_size",
+        "font_size", "ui_scale", "history_max_entries",
+        "btn_height", "widget_spacing", "border_radius", "panel_padding",
+        "history_max_entries_converter", "history_max_entries_alpha",
+        "history_max_entries_selective_alpha", "history_max_entries_gif_builder",
+        "history_max_entries_video_builder",
+        "history_track_converter", "history_track_alpha",
+        "history_track_selective_alpha", "history_track_gif_builder", "history_track_video_builder",
+        "notif_overlay_enabled", "use_theme_notif", "custom_shortcuts",
+        "hold_effects_enabled", "hold_effects_key", "use_theme_hold_effects",
+        "last_trail_style_pref", "last_effect_key_pref", "last_cursor_key_pref",
+        "last_sound_profile_pref", "last_btn_anim_pref",
         "click_effects_enabled", "use_theme_effect", "tooltip_mode", "tooltip_style",
+        "bg_drip_enabled", "bg_drip_type", "use_theme_drip",
+        "bg_flock_enabled", "use_theme_flock", "bg_flock_style",
+        "bg_ambient_enabled", "bg_ambient_type", "use_theme_ambient",
+        "custom_bg_enabled", "use_theme_bg", "custom_bg_path",
         "animated_banner_enabled", "banner_anim_style", "banner_use_theme_anim",
         "show_splash_screen",
         "button_anim_enabled", "button_anim_style", "use_theme_button_anim",
@@ -523,20 +903,119 @@ class SettingsManager:
         "batch_recursive", "output_suffix", "overwrite_originals",
         "converter_output_dir", "converter_recursive", "converter_keep_metadata",
         "last_alpha_preset", "last_converter_format", "last_converter_quality",
+        "last_converter_dds_variant",
         "custom_presets",
         # Selective Alpha Tool
-        "sa_zone_alphas", "sa_brush_size", "sa_eraser_size", "sa_autocorrect", "sa_last_tool",
+        "sa_zone_alphas", "sa_zone_colors", "sa_brush_size", "sa_eraser_size",
+        "sa_autocorrect", "sa_show_zero_alpha", "sa_show_alpha_labels", "sa_last_tool",
     ]
 
     def export_settings(self, path: str) -> None:
-        """Write a subset of settings to *path* as JSON."""
+        """Atomically write a subset of settings to *path* as JSON."""
         data = {}
         for key in self.EXPORT_KEYS:
             val = self._qs.value(key, None)
             if val is not None:
                 data[key] = val
-        with open(path, "w", encoding="utf-8") as f:
+        with staged_output_path(path, preserve_existing_mode=True) as staged_path, \
+                open(staged_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+
+    @classmethod
+    def _validate_backup_theme(cls, theme: dict, label: str) -> None:
+        if not isinstance(theme, dict):
+            raise ValueError(f"Invalid theme preference: {label} (expected an object)")
+        for field, value in theme.items():
+            if field == "name":
+                valid = isinstance(value, str) and bool(value.strip())
+            elif field.startswith("_"):
+                valid = isinstance(value, str)
+                if field == "_trail_color":
+                    valid = valid and _is_valid_qcolor(value)
+            elif field in cls._DEFAULT_THEME:
+                valid = isinstance(value, str) and _is_valid_qcolor(value)
+            else:
+                continue
+            if not valid:
+                raise ValueError(f"Invalid theme preference: {label}.{field}")
+
+    @classmethod
+    def _validate_backup_presets(cls, data) -> None:
+        from .presets import AlphaPreset
+
+        if not isinstance(data, list):
+            raise ValueError("Invalid custom_presets (expected a list)")
+        for index, record in enumerate(data):
+            label = f"custom_presets[{index}]"
+            if not isinstance(record, dict):
+                raise ValueError(f"Invalid {label} (expected an object)")
+            if not isinstance(record.get("name"), str) or not record["name"].strip():
+                raise ValueError(f"Invalid {label}.name (expected a non-empty name)")
+            if not isinstance(record.get("description"), str):
+                raise ValueError(f"Invalid {label}.description (expected text)")
+            for field in ("builtin", "invert", "binary_cut"):
+                if field in record and not isinstance(record[field], bool):
+                    raise ValueError(f"Invalid {label}.{field} (expected a boolean)")
+            for field in ("clamp_min", "clamp_max", "alpha_value"):
+                value = record.get(field)
+                if value is not None and type(value) not in (int, str):
+                    raise ValueError(f"Invalid {label}.{field} (expected an integer)")
+            try:
+                preset = AlphaPreset.from_dict(record)
+            except (TypeError, ValueError, OverflowError):
+                raise ValueError(f"Invalid {label} (unusable alpha range)") from None
+            for field in ("clamp_min", "clamp_max", "threshold"):
+                value = getattr(preset, field)
+                if type(value) is not int or not 0 <= value <= 255:
+                    raise ValueError(f"Invalid {label}.{field} (expected an integer 0–255)")
+
+    @classmethod
+    def _validate_backup_structure(cls, key: str, value: str) -> None:
+        if key not in ("custom_shortcuts", "sa_zone_alphas", "sa_zone_colors",
+                       "theme_data", "saved_themes", "custom_presets"):
+            return
+        # Empty shortcut maps, saved themes and zone colors mean "use defaults".
+        if not value and key in ("custom_shortcuts", "sa_zone_colors", "saved_themes", "custom_presets"):
+            return
+        try:
+            data = json.loads(value)
+        except ValueError:
+            raise ValueError(f"Invalid JSON preference: {key}") from None
+        if key == "custom_presets":
+            cls._validate_backup_presets(data)
+            return
+        if key == "theme_data":
+            cls._validate_backup_theme(data, key)
+            return
+        if key == "saved_themes":
+            if not isinstance(data, dict):
+                raise ValueError(f"Invalid theme preference: {key} (expected an object)")
+            for name, theme in data.items():
+                if not name.strip():
+                    raise ValueError(f"Invalid theme preference: {key} (empty theme name)")
+                cls._validate_backup_theme(theme, f"{key}[{name}]")
+            return
+        if key == "custom_shortcuts":
+            if not isinstance(data, dict) or not all(
+                isinstance(binding, str) for binding in data.values()
+            ):
+                raise ValueError(f"Invalid shortcut map: {key} (expected text bindings)")
+            return
+        if not isinstance(data, list) or not 1 <= len(data) <= 40:
+            raise ValueError(f"Invalid zone preference: {key} (expected 1–40 zones)")
+        rows = data if key == "sa_zone_colors" else [data]
+        for row in rows:
+            if not isinstance(row, list) or (key == "sa_zone_colors" and len(row) != 4):
+                raise ValueError(f"Invalid zone preference: {key} (expected RGBA rows)")
+            for component in row:
+                if type(component) not in (int, str):
+                    raise ValueError(f"Invalid zone preference: {key} (expected integers 0–255)")
+                try:
+                    number = int(component)
+                except ValueError:
+                    raise ValueError(f"Invalid zone preference: {key} (expected integers 0–255)") from None
+                if not 0 <= number <= 255:
+                    raise ValueError(f"Invalid zone preference: {key} (expected integers 0–255)")
 
     def import_settings(self, path: str) -> list[str]:
         """
@@ -544,7 +1023,9 @@ class SettingsManager:
         Returns a list of keys that were imported.
         Raises OSError on file-read failure, json.JSONDecodeError if the
         file contains invalid JSON syntax, or ValueError if the JSON root
-        is not an object (dict).
+        is not an object (dict) or a recognized preference has an invalid type
+        or is outside its supported numeric range.
+        All recognized values are validated before any preferences are changed.
         """
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
@@ -553,10 +1034,47 @@ class SettingsManager:
                 f"Settings file must contain a JSON object, "
                 f"got {type(data).__name__!r} instead."
             )
-        imported = []
+        validated = {}
         for key in self.EXPORT_KEYS:
             if key in data:
-                self._qs.setValue(key, data[key])
-                imported.append(key)
+                value = data[key]
+                default = self._DEFAULTS.get(key, "")
+                if key.startswith("history_max_entries_"):
+                    default = 0
+                if isinstance(default, bool):
+                    if isinstance(value, str):
+                        normalized = value.lower()
+                        if normalized not in ("true", "false", "1", "0", "yes", "no"):
+                            raise ValueError(f"Invalid boolean preference: {key}")
+                        value = normalized in ("true", "1", "yes")
+                    elif type(value) is int and value in (0, 1):
+                        value = bool(value)
+                    elif not isinstance(value, bool):
+                        raise ValueError(f"Invalid boolean preference: {key}")
+                elif isinstance(default, int):
+                    if isinstance(value, str):
+                        try:
+                            value = int(value)
+                        except ValueError:
+                            raise ValueError(f"Invalid integer preference: {key}") from None
+                    elif type(value) is not int:
+                        raise ValueError(f"Invalid integer preference: {key}")
+                    # QSettings stores integer variants as signed 64-bit values.
+                    if not -(2**63) <= value < 2**63:
+                        raise ValueError(f"Integer preference out of range: {key}")
+                    if key in self._IMPORT_INTEGER_RANGES:
+                        minimum, maximum = self._IMPORT_INTEGER_RANGES[key]
+                        if not minimum <= value <= maximum:
+                            raise ValueError(
+                                f"Integer preference out of range: {key} "
+                                f"(expected {minimum}–{maximum}, got {value})"
+                            )
+                elif not isinstance(value, str):
+                    raise ValueError(f"Invalid text preference: {key}")
+                if isinstance(value, str):
+                    self._validate_backup_structure(key, value)
+                validated[key] = value
+        for key, value in validated.items():
+            self._qs.setValue(key, value)
         self._qs.sync()
-        return imported
+        return list(validated)

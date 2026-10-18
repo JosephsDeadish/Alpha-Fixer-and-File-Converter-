@@ -1,0 +1,816 @@
+"""Disk-backed settings lifecycle acceptance, independent of user preferences."""
+import json
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+from PIL import Image
+from PyQt6 import sip
+from PyQt6.QtCore import QSettings, QTimer
+from PyQt6.QtTest import QTest
+from PyQt6.QtWidgets import QApplication, QMessageBox
+
+from src.core.settings_manager import SettingsManager
+from src.ui.settings_dialog import SettingsDialog, _background_file_filter
+
+
+@pytest.fixture(scope="module")
+def app():
+    return QApplication.instance() or QApplication([])
+
+
+@pytest.fixture
+def dialog(tmp_path):
+    with patch("src.core.settings_manager._settings_ini_path",
+               return_value=str(tmp_path / "settings.ini")):
+        manager = SettingsManager()
+        widget = SettingsDialog(manager)
+        yield widget, manager
+        widget.close()
+        sip.delete(widget)
+        manager.sync()
+        sip.delete(manager._qs)
+
+
+@pytest.fixture
+def settings_session(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    font, stylesheet = app.font(), app.styleSheet()
+    managers, widgets = [], []
+    with patch("src.core.settings_manager._settings_ini_path",
+               return_value=str(tmp_path / "settings.ini")):
+        def launch():
+            manager = SettingsManager()
+            managers.append(manager)
+            return manager
+
+        def open_settings(manager, parent=None):
+            widget = SettingsDialog(manager, parent)
+            widgets.append(widget)
+            return widget
+
+        yield app, launch, open_settings, widgets
+    for widget in reversed(widgets):
+        if not sip.isdeleted(widget):
+            widget.close()
+            sip.delete(widget)
+    for manager in managers:
+        manager.sync()
+        sip.delete(manager._qs)
+    app.setFont(font)
+    app.setStyleSheet(stylesheet)
+
+
+def _run_main_window_settings(window, action):
+    outcomes = []
+
+    def interact():
+        dialog = window._settings_dialog
+        try:
+            outcomes.append((True, action(dialog)))
+        except BaseException as exc:
+            outcomes.append((False, exc))
+        finally:
+            if dialog is not None and dialog.isVisible():
+                dialog.close()
+
+    QTimer.singleShot(0, interact)
+    window._btn_settings.click()
+    assert outcomes
+    succeeded, result = outcomes[0]
+    if not succeeded:
+        raise result
+    return result
+
+
+_HISTORY_CONTROLS = [
+    ("converter", "_history_max_conv_spin", "_chk_track_converter"),
+    ("alpha", "_history_max_alpha_spin", "_chk_track_alpha"),
+    ("selective_alpha", "_history_max_sel_spin", "_chk_track_sel_alpha"),
+    ("gif_builder", "_history_max_gif_spin", "_chk_track_gif"),
+    ("video_builder", "_history_max_video_spin", "_chk_track_video"),
+]
+
+
+def test_custom_background_picker_covers_supported_image_and_video_formats():
+    flt = _background_file_filter()
+    assert "All Supported Media" in flt
+    assert "Images (" in flt
+    assert "Videos (" in flt
+    assert "*.avif" in flt
+    assert "*.webm" in flt
+    assert "*.mp4" in flt
+
+
+def test_custom_background_path_edit_accepts_local_file_drops():
+    from src.ui.settings_dialog import _BackgroundPathEdit
+
+    class _Url:
+        def __init__(self, path: str):
+            self._path = path
+        def isLocalFile(self):
+            return True
+        def toLocalFile(self):
+            return self._path
+
+    class _Mime:
+        def __init__(self, path: str):
+            self._url = _Url(path)
+        def hasUrls(self):
+            return True
+        def urls(self):
+            return [self._url]
+
+    class _Event:
+        def __init__(self, path: str):
+            self._mime = _Mime(path)
+            self.accepted = False
+            self.ignored = False
+        def mimeData(self):
+            return self._mime
+        def acceptProposedAction(self):
+            self.accepted = True
+        def ignore(self):
+            self.ignored = True
+
+    edit = _BackgroundPathEdit()
+    try:
+        event = _Event("/tmp/background.webm")
+        edit.dropEvent(event)
+        assert edit.text() == "/tmp/background.webm"
+        assert event.accepted
+        assert not event.ignored
+    finally:
+        edit.deleteLater()
+
+
+def test_custom_background_path_clear_button_empties_the_field(app, dialog):
+    widget, _ = dialog
+    widget._custom_bg_check.setChecked(True)
+    widget._custom_bg_path_edit.setText("/tmp/background.png")
+    assert widget._custom_bg_path_edit.text() == "/tmp/background.png"
+    widget._custom_bg_path_edit.clear()
+    app.processEvents()
+    assert widget._custom_bg_path_edit.text() == ""
+    assert "Choose an image" in widget._custom_bg_status_lbl.text()
+
+
+def test_custom_background_preview_updates_for_image_files(app, dialog, tmp_path):
+    from PyQt6.QtGui import QColor, QImage
+
+    widget, _ = dialog
+    preview_path = tmp_path / "background.png"
+    image = QImage(12, 12, QImage.Format.Format_ARGB32)
+    image.fill(QColor("#336699"))
+    assert image.save(str(preview_path))
+
+    widget._custom_bg_check.setChecked(True)
+    widget._custom_bg_path_edit.setText(str(preview_path))
+    app.processEvents()
+
+    assert not widget._custom_bg_preview.isHidden()
+    assert not widget._custom_bg_preview.pixmap().isNull()
+    assert "background.png" in widget._custom_bg_status_lbl.text()
+
+
+def test_custom_background_overlay_tracks_settings_state(settings_session, tmp_path):
+    app, launch, open_settings, widgets = settings_session
+    background_path = tmp_path / "background.png"
+    Image.new("RGBA", (20, 12), "#336699").save(background_path)
+
+    manager = launch()
+    manager.set("custom_bg_enabled", True)
+    manager.set("use_theme_bg", False)
+    manager.set("custom_bg_path", str(background_path))
+
+    widget = open_settings(manager)
+    widgets.append(widget)
+    try:
+        widget.show()
+        app.processEvents()
+
+        assert widget._settings_bg_overlay.isVisible()
+        assert widget._settings_bg_overlay.geometry() == widget.rect()
+        assert widget._settings_tabs.property("customBgTransparent") is True
+
+        widget.theme_changed.emit(widget._theme)
+        app.processEvents()
+        assert widget._settings_bg_overlay.isVisible()
+
+        widget._custom_bg_check.setChecked(False)
+        app.processEvents()
+
+        assert not widget._settings_bg_overlay.isVisible()
+        assert widget._settings_tabs.property("customBgTransparent") is False
+    finally:
+        widget.close()
+
+
+def test_custom_background_preview_rescales_when_resized(app, dialog, tmp_path):
+    from PyQt6.QtGui import QColor, QImage
+
+    widget, _ = dialog
+    preview_path = tmp_path / "background.png"
+    image = QImage(40, 20, QImage.Format.Format_ARGB32)
+    image.fill(QColor("#663399"))
+    assert image.save(str(preview_path))
+
+    widget._custom_bg_check.setChecked(True)
+    widget._custom_bg_path_edit.setText(str(preview_path))
+    app.processEvents()
+    first_size = widget._custom_bg_preview.pixmap().size()
+
+    widget._custom_bg_preview.resize(120, 220)
+    app.processEvents()
+    second_size = widget._custom_bg_preview.pixmap().size()
+
+    assert not first_size.isEmpty()
+    assert not second_size.isEmpty()
+    assert first_size != second_size
+
+
+def test_custom_background_preview_plays_gif_backgrounds(app, dialog, tmp_path):
+    from PIL import Image
+    from PyQt6.QtGui import QMovie
+
+    widget, _ = dialog
+    preview_path = tmp_path / "background.gif"
+    frames = [
+        Image.new("RGBA", (24, 12), color)
+        for color in ("#ff3366", "#3366ff")
+    ]
+    frames[0].save(
+        preview_path,
+        save_all=True,
+        append_images=frames[1:],
+        duration=50,
+        loop=0,
+    )
+
+    widget._custom_bg_check.setChecked(True)
+    widget._custom_bg_path_edit.setText(str(preview_path))
+    app.processEvents()
+
+    movie = widget._custom_bg_preview.movie()
+    assert movie is not None
+    assert isinstance(movie, QMovie)
+    assert movie.state() == QMovie.MovieState.Running
+    original_size = movie.scaledSize()
+
+    widget._custom_bg_preview.resize(180, 90)
+    app.processEvents()
+    assert movie.scaledSize() != original_size
+
+
+def test_custom_background_preview_animates_multi_frame_images(app, dialog, tmp_path):
+    from PIL import Image
+
+    widget, _ = dialog
+    preview_path = tmp_path / "background.tiff"
+    frames = [
+        Image.new("RGBA", (16, 10), color)
+        for color in ("#ffcc00", "#00ccff")
+    ]
+    frames[0].save(
+        preview_path,
+        save_all=True,
+        append_images=frames[1:],
+        format="TIFF",
+    )
+
+    widget._custom_bg_check.setChecked(True)
+    widget._custom_bg_path_edit.setText(str(preview_path))
+    app.processEvents()
+
+    assert widget._custom_bg_preview.movie() is None
+    assert len(widget._custom_bg_preview._frames) == 2
+    assert widget._custom_bg_preview._frame_timer.isActive()
+
+
+def test_custom_background_preview_animates_video_files(app, dialog, tmp_path, monkeypatch):
+    import numpy as np
+
+    widget, _ = dialog
+    preview_path = tmp_path / "background.mp4"
+    preview_path.write_bytes(b"fake video")
+
+    class _Reader:
+        def __init__(self):
+            self._frames = [
+                np.zeros((8, 12, 4), dtype=np.uint8),
+                np.full((8, 12, 4), 255, dtype=np.uint8),
+            ]
+
+        def get_meta_data(self):
+            return {"fps": 10}
+
+        def get_data(self, index):
+            if index >= len(self._frames):
+                raise IndexError
+            return self._frames[index]
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("imageio.v2.get_reader", lambda path: _Reader())
+
+    widget._custom_bg_check.setChecked(True)
+    widget._custom_bg_path_edit.setText(str(preview_path))
+    app.processEvents()
+
+    assert widget._custom_bg_preview.movie() is None
+    assert len(widget._custom_bg_preview._frames) == 2
+    assert widget._custom_bg_preview._frame_timer.isActive()
+
+
+def test_ui_scale_preview_reflects_layout_controls(app, dialog):
+    widget, _ = dialog
+
+    widget._ui_scale_combo.setCurrentIndex(widget._ui_scale_combo.findText("Giant  (175%)"))
+    widget._btn_height_combo.setCurrentIndex(widget._btn_height_combo.findText("Comfortable  (32 px min)"))
+    widget._widget_spacing_combo.setCurrentIndex(widget._widget_spacing_combo.findText("Relaxed  (8 px)"))
+    widget._border_radius_combo.setCurrentIndex(widget._border_radius_combo.findText("Pill  (16 px)"))
+    widget._panel_padding_combo.setCurrentIndex(widget._panel_padding_combo.findText("Spacious  (12 px)"))
+    app.processEvents()
+
+    assert widget._scale_preview_title.text().startswith("Live preview — Giant")
+    assert widget._scale_preview_button.minimumHeight() == 32
+    assert widget._scale_preview_combo.minimumHeight() == 32
+    assert widget._scale_preview_frame.layout().spacing() == 8
+    assert widget._scale_preview_frame.layout().contentsMargins().left() == 12
+    assert "border-radius: 16px" in widget._scale_preview_frame.styleSheet()
+    assert "button height 32px" in widget._scale_preview_detail.text().lower()
+
+
+def test_ui_scale_preview_updates_theme_colors(dialog):
+    from src.ui.theme_engine import PRESET_THEMES
+
+    widget, _ = dialog
+    theme = dict(PRESET_THEMES["Bat Cave"])
+    widget._theme = theme
+    widget.theme_changed.emit(theme)
+
+    frame_style = widget._scale_preview_frame.styleSheet()
+    button_style = widget._scale_preview_button.styleSheet()
+    assert theme["surface"] in frame_style
+    assert theme["accent"] in frame_style
+    assert theme["accent"] in button_style
+    assert theme["text"] in frame_style
+
+
+def test_custom_background_recent_list_is_saved_and_restored(settings_session, tmp_path):
+    from PyQt6.QtGui import QColor, QImage
+
+    app, launch, open_settings, widgets = settings_session
+    manager = launch()
+    widget = open_settings(manager)
+    widgets.append(widget)
+
+    recent_path = tmp_path / "background.png"
+    image = QImage(10, 10, QImage.Format.Format_ARGB32)
+    image.fill(QColor("#884422"))
+    assert image.save(str(recent_path))
+
+    widget._custom_bg_check.setChecked(True)
+    widget._custom_bg_path_edit.setText(str(recent_path))
+    app.processEvents()
+
+    combo = widget._custom_bg_recent_combo
+    idx = combo.findData(str(recent_path))
+    assert idx > 0
+    combo.setCurrentIndex(idx)
+    app.processEvents()
+    assert widget._custom_bg_path_edit.text() == str(recent_path)
+
+    widget.close()
+    reopened = open_settings(manager)
+    widgets.append(reopened)
+    try:
+        reopened_idx = reopened._custom_bg_recent_combo.findData(str(recent_path))
+        assert reopened_idx > 0
+        assert reopened._custom_bg_recent_combo.itemText(reopened_idx).startswith("background.png")
+    finally:
+        reopened.close()
+
+
+def test_custom_background_group_accepts_dragged_local_files(dialog):
+    widget, _ = dialog
+
+    class _Url:
+        def __init__(self, path: str):
+            self._path = path
+        def isLocalFile(self):
+            return True
+        def toLocalFile(self):
+            return self._path
+
+    class _Mime:
+        def __init__(self, path: str):
+            self._url = _Url(path)
+        def hasUrls(self):
+            return True
+        def urls(self):
+            return [self._url]
+
+    class _Event:
+        def __init__(self, path: str):
+            self._mime = _Mime(path)
+            self.accepted = False
+        def type(self):
+            from PyQt6.QtCore import QEvent
+            return QEvent.Type.Drop
+        def mimeData(self):
+            return self._mime
+        def acceptProposedAction(self):
+            self.accepted = True
+
+    event = _Event("/tmp/background.webm")
+    handled = widget.eventFilter(widget._custom_bg_group, event)
+    assert handled is True
+    assert event.accepted
+    assert widget._custom_bg_check.isChecked()
+    assert not widget._use_theme_bg_check.isChecked()
+    assert widget._custom_bg_path_edit.text() == "/tmp/background.webm"
+
+
+@pytest.mark.parametrize("tool,limit_control,track_control", _HISTORY_CONTROLS)
+def test_opening_existing_ini_does_not_rewrite_legacy_history_policy(
+        settings_session, tool, limit_control, track_control):
+    _, launch, open_settings, _ = settings_session
+    manager = launch()
+    assert isinstance(manager._qs, QSettings)
+    limit_key, track_key = f"history_max_entries_{tool}", f"history_track_{tool}"
+    manager.set(limit_key, "6000")
+    manager.set(track_key, "no")
+    manager.set("future_setting", "keep")
+    manager.sync()
+    path = Path(manager._qs.fileName())
+    before = path.read_bytes()
+
+    with patch.object(manager, "set", wraps=manager.set) as write:
+        widget = open_settings(manager)
+        widget._load_values()
+        widget.close()
+    write.assert_not_called()
+    manager.sync()
+    assert path.read_bytes() == before
+    assert manager.get(limit_key, 0) == 6000
+    assert getattr(widget, limit_control).value() == 5000
+    assert not getattr(widget, track_control).isChecked()
+    assert manager.get(track_key, True) is False
+    assert manager.get("future_setting") == "keep"
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_change_export_reset_import_relaunch_preferences_and_live_appearance(
+        settings_session, tmp_path, legacy):
+    from src.ui.main_window import MainWindow
+
+    app, launch, _, widgets = settings_session
+    manager = launch()
+    assert manager._qs.allKeys() == []
+    window = MainWindow(manager)
+    widgets.append(window)
+    window.show()
+    app.processEvents()
+
+    def configure_preferences(widget):
+        widget._theme_preset_combo.setCurrentText("Bat Cave")
+        widget._font_size_spin.setValue(12)
+        widget._ui_scale_combo.setCurrentIndex(widget._ui_scale_combo.findText("Large  (115%)"))
+        widget._btn_height_combo.setCurrentIndex(2)  # Comfortable
+        widget._widget_spacing_combo.setCurrentIndex(0)  # Tight
+        widget._border_radius_combo.setCurrentIndex(3)  # Rounded
+        widget._panel_padding_combo.setCurrentIndex(2)  # Spacious
+        widget._click_effects_theme_check.setChecked(True)
+        widget._use_theme_effect_check.setChecked(False)
+        widget._hold_effects_check.setChecked(True)
+        widget._use_theme_hold_check.setChecked(False)
+        widget._hold_key_combo.setCurrentIndex(widget._hold_key_combo.findData("blood"))
+        widget._history_max_spin.setValue(20)
+        for _, control, _ in _HISTORY_CONTROLS:
+            getattr(widget, control).setValue(3)
+        widget._chk_track_gif.setChecked(False)
+        assert window._update_shortcut("help", "Ctrl+Alt+H")
+        assert window._update_shortcut("converter_run", "Ctrl+Alt+C")
+
+    _run_main_window_settings(window, configure_preferences)
+    assert window._settings_apply_timer.isActive()
+    QTest.qWait(550)
+    assert manager.get_theme()["name"] == "Bat Cave"
+    assert app.font().pointSize() == 14
+    assert window._click_effects._enabled
+    assert window._click_effects._effect_key == "bat"
+    assert "border-radius" in app.styleSheet()
+    expected = {key: manager.get(key) for key in manager.EXPORT_KEYS}
+    histories = {}
+    for tool, _, _ in _HISTORY_CONTROLS:
+        key = f"{tool}_history"
+        histories[key] = json.dumps([{"file": f"{tool}.png", "status": "completed"}])
+        manager.set(key, histories[key])
+    manager.sync()
+    backup = tmp_path / "preferences.json"
+
+    with patch("src.ui.settings_dialog.QFileDialog.getSaveFileName",
+               return_value=(str(backup), "")), \
+            patch("src.ui.settings_dialog.QMessageBox.information"):
+        _run_main_window_settings(window, lambda widget: widget._btn_export_theme.click())
+    payload = json.loads(backup.read_text(encoding="utf-8"))
+    assert not any(key in payload for key in histories)
+    assert set(payload) == set(manager._qs.allKeys()) & set(manager.EXPORT_KEYS)
+    if legacy:
+        for key, value in payload.items():
+            if type(value) is bool:
+                payload[key] = "yes" if value else "no"
+            elif type(value) is int:
+                payload[key] = str(value)
+        payload["future_setting"] = {"ignored": True}
+        backup.write_text(json.dumps(payload), encoding="utf-8")
+
+    with patch.object(
+        QMessageBox, "question",
+        return_value=QMessageBox.StandardButton.Yes,
+    ), patch.object(QMessageBox, "information"):
+        _run_main_window_settings(window, lambda widget: widget._btn_reset.click())
+    assert manager.get_theme()["name"] == "Panda Dark"
+    assert all(manager.get(key) is None for key in histories)
+    QTest.qWait(550)
+    assert app.font().pointSize() == 10
+    assert not window._click_effects._enabled
+    with patch("src.ui.settings_dialog.QFileDialog.getOpenFileName",
+               return_value=(str(backup), "")), \
+         patch("src.ui.settings_dialog.QMessageBox.information") as notice:
+        def import_preferences(widget):
+            widget._btn_import_theme.click()
+            assert "Restart" in notice.call_args.args[2]
+            assert widget._font_size_spin.value() == 12
+            assert widget._ui_scale_combo.currentText().startswith("Large")
+        _run_main_window_settings(window, import_preferences)
+    assert window._settings_apply_timer.isActive()
+    QTest.qWait(550)
+    assert app.font().pointSize() == 14
+    assert window._click_effects._enabled
+    # Import merges recognized preferences; histories/unlocks are not backups.
+    assert {key: manager.get(key) for key in manager.EXPORT_KEYS} == expected
+    assert manager.get("future_setting") is None
+    window.close()
+
+    reloaded = launch()
+    restarted = MainWindow(reloaded)
+    widgets.append(restarted)
+    restarted.show()
+    app.processEvents()
+
+    def assert_reloaded_controls(reopened):
+        assert reopened._theme_preset_combo.currentText() == "Bat Cave"
+        assert reopened._font_size_spin.value() == 12
+        assert reopened._ui_scale_combo.currentText().startswith("Large")
+        assert reopened._btn_height_combo.currentIndex() == 2
+        assert reopened._widget_spacing_combo.currentIndex() == 0
+        assert reopened._border_radius_combo.currentIndex() == 3
+        assert reopened._panel_padding_combo.currentIndex() == 2
+        assert reopened._click_effects_theme_check.isChecked()
+        assert reopened._hold_key_combo.currentData() == "blood"
+        assert not reopened._chk_track_gif.isChecked()
+        for _, control, _ in _HISTORY_CONTROLS:
+            assert getattr(reopened, control).value() == 3
+    _run_main_window_settings(restarted, assert_reloaded_controls)
+    assert reloaded.get_custom_shortcuts()["help"] == "Ctrl+Alt+H"
+    assert reloaded.get_custom_shortcuts()["converter_run"] == "Ctrl+Alt+C"
+    assert restarted._shortcut_map["help"]["sc"].key().toString() == "Ctrl+Alt+H"
+    assert restarted._converter_tab._shortcut_objects["converter_run"].key().toString() == "Ctrl+Alt+C"
+    assert app.font().pointSize() == 14
+
+
+@pytest.mark.parametrize("reset_all", [False, True])
+def test_confirmed_dialog_resets_survive_relaunch_with_intended_scope(
+        settings_session, reset_all):
+    app, launch, _, widgets = settings_session
+    from src.ui.main_window import MainWindow
+
+    manager = launch()
+    manager.set("font_size", 18)
+    manager.set("custom_shortcuts", json.dumps({"help": "Ctrl+Alt+H"}))
+    histories = {}
+    for tool, _, _ in _HISTORY_CONTROLS:
+        histories[f"{tool}_history"] = json.dumps([{"file": f"{tool}.png"}])
+    for key, value in histories.items():
+        manager.set(key, value)
+    progress = [key for key in manager._DEFAULTS
+                if key.startswith("unlock_") or key.endswith("_once")
+                or key in ("total_clicks", "alpha_fixes_total", "conversions_total")]
+    for key in progress:
+        manager.set(key, 42 if type(manager._DEFAULTS[key]) is int else True)
+    manager.sync()
+    window = MainWindow(manager)
+    widgets.append(window)
+    window.show()
+    app.processEvents()
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes), \
+         patch.object(QMessageBox, "information"):
+        _run_main_window_settings(
+            window,
+            lambda widget: (
+                widget._btn_reset.click() if reset_all
+                else widget._btn_reset_unlocks.click()
+            ),
+        )
+    window.close()
+    sip.delete(window)
+    widgets.remove(window)
+    reloaded = launch()
+    assert all(reloaded.get(key) == reloaded._DEFAULTS[key] for key in progress)
+    assert reloaded.get_custom_shortcuts() == ({} if reset_all else {"help": "Ctrl+Alt+H"})
+    for key, value in histories.items():
+        assert reloaded.get(key) == (None if reset_all else value)
+    restarted = MainWindow(reloaded)
+    widgets.append(restarted)
+    restarted.show()
+    app.processEvents()
+
+    def assert_reset_scope(widget):
+        assert widget._font_size_spin.value() == (10 if reset_all else 18)
+
+    _run_main_window_settings(restarted, assert_reset_scope)
+
+
+@pytest.mark.parametrize("reset_all", [False, True])
+def test_cancelled_settings_resets_preserve_preferences_after_relaunch(
+        settings_session, reset_all):
+    app, launch, _, widgets = settings_session
+    from src.ui.main_window import MainWindow
+
+    manager = launch()
+    manager.set("font_size", 18)
+    manager.set("custom_shortcuts", json.dumps({"help": "Ctrl+Alt+H"}))
+    histories = {}
+    for tool, _, _ in _HISTORY_CONTROLS:
+        histories[f"{tool}_history"] = json.dumps([{"file": f"{tool}.png"}])
+    for key, value in histories.items():
+        manager.set(key, value)
+    progress = [
+        key for key in manager._DEFAULTS
+        if key.startswith("unlock_") or key.endswith("_once")
+        or key in ("total_clicks", "alpha_fixes_total", "conversions_total")
+    ]
+    for key in progress:
+        manager.set(key, 42 if type(manager._DEFAULTS[key]) is int else True)
+    manager.set("unknown_future_key", "retain")
+    manager.sync()
+
+    window = MainWindow(manager)
+    widgets.append(window)
+    window.show()
+    app.processEvents()
+    manager.sync()
+    before = {key: manager._qs.value(key) for key in manager._qs.allKeys()}
+
+    def decline_reset(dialog):
+        button = dialog._btn_reset if reset_all else dialog._btn_reset_unlocks
+        with patch.object(
+            QMessageBox, "question",
+            return_value=QMessageBox.StandardButton.No,
+        ) as confirmation, patch.object(
+            QMessageBox, "information"
+        ) as notice:
+            button.click()
+        confirmation.assert_called_once()
+        notice.assert_not_called()
+        assert dialog.isVisible()
+        assert {key: manager._qs.value(key) for key in manager._qs.allKeys()} == before
+
+    _run_main_window_settings(window, decline_reset)
+    window.close()
+    sip.delete(window)
+    widgets.remove(window)
+    manager.sync()
+
+    reloaded = launch()
+    assert {key: reloaded._qs.value(key) for key in before} == before
+    assert reloaded.get("unknown_future_key") == "retain"
+    assert reloaded.get_custom_shortcuts() == {"help": "Ctrl+Alt+H"}
+    for key, value in histories.items():
+        assert reloaded.get(key) == value
+    assert all(reloaded.get(key) == before[key] for key in progress)
+    restarted = MainWindow(reloaded)
+    widgets.append(restarted)
+    restarted.show()
+    app.processEvents()
+
+    def assert_preferences_remain(dialog):
+        assert dialog._font_size_spin.value() == 18
+
+    _run_main_window_settings(restarted, assert_preferences_remain)
+
+
+def test_main_window_settings_dialog_applies_theme_and_persists_after_relaunch(
+        settings_session):
+    from src.ui.main_window import MainWindow
+
+    app, launch, _, widgets = settings_session
+    original_stylesheet = app.styleSheet()
+    manager = launch()
+    window = MainWindow(manager)
+    widgets.append(window)
+    window.show()
+
+    def change_settings_through_dialog():
+        dialog = window._settings_dialog
+        assert dialog is not None
+        assert dialog.parent() is window
+        dialog._theme_preset_combo.setCurrentText("Bat Cave")
+        dialog._font_size_spin.setValue(12)
+        dialog._btn_close.click()
+
+    QTimer.singleShot(0, change_settings_through_dialog)
+    window._open_settings()
+
+    assert manager.get_theme()["name"] == "Bat Cave"
+    assert manager.get("font_size") == 12
+    assert window._settings_apply_timer.isActive()
+    QTest.qWait(550)
+    assert app.styleSheet() != original_stylesheet
+
+    window.close()
+    reloaded = launch()
+    assert reloaded.get_theme()["name"] == "Bat Cave"
+    assert reloaded.get("font_size") == 12
+
+
+def test_invalid_backup_preserves_every_ini_key_and_disk_after_relaunch(
+        settings_session, tmp_path):
+    app, launch, open_settings, widgets = settings_session
+    from src.ui.main_window import MainWindow
+
+    manager = launch()
+    manager.set("font_size", "12")
+    manager.set("unlock_skeleton", True)
+    manager.set("converter_history", '[{"file": "retained.png"}]')
+    manager.set("unknown_future_key", "retain")
+    manager.sync()
+    window = MainWindow(manager)
+    widgets.append(window)
+    window.show()
+    app.processEvents()
+    manager.sync()
+    disk = Path(manager._qs.fileName())
+    before_disk = disk.read_bytes()
+    before = {key: manager._qs.value(key) for key in manager._qs.allKeys()}
+    backup = tmp_path / "invalid.json"
+    backup.write_text(json.dumps({
+        "theme": "Replacement", "font_size": 20,
+        "custom_shortcuts": '{"help": 42}', "unknown_future_key": "replace",
+    }), encoding="utf-8")
+    with patch("src.ui.settings_dialog.QFileDialog.getOpenFileName",
+              return_value=(str(backup), "")), \
+            patch("src.ui.settings_dialog.QMessageBox.critical") as failure:
+        _run_main_window_settings(
+            window, lambda widget: widget._btn_import_theme.click()
+        )
+    failure.assert_called_once()
+    assert "custom_shortcuts" in failure.call_args.args[2]
+    assert disk.read_bytes() == before_disk
+    assert {key: manager._qs.value(key) for key in manager._qs.allKeys()} == before
+    with pytest.raises(ValueError, match="custom_shortcuts"):
+        manager.import_settings(str(backup))
+    assert disk.read_bytes() == before_disk
+    assert {key: manager._qs.value(key) for key in manager._qs.allKeys()} == before
+    window.close()
+    sip.delete(window)
+    widgets.remove(window)
+    manager.sync()
+    after_close = {key: manager._qs.value(key) for key in manager._qs.allKeys()}
+    reloaded = launch()
+    assert {key: reloaded._qs.value(key) for key in reloaded._qs.allKeys()} == after_close
+    widget = open_settings(reloaded)
+    assert widget._font_size_spin.value() == 12
+
+
+@pytest.mark.parametrize("tool,limit_control,track_control", _HISTORY_CONTROLS)
+def test_dialog_history_limits_take_effect_on_next_entry_and_zero_inherits_global(
+        settings_session, tool, limit_control, track_control):
+    _, launch, open_settings, _ = settings_session
+    manager = launch()
+    widget = open_settings(manager)
+    widget._history_max_spin.setValue(10)
+    getattr(widget, limit_control).setValue(3)
+    add = getattr(manager, f"add_{tool}_history")
+    history = getattr(manager, f"get_{tool}_history")
+    for index in range(5):
+        add({"file": f"{index}.png"})
+    assert [entry["file"] for entry in history()] == ["4.png", "3.png", "2.png"]
+    getattr(widget, limit_control).setValue(0)
+    for index in range(5, 15):
+        add({"file": f"{index}.png"})
+    assert len(history()) == 10
+    assert history()[0]["file"] == "14.png"
+    if tool in ("gif_builder", "video_builder"):
+        getattr(widget, track_control).setChecked(False)
+        add({"file": "not-recorded.png"})
+        assert history()[0]["file"] == "14.png"
+    widget.close()
+    reloaded = launch()
+    assert len(getattr(reloaded, f"get_{tool}_history")()) == 10
+    reopened = open_settings(reloaded)
+    assert getattr(reopened, limit_control).value() == 0
+    assert reopened._history_max_spin.value() == 10

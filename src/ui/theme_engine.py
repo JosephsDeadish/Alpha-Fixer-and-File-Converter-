@@ -4,6 +4,99 @@ and provides helper utilities.
 """
 from typing import Optional
 
+try:
+    from ..version import APP_NAME
+except Exception:
+    try:
+        from src.version import APP_NAME  # type: ignore[no-redef]
+    except Exception:
+        APP_NAME = "FORMATOMANCER: Alpha & Media Alchemy"
+
+_LEGACY_APP_BANNER = "Alpha & RGBA Adjuster  |  File Converter"
+
+
+def _brand_banner(text: str) -> str:
+    return text.replace(_LEGACY_APP_BANNER, APP_NAME)
+
+
+_NAMED_COLORS = {
+    "black": (0, 0, 0, 255),
+    "white": (255, 255, 255, 255),
+    "red": (255, 0, 0, 255),
+    "green": (0, 128, 0, 255),
+    "blue": (0, 0, 255, 255),
+    "gray": (128, 128, 128, 255),
+    "grey": (128, 128, 128, 255),
+    "transparent": (0, 0, 0, 0),
+}
+
+
+def _parse_color(value) -> tuple[int, int, int, int]:
+    """Parse a Qt-style color string into RGBA components."""
+    if isinstance(value, (tuple, list)) and len(value) in (3, 4):
+        channels = [max(0, min(255, int(channel))) for channel in value]
+        if len(channels) == 3:
+            channels.append(255)
+        return tuple(channels)  # type: ignore[return-value]
+
+    text = str(value).strip().lower()
+    if text in _NAMED_COLORS:
+        return _NAMED_COLORS[text]
+    if text.startswith("rgba(") and text.endswith(")"):
+        parts = [part.strip() for part in text[5:-1].split(",")]
+        if len(parts) == 4:
+            r, g, b = (max(0, min(255, int(part))) for part in parts[:3])
+            alpha_text = parts[3]
+            alpha = float(alpha_text)
+            if alpha <= 1:
+                a = int(round(max(0.0, min(1.0, alpha)) * 255))
+            else:
+                a = max(0, min(255, int(alpha)))
+            return r, g, b, a
+    if text.startswith("rgb(") and text.endswith(")"):
+        parts = [part.strip() for part in text[4:-1].split(",")]
+        if len(parts) == 3:
+            r, g, b = (max(0, min(255, int(part))) for part in parts)
+            return r, g, b, 255
+    if text.startswith("#"):
+        hex_value = text[1:]
+        if len(hex_value) in (3, 4):
+            expanded = "".join(ch * 2 for ch in hex_value)
+            hex_value = expanded
+        if len(hex_value) == 6:
+            hex_value = "ff" + hex_value
+        if len(hex_value) == 8:
+            alpha = int(hex_value[0:2], 16)
+            red = int(hex_value[2:4], 16)
+            green = int(hex_value[4:6], 16)
+            blue = int(hex_value[6:8], 16)
+            return red, green, blue, alpha
+    raise ValueError(f"Unsupported color value: {value!r}")
+
+
+def _to_hex(rgb: tuple[int, int, int]) -> str:
+    return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
+def _luminance(value) -> float:
+    r, g, b, _ = _parse_color(value)
+    channels = (r / 255.0, g / 255.0, b / 255.0)
+    linear = [
+        c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+        for c in channels
+    ]
+    return sum(c * weight for c, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+
+
+def get_theme_hold_effect(theme: dict) -> str:
+    """Resolve the hold-click style shared by settings and the runtime."""
+    effect = theme.get("_effect", "default")
+    if effect == "gore":
+        return "blood"
+    if effect in ("bat", "goth"):
+        return "shake"
+    return "bubble"
+
 
 # Default panda-themed dark palette
 DEFAULT_THEME = {
@@ -90,7 +183,7 @@ NEON_THEME = {
     "_trail_color": "#00ff88",
     "_banner_anim": "shake",
     "_button_anim": "shake",
-    "_trail": "sparkle",
+    "_trail": "plasma",
 }
 
 GORE_THEME = {
@@ -117,7 +210,7 @@ GORE_THEME = {
     "_effect": "gore",
     "_cursor": "emoji:💀",
     "_trail_color": "#cc0000",
-    "_banner_anim": "shake",
+    "_banner_anim": "drip",
     "_button_anim": "shatter",
     "_trail": "dots",
 }
@@ -149,6 +242,7 @@ BAT_THEME = {
     "_banner_anim": "flock",
     "_button_anim": "fall",
     "_trail": "comet",
+    "_flock": "bats",
 }
 
 RAINBOW_THEME = {
@@ -203,10 +297,10 @@ OTTER_THEME = {
     "scrollbar_handle": "#e8a040",
     "_effect": "otter",
     "_cursor": "emoji:🤘",
+    "_trail": "noodle",
     "_trail_color": "#e8a040",
     "_banner_anim": "bounce",
-    "_button_anim": "fall",
-    "_trail": "ribbon",
+    "_button_anim": "press",
 }
 
 GALAXY_THEME = {
@@ -236,6 +330,7 @@ GALAXY_THEME = {
     "_banner_anim": "flock",
     "_button_anim": "fall",
     "_trail": "comet",
+    "_flock": "stars",
 }
 
 GALAXY_OTTER_THEME = {
@@ -261,10 +356,11 @@ GALAXY_OTTER_THEME = {
     "scrollbar_handle": "#a06aff",
     "_effect": "galaxy_otter",
     "_cursor": "emoji:🤘",
-    "_trail_color": "#a06aff",
-    "_banner_anim": "bounce",
-    "_button_anim": "fall",
+    "_flock": "stars",
     "_trail": "comet",
+    "_trail_color": "#a06aff",
+    "_banner_anim": "orbit",
+    "_button_anim": "bounce",
 }
 
 GOTH_THEME = {
@@ -293,7 +389,7 @@ GOTH_THEME = {
     "_trail_color": "#8800aa",
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
-    "_trail": "comet",
+    "_trail": "smoke",
 }
 
 VOLCANO_THEME = {
@@ -382,7 +478,7 @@ SECRET_SKELETON_THEME = {
     "_unlock": "skeleton",
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
-    "_trail": "dots",
+    "_trail": "smoke",
 }
 
 SECRET_SAKURA_THEME = {
@@ -412,7 +508,8 @@ SECRET_SAKURA_THEME = {
     "_unlock": "sakura",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
-    "_trail": "fairy",
+    "_trail": "sakura",
+    "_flock": "petals",
 }
 
 FAIRY_THEME = {
@@ -442,6 +539,7 @@ FAIRY_THEME = {
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
     "_trail": "fairy",
+    "_flock": "fairies",
 }
 
 SECRET_DEEP_OCEAN_THEME = {
@@ -472,6 +570,7 @@ SECRET_DEEP_OCEAN_THEME = {
     "_banner_anim": "bounce",
     "_button_anim": "fall",
     "_trail": "wave",
+    "_flock": "fish",
 }
 
 PRESET_THEMES = {
@@ -516,11 +615,12 @@ MERMAID_THEME = {
     "scrollbar": "#0a1e2e",
     "scrollbar_handle": "#00ccaa",
     "_effect": "mermaid",
-    "_cursor": "emoji:🔱",
+    "_cursor": "emoji:🧜",
     "_trail_color": "#00ccaa",
     "_banner_anim": "bounce",
     "_button_anim": "fall",
     "_trail": "wave",
+    "_flock": "fish",
 }
 
 SHARK_BAIT_THEME = {
@@ -547,9 +647,12 @@ SHARK_BAIT_THEME = {
     "_effect": "shark",
     "_cursor": "emoji:🦈",
     "_trail_color": "#1177cc",
-    "_banner_anim": "shake",
+    "_banner_anim": "drip",
     "_button_anim": "bite",
     "_trail": "wave",
+    # No _flock: the "shark" effect already spawns its own shark-fin background
+    # animation (_SharkFin).  Having both _flock:"sharks" and _SharkFin active
+    # simultaneously produced two overlapping shark effects (item 32).
 }
 
 ALIEN_THEME = {
@@ -612,7 +715,7 @@ NOODLE_THEME = {
     "input_bg": "#140e00",
     "scrollbar": "#2a1e00",
     "scrollbar_handle": "#ffdd44",
-    "_effect": "default",
+    "_effect": "noodle",
     "_cursor": "emoji:🍜",
     "_trail_color": "#ffdd44",
     "_banner_anim": "bounce",
@@ -683,7 +786,7 @@ SECRET_BLOOD_MOON_THEME = {
     "_cursor": "emoji:🩸",
     "_trail_color": "#cc1133",
     "_unlock": "blood_moon",
-    "_banner_anim": "shake",
+    "_banner_anim": "drip",
     "_button_anim": "shatter",
     "_trail": "dots",
 }
@@ -709,13 +812,13 @@ SECRET_ICE_CAVE_THEME = {
     "input_bg": "#010810",
     "scrollbar": "#061828",
     "scrollbar_handle": "#88ddff",
-    "_effect": "sparkle",
-    "_cursor": "emoji:❄",
-    "_trail_color": "#88ddff",
     "_unlock": "ice_cave",
+    "_effect": "ice",
+    "_cursor": "emoji:❄",
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
     "_trail": "sparkle",
+    "_trail_color": "#88ddff",
 }
 
 SECRET_CYBER_OTTER_THEME = {
@@ -775,7 +878,7 @@ SECRET_TOXIC_NEON_THEME = {
     "_unlock": "toxic_neon",
     "_banner_anim": "shake",
     "_button_anim": "shake",
-    "_trail": "sparkle",
+    "_trail": "plasma",
 }
 
 SECRET_LAVA_CAVE_THEME = {
@@ -799,13 +902,13 @@ SECRET_LAVA_CAVE_THEME = {
     "input_bg": "#0a0300",
     "scrollbar": "#1e0800",
     "scrollbar_handle": "#ff6600",
-    "_effect": "gore",
-    "_cursor": "emoji:🌋",
-    "_trail_color": "#ff6600",
     "_unlock": "lava_cave",
+    "_effect": "fire",
+    "_cursor": "emoji:🌋",
     "_banner_anim": "shake",
     "_button_anim": "shatter",
     "_trail": "comet",
+    "_trail_color": "#ff6600",
 }
 
 SECRET_SUNSET_BEACH_THEME = {
@@ -829,13 +932,13 @@ SECRET_SUNSET_BEACH_THEME = {
     "input_bg": "#0c0800",
     "scrollbar": "#1e1200",
     "scrollbar_handle": "#ff9944",
-    "_effect": "sakura",
-    "_cursor": "emoji:🌅",
-    "_trail_color": "#ff9944",
     "_unlock": "sunset_beach",
+    "_effect": "ocean",
+    "_cursor": "emoji:🌅",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
     "_trail": "wave",
+    "_trail_color": "#ff9944",
 }
 
 SECRET_MIDNIGHT_FOREST_THEME = {
@@ -940,7 +1043,7 @@ SECRET_ZOMBIE_THEME = {
     "_cursor": "emoji:🧟",
     "_trail_color": "#55cc00",
     "_unlock": "zombie",
-    "_banner_anim": "shake",
+    "_banner_anim": "drip",
     "_button_anim": "shatter",
     "_trail": "dots",
 }
@@ -1032,7 +1135,7 @@ SECRET_THUNDER_THEME = {
     "_unlock": "thunder_storm",
     "_banner_anim": "shake",
     "_button_anim": "shake",
-    "_trail": "comet",
+    "_trail": "plasma",
 }
 
 SECRET_ROSE_GOLD_THEME = {
@@ -1062,7 +1165,7 @@ SECRET_ROSE_GOLD_THEME = {
     "_unlock": "rose_gold",
     "_banner_anim": "bounce",
     "_button_anim": "bounce",
-    "_trail": "fairy",
+    "_trail": "sakura",
 }
 
 SECRET_SPACE_CAT_THEME = {
@@ -1152,7 +1255,7 @@ SECRET_ABYSSAL_THEME = {
     "_unlock": "abyssal_void",
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
-    "_trail": "comet",
+    "_trail": "smoke",
 }
 
 SECRET_SPRING_THEME = {
@@ -1321,7 +1424,7 @@ SECRET_GLITCH_THEME = {
     "_unlock": "glitch",
     "_banner_anim": "shake",
     "_button_anim": "shake",
-    "_trail": "sparkle",
+    "_trail": "plasma",
 }
 
 SECRET_WILD_WEST_THEME = {
@@ -1375,13 +1478,13 @@ SECRET_PIRATE_THEME = {
     "input_bg": "#050508",
     "scrollbar": "#12121e",
     "scrollbar_handle": "#ddaa22",
-    "_effect": "default",
-    "_cursor": "emoji:🏴‍☠️",
-    "_trail_color": "#ddaa22",
     "_unlock": "pirate",
+    "_effect": "ocean",
+    "_cursor": "emoji:🏴‍☠️",
     "_banner_anim": "pendulum",
     "_button_anim": "fall",
     "_trail": "wave",
+    "_trail_color": "#ddaa22",
 }
 
 SECRET_DEEP_SPACE_THEME = {
@@ -1405,13 +1508,13 @@ SECRET_DEEP_SPACE_THEME = {
     "input_bg": "#020208",
     "scrollbar": "#03030f",
     "scrollbar_handle": "#4466ff",
-    "_effect": "galaxy",
-    "_cursor": "emoji:🛸",
-    "_trail_color": "#4466ff",
     "_unlock": "deep_space",
+    "_effect": "galaxy",
+    "_cursor": "emoji:🌌",
     "_banner_anim": "flock",
     "_button_anim": "fall",
     "_trail": "comet",
+    "_trail_color": "#4466ff",
 }
 
 SECRET_WITCHS_BREW_THEME = {
@@ -1435,13 +1538,13 @@ SECRET_WITCHS_BREW_THEME = {
     "input_bg": "#030008",
     "scrollbar": "#0e0025",
     "scrollbar_handle": "#44ff88",
-    "_effect": "sparkle",
-    "_cursor": "emoji:🧙",
-    "_trail_color": "#44ff88",
     "_unlock": "witchs_brew",
+    "_effect": "ghost",
+    "_cursor": "emoji:🧙",
     "_banner_anim": "pendulum",
     "_button_anim": "bounce",
-    "_trail": "sparkle",
+    "_trail": "smoke",
+    "_trail_color": "#44ff88",
 }
 
 SECRET_LAVA_LAMP_THEME = {
@@ -1495,7 +1598,7 @@ SECRET_CORAL_REEF_THEME = {
     "input_bg": "#00131a",
     "scrollbar": "#00263a",
     "scrollbar_handle": "#ff6655",
-    "_effect": "ocean",
+    "_effect": "ripple",
     "_cursor": "emoji:🪸",
     "_trail_color": "#ff6655",
     "_unlock": "coral_reef",
@@ -1531,7 +1634,7 @@ SECRET_STORM_CLOUD_THEME = {
     "_unlock": "storm_cloud",
     "_banner_anim": "shake",
     "_button_anim": "shake",
-    "_trail": "comet",
+    "_trail": "plasma",
 }
 
 SECRET_GOLDEN_HOUR_THEME = {
@@ -1705,7 +1808,7 @@ SECRET_GHOST_THEME = {
     "_trail_color": "#ccccff",
     "_banner_anim": "pendulum",
     "_button_anim": "bounce",
-    "_trail": "comet",
+    "_trail": "smoke",
     "_unlock": "ghost",
 }
 
@@ -1799,13 +1902,10 @@ SECRET_SLIME_THEME = {
     "_unlock": "slime",
 }
 
-# Anime/Waifu go in PRESET_THEMES (unlocked by default); Snake/Ghost/Slime in HIDDEN_THEMES
-PRESET_THEMES.update({
-    "Anime": ANIME_THEME,
-    "Waifu": WAIFU_THEME,
-})
-
+# Anime/Waifu are secret/unlockable themes — moved to HIDDEN_THEMES alongside Snake/Ghost/Slime
 HIDDEN_THEMES.update({
+    "Anime":      ANIME_THEME,
+    "Waifu":      WAIFU_THEME,
     "Snake Pit":  SECRET_SNAKE_THEME,
     "Ghost":      SECRET_GHOST_THEME,
     "Slime":      SECRET_SLIME_THEME,
@@ -1815,6 +1915,55 @@ HIDDEN_THEMES.update({
 THEME_EFFECTS = {t["name"]: t.get("_effect", "default") for t in {
     **PRESET_THEMES, **HIDDEN_THEMES,
 }.values()}
+
+# Which ambient background style each theme is associated with.
+# Only themes explicitly listed here get an automatic ambient when
+# "Use theme ambient" is checked.  Themes not listed = no themed ambient.
+THEME_AMBIENT_MAP: dict[str, str] = {
+    # Preset themes
+    "Gore":              "ember",
+    "Bat Cave":          "ghost",
+    "Rainbow Chaos":     "rainbow",
+    "Galaxy":            "stars",
+    "Galaxy Otter":      "stars",
+    "Goth":              "ghost",
+    "Volcano":           "ember",
+    "Arctic":            "snow",
+    "Fairy Garden":      "sakura",
+    # Hidden themes
+    "Secret Skeleton":   "ghost",
+    "Secret Sakura":     "sakura",
+    "Deep Ocean":        "bubbles",
+    "Blood Moon":        "ember",
+    "Ice Cave":          "snow",
+    "Cyber Otter":       "matrix",
+    "Toxic Neon":        "neon",
+    "Lava Cave":         "ember",
+    "Sunset Beach":      "confetti",
+    "Midnight Forest":   "firefly",
+    "Candy Land":        "confetti",
+    "Zombie Apocalypse": "matrix",
+    "Dragon Fire":       "ember",
+    "Bubblegum":         "confetti",
+    "Thunder Storm":     "neon",
+    "Rose Gold":         "sakura",
+    "Space Cat":         "stars",
+    "Magic Mushroom":    "firefly",
+    "Abyssal Void":      "ghost",
+    "Spring Bloom":      "sakura",
+    "Gold Rush":         "firefly",
+    "Nebula":            "stars",
+    "Mermaid":           "bubbles",
+    "Shark Bait":        "bubbles",
+    "Alien":             "neon",
+    # Very hidden themes
+    "Crystal Cave":      "stars",
+    "Witch's Brew":      "ghost",
+    "Slime":             "neon",
+    # Panda themes use bamboo leaf drift as their ambient
+    "Panda":             "bamboo",
+    "Panda Dark":        "bamboo",
+}
 
 # Short descriptions for each theme, shown as per-item tooltips in the theme combo.
 THEME_DESCRIPTIONS: dict[str, str] = {
@@ -2012,9 +2161,23 @@ THEME_BANNER = {
     # Animal themes
     "Purrfect Cats":     "🐱🧶  Alpha & RGBA Adjuster  |  File Converter  🧶🐱",
     "Good Dog":          "🐶🦴  Alpha & RGBA Adjuster  |  File Converter  🦴🐶",
-    # Newest preset themes
+    # Hidden anime-style themes
     "Anime":             "🌸⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🌸",
     "Waifu":             "💖🌸  Alpha & RGBA Adjuster  |  File Converter  🌸💖",
+    # Latest hidden themes
+    "Crystal Cave":      "💎❄  Alpha & RGBA Adjuster  |  File Converter  ❄💎",
+    "Glitch":            "📡⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡📡",
+    "Wild West":         "🤠⭐  Alpha & RGBA Adjuster  |  File Converter  ⭐🤠",
+    "Pirate":            "🏴‍☠️⚓  Alpha & RGBA Adjuster  |  File Converter  ⚓🏴‍☠️",
+    "Deep Space":        "🛸🌑  Alpha & RGBA Adjuster  |  File Converter  🌑🛸",
+    "Witch's Brew":      "🧙🫧  Alpha & RGBA Adjuster  |  File Converter  🫧🧙",
+    "Lava Lamp":         "🪔🔥  Alpha & RGBA Adjuster  |  File Converter  🔥🪔",
+    "Coral Reef":        "🪸🐠  Alpha & RGBA Adjuster  |  File Converter  🐠🪸",
+    "Storm Cloud":       "⛈⚡  Alpha & RGBA Adjuster  |  File Converter  ⚡⛈",
+    "Golden Hour":       "🌇✨  Alpha & RGBA Adjuster  |  File Converter  ✨🌇",
+    "Ghost":             "👻🌙  Alpha & RGBA Adjuster  |  File Converter  🌙👻",
+    "Snake Pit":         "🐍☠  Alpha & RGBA Adjuster  |  File Converter  ☠🐍",
+    "Slime":             "🟢🫧  Alpha & RGBA Adjuster  |  File Converter  🫧🟢",
 }
 
 THEME_STATUS_MESSAGES = {
@@ -2063,15 +2226,29 @@ THEME_STATUS_MESSAGES = {
     # Animal themes
     "Purrfect Cats":     "🐱  Purrfect Cats — Meow, your pixels look great.",
     "Good Dog":          "🐶  Good Dog — Such image. Very convert. Wow.",
-    # Newest preset themes
+    # Hidden anime-style themes
     "Anime":             "🌸  Anime — Kawaii conversions unlocked!",
     "Waifu":             "💖  Waifu — Your perfect pixel companion.",
+    # Latest hidden themes
+    "Crystal Cave":      "💎  Crystal Cave — Crystalline precision in every pixel.",
+    "Glitch":            "📡  Glitch — Error 404: normalcy not found.",
+    "Wild West":         "🤠  Wild West — Rounding up them alphas, partner.",
+    "Pirate":            "🏴‍☠️  Pirate — Arr, ye files shall be converted, matey.",
+    "Deep Space":        "🛸  Deep Space — Boldly processing where none have gone.",
+    "Witch's Brew":      "🧙  Witch's Brew — Bubbling with pure image magic.",
+    "Lava Lamp":         "🪔  Lava Lamp — Slow, hypnotic, and surprisingly functional.",
+    "Coral Reef":        "🪸  Coral Reef — Vibrant depths, vivid output.",
+    "Storm Cloud":       "⛈  Storm Cloud — Charged and crackling with energy.",
+    "Golden Hour":       "🌇  Golden Hour — That perfect warm glow at its best.",
+    "Ghost":             "👻  Ghost — Boo! Processing through the ethereal plane.",
+    "Snake Pit":         "🐍  Snake Pit — Ssslithering through your file queue.",
+    "Slime":             "🟢  Slime — Oozing through your files with slimy efficiency.",
 }
 
 
 def get_theme_banner(theme_name: str) -> str:
     """Return the header banner text for *theme_name*, falling back to default."""
-    return THEME_BANNER.get(theme_name, "🐼  Alpha & RGBA Adjuster  |  File Converter")
+    return _brand_banner(THEME_BANNER.get(theme_name, f"🐼  {APP_NAME}"))
 
 
 # Single representative emoji for each theme — used for the animated banner icon.
@@ -2124,6 +2301,17 @@ THEME_ICON: dict[str, str] = {
     "Snake Pit":         "🐍",
     "Ghost":             "👻",
     "Slime":             "🟢",
+    # Latest hidden themes
+    "Crystal Cave":      "💎",
+    "Glitch":            "📡",
+    "Wild West":         "🤠",
+    "Pirate":            "🏴‍☠️",
+    "Deep Space":        "🛸",
+    "Witch's Brew":      "🧙",
+    "Lava Lamp":         "🪔",
+    "Coral Reef":        "🪸",
+    "Storm Cloud":       "⛈",
+    "Golden Hour":       "🌇",
 }
 
 
@@ -2189,13 +2377,24 @@ _THEME_TAB_EMOJIS: dict[str, tuple[str, str, str]] = {
     "Snake Pit":        ("🐍🖼", "🐍🔄", "🐍📋"),
     "Ghost":            ("👻🖼", "👻🔄", "👻📋"),
     "Slime":            ("🟢🖼", "🟢🔄", "🟢📋"),
+    # Latest hidden themes
+    "Crystal Cave":     ("💎🖼", "💎🔄", "💎📋"),
+    "Glitch":           ("📡🖼", "📡🔄", "📡📋"),
+    "Wild West":        ("🤠🖼", "🤠🔄", "🤠📋"),
+    "Pirate":           ("🏴‍☠️🖼", "🏴‍☠️🔄", "🏴‍☠️📋"),
+    "Deep Space":       ("🛸🖼", "🛸🔄", "🛸📋"),
+    "Witch's Brew":     ("🧙🖼", "🧙🔄", "🧙📋"),
+    "Lava Lamp":        ("🪔🖼", "🪔🔄", "🪔📋"),
+    "Coral Reef":       ("🪸🖼", "🪸🔄", "🪸📋"),
+    "Storm Cloud":      ("⛈🖼", "⛈🔄", "⛈📋"),
+    "Golden Hour":      ("🌇🖼", "🌇🔄", "🌇📋"),
 }
 
 _DEFAULT_TAB_EMOJIS = ("🖼", "🔄", "📋")
 
 
 def get_theme_tab_labels(theme_name: str) -> tuple[str, str, str]:
-    """Return theme-specific (alpha_fixer_label, converter_label, history_label).
+    """Return theme-specific labels for the Alpha, Converter, and History tabs.
 
     Each theme has its own emoji prefix from ``_THEME_TAB_EMOJIS``, so the
     tabs visually reflect the active theme.  The labels are *static* per theme
@@ -3453,6 +3652,42 @@ def _get_theme_gradient_css(t: dict) -> str:
     return ""
 
 
+def _painted_color(foreground, background):
+    """Composite QColor's ARGB colors in Qt's painted sRGB space."""
+    fr, fg, fb, fa = _parse_color(foreground)
+    br, bg, bb, _ = _parse_color(background)
+    alpha = fa / 255.0
+    return _to_hex(tuple(
+        int(round(front * alpha + back * (1 - alpha)))
+        for front, back in ((fr, br), (fg, bg), (fb, bb))
+    ))
+
+
+def _readable_color(backgrounds, *candidates) -> str:
+    """Choose text on resolved solid fills, including foreground alpha.
+
+    Custom images/gradients and unknown parent surfaces cannot be guaranteed.
+    """
+    backgrounds = list(backgrounds)
+    background_luminances = [_luminance(value) for value in backgrounds]
+    for candidate in (*candidates, "#000000", "#ffffff"):
+        foregrounds = [_luminance(_painted_color(candidate, bg)) for bg in backgrounds]
+        if all((max(fg, bg) + 0.05) / (min(fg, bg) + 0.05) >= 4.5
+               for fg, bg in zip(foregrounds, background_luminances)):
+            return candidate
+    # Unusually contrasting custom surfaces may have no mutually readable color.
+    surface = background_luminances[0]
+    return "#000000" if surface > 0.179 else "#ffffff"
+
+
+def _readable_disabled_color(theme: dict) -> str:
+    """Keep disabled text legible while preferring the theme's muted color."""
+    background = _painted_color(theme["background"], DEFAULT_THEME["background"])
+    surface = _painted_color(theme["surface"], background)
+    return _readable_color(
+        (surface, background), theme["text_secondary"], theme["text"])
+
+
 def build_stylesheet(theme: Optional[dict] = None, tooltip_style: str = "Auto (follow theme)") -> str:
     """Generate a full Qt stylesheet from the given theme dictionary.
 
@@ -3462,6 +3697,23 @@ def build_stylesheet(theme: Optional[dict] = None, tooltip_style: str = "Auto (f
     "Neon", "Classic" to force a fixed visual style for all tooltips.
     """
     t = {**DEFAULT_THEME, **(theme or {})}
+    disabled_text = _readable_disabled_color(t)
+    background = _painted_color(t["background"], DEFAULT_THEME["background"])
+    surface = _painted_color(t["surface"], background)
+
+    def action_fills(key):
+        return tuple(_painted_color(t[key], parent) for parent in (surface, background))
+
+    button_text = _readable_color(action_fills("button_bg"), t["text"], t["panda_white"])
+    tab_text = _readable_color((_painted_color(t["primary"], background),),
+                               t["text_secondary"], t["text"], t["panda_white"])
+    selected_text = _readable_color((_painted_color(t["tab_selected"], background),),
+                                    t["panda_white"], t["text"])
+    hover_text = _readable_color(action_fills("button_hover"), t["panda_white"], t["text"])
+    accent_text = _readable_color(action_fills("accent"), t["panda_white"], t["text"])
+    accent_focus = _readable_color(
+        (*action_fills("accent"), *action_fills("button_hover")),
+        t["text_secondary"], t["text"])
     return f"""
 /* ===== Global ===== */
 QWidget {{
@@ -3503,28 +3755,28 @@ QTabBar[objectName="qt_tabwidget_tabbar"] {{
 }}
 QTabBar::tab {{
     background: {t['primary']};
-    color: {t['text_secondary']};
-    padding: 5px 14px;
-    min-width: 80px;
-    min-height: 22px;
+    color: {tab_text};
+    padding: 7px 16px;
+    min-width: 108px;
+    min-height: 28px;
     margin-right: 3px;
     border: 2px solid {t['border']};
     border-bottom: none;
     border-top-left-radius: 8px;
     border-top-right-radius: 8px;
     font-weight: 600;
-    font-size: 11px;
+    font-size: 12px;
 }}
 QTabBar::tab:selected {{
     background: {t['tab_selected']};
-    color: {t['panda_white']};
+    color: {selected_text};
     border: 2px solid {t['tab_selected']};
     border-bottom: none;
     margin-bottom: -2px;
 }}
 QTabBar::tab:hover:!selected {{
     background: {t['button_hover']};
-    color: {t['panda_white']};
+    color: {hover_text};
     border-color: {t['accent']};
 }}
 /* Fill the space to the right of the last tab with the background colour */
@@ -3538,16 +3790,38 @@ QTabBar::scroller {{
     border: none;
     width: 20px;
 }}
+/* Styled arrow buttons for tab bar overflow (item 43) */
 QTabBar QToolButton {{
-    background: {t['background']};
+    background: {t['surface']};
     border: 1px solid {t['border']};
     border-radius: 4px;
+    padding: 2px 4px;
+    font-size: 11px;
+    min-width: 18px;
+    min-height: 18px;
+}}
+QTabBar QToolButton:hover {{
+    background: {t['button_hover']};
+    border-color: {t['accent']};
+    color: {hover_text};
+}}
+QTabBar QToolButton:pressed {{
+    background: {t['accent']};
+    color: {accent_text};
+}}
+QTabBar QToolButton:disabled {{
+    background: {t['background']};
+    border-color: {t['border']};
+    color: {t['text_secondary']};
 }}
 
 /* ===== Buttons ===== */
+QToolButton {{
+    border: 1px solid transparent;
+}}
 QPushButton {{
     background-color: {t['button_bg']};
-    color: {t['text']};
+    color: {button_text};
     border: 1px solid {t['border']};
     border-radius: 6px;
     padding: 7px 16px;
@@ -3555,11 +3829,23 @@ QPushButton {{
 }}
 QPushButton:hover {{
     background-color: {t['button_hover']};
-    color: {t['panda_white']};
+    color: {hover_text};
     border-color: {t['accent']};
 }}
 QPushButton:pressed {{
     background-color: {t['accent']};
+    color: {accent_text};
+}}
+QPushButton:checked {{
+    background-color: {t['accent']};
+    color: {accent_text};
+    border: 2px solid {t['button_hover']};
+    font-weight: 700;
+}}
+QPushButton:checked:hover {{
+    background-color: {t['button_hover']};
+    color: {hover_text};
+    border-color: {t['panda_white']};
 }}
 QPushButton:disabled {{
     background-color: {t['border']};
@@ -3569,13 +3855,14 @@ QPushButton:disabled {{
 /* ===== Accent Buttons ===== */
 QPushButton#accent {{
     background-color: {t['accent']};
-    color: {t['panda_white']};
-    border: none;
+    color: {accent_text};
+    border: 1px solid transparent;
     font-size: 14px;
     padding: 9px 20px;
 }}
 QPushButton#accent:hover {{
     background-color: {t['button_hover']};
+    color: {hover_text};
 }}
 
 /* ===== Line Edits / Inputs ===== */
@@ -3615,8 +3902,9 @@ QComboBox::drop-down {{
     background: {t['primary']};
 }}
 QComboBox::down-arrow {{
+    image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M0 0L10 0L5 6z' fill='{t['text'].replace('#','%23')}'/%3E%3C/svg%3E");
     width: 10px;
-    height: 10px;
+    height: 6px;
 }}
 QComboBox QAbstractItemView {{
     background-color: {t['surface']};
@@ -3642,8 +3930,8 @@ QSpinBox:focus, QDoubleSpinBox:focus {{
 QSpinBox::up-button, QDoubleSpinBox::up-button {{
     subcontrol-origin: border;
     subcontrol-position: top right;
-    width: 20px;
-    height: 14px;
+    width: 22px;
+    height: 16px;
     background: {t['primary']};
     border: 1px solid {t['border']};
     border-top-right-radius: 4px;
@@ -3651,8 +3939,8 @@ QSpinBox::up-button, QDoubleSpinBox::up-button {{
 QSpinBox::down-button, QDoubleSpinBox::down-button {{
     subcontrol-origin: border;
     subcontrol-position: bottom right;
-    width: 20px;
-    height: 14px;
+    width: 22px;
+    height: 16px;
     background: {t['primary']};
     border: 1px solid {t['border']};
     border-bottom-right-radius: 4px;
@@ -3660,6 +3948,16 @@ QSpinBox::down-button, QDoubleSpinBox::down-button {{
 QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
 QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{
     background: {t['accent']};
+}}
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
+    image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7'%3E%3Cpath d='M5 0L10 7H0z' fill='{t['text'].replace('#','%23')}'/%3E%3C/svg%3E");
+    width: 10px;
+    height: 7px;
+}}
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
+    image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7'%3E%3Cpath d='M0 0L10 0L5 7z' fill='{t['text'].replace('#','%23')}'/%3E%3C/svg%3E");
+    width: 10px;
+    height: 7px;
 }}
 
 /* ===== Sliders ===== */
@@ -3670,6 +3968,7 @@ QSlider::groove:horizontal {{
 }}
 QSlider::handle:horizontal {{
     background: {t['accent']};
+    border: 1px solid transparent;
     width: 18px;
     height: 18px;
     margin: -6px 0;
@@ -3706,6 +4005,75 @@ QLabel#subheader {{
     font-size: 14px;
     font-weight: 600;
     color: {t['text_secondary']};
+}}
+QLabel[settingsHint="true"] {{
+    color: {t['text']};
+    margin-left: 4px;
+}}
+QLabel[toolGuidance="true"], QLabel[previewZoomValue="true"] {{
+    color: {t['text']};
+}}
+QFrame#zoomOverlayBar, QFrame#zoomOverlay, QFrame#historyOverlay {{
+    background-color: {t['surface']};
+    border: 1px solid {t['border']};
+    border-radius: 6px;
+}}
+QPushButton[previewOverlay="true"] {{
+    background-color: {t['surface']};
+    color: {t['text']};
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 2px 3px;
+    min-width: 24px;
+    min-height: 20px;
+}}
+QPushButton[previewOverlay="true"]:hover {{
+    background-color: {t['button_hover']};
+    color: {hover_text};
+}}
+QLabel[statusTone] {{
+    color: {t['text']};
+}}
+QLabel[statusTone="success"], QLabel[statusTone="warning"], QLabel[statusTone="error"] {{
+    background-color: {t['surface']};
+    padding: 4px 6px;
+    border: 1px solid {t['success']};
+    border-radius: 4px;
+}}
+QLabel[statusTone="warning"] {{
+    border-color: {t['warning']};
+}}
+QLabel[statusTone="error"] {{
+    border-color: {t['error']};
+}}
+QLabel[capabilityState="limited"], QLabel[capabilityState="ready"] {{
+    color: {t['text']};
+    background-color: {t['surface']};
+    padding: 4px 6px;
+    border: 1px solid {t['warning']};
+    border-radius: 4px;
+}}
+QLabel[capabilityState="ready"] {{
+    border-color: {t['success']};
+}}
+QLabel[settingsGuide="true"] {{
+    color: {t['text']};
+    background-color: {t['surface']};
+    padding: 6px 8px;
+    border: 1px solid {t['border']};
+    border-radius: 6px;
+}}
+QPushButton#resetBtn {{
+    background-color: {t['surface']};
+    color: {t['error']};
+    border: 1px solid {t['error']};
+    border-radius: 4px;
+    padding: 4px 8px;
+}}
+QPushButton#resetBtn:hover, QPushButton#resetBtn:pressed {{
+    color: {t['text']};
+    background-color: {t['surface']};
+    border-color: {t['error']};
 }}
 QLabel#section {{
     font-size: 13px;
@@ -3914,4 +4282,77 @@ QFrame#card {{
 {_get_tooltip_css(t, tooltip_style)}
 {_get_theme_gradient_css(t)}
 {_get_theme_extra_css(t)}
+
+/* ===== Keyboard Focus (preserve existing border widths) ===== */
+QToolButton:enabled:focus, QTabBar QToolButton:enabled:focus {{
+    border-style: dotted;
+    border-color: {t['text']};
+}}
+QSlider::handle:horizontal:enabled:focus {{
+    border-style: dotted;
+    border-color: {accent_focus};
+}}
+QPushButton:enabled:focus, QPushButton#accent:enabled:focus,
+QPushButton#resetBtn:enabled:focus,
+QLineEdit:enabled:focus, QTextEdit:enabled:focus, QPlainTextEdit:enabled:focus,
+QComboBox:enabled:focus, QSpinBox:enabled:focus, QDoubleSpinBox:enabled:focus {{
+    border-style: dotted;
+    border-color: {t['text']};
+}}
+QPushButton:enabled:focus {{
+    border-color: {button_text};
+}}
+QPushButton:enabled:hover:focus, QTabBar QToolButton:enabled:hover:focus {{
+    border-color: {hover_text};
+}}
+QPushButton#accent:enabled:focus, QPushButton:enabled:checked:focus {{
+    border-style: dotted;
+    border-color: {accent_focus};
+}}
+QPushButton#accent:enabled:hover:focus, QPushButton:enabled:checked:hover:focus {{
+    border-color: {hover_text};
+}}
+QPushButton#resetBtn:enabled:focus {{
+    border-color: {t['text']};
+}}
+QPushButton[previewOverlay="true"]:enabled:focus {{
+    border-style: dotted;
+    border-color: {t['text']};
+}}
+QPushButton[previewOverlay="true"]:enabled:hover:focus {{
+    border-color: {hover_text};
+}}
+QCheckBox::indicator:enabled:focus, QRadioButton::indicator:enabled:focus {{
+    border-style: dotted;
+    border-color: {t['text']};
+}}
+
+/* ===== Disabled Controls (after theme-specific decorations) ===== */
+QPushButton:disabled, QPushButton:disabled:hover, QPushButton:disabled:checked,
+QPushButton#accent:disabled, QPushButton#accent:disabled:hover,
+QPushButton#resetBtn:disabled, QPushButton#resetBtn:disabled:hover,
+QToolButton:disabled, QToolButton:disabled:hover {{
+    background-color: {t['surface']};
+    color: {disabled_text};
+    border: 1px dashed {t['border']};
+}}
+QLineEdit:disabled, QTextEdit:disabled, QPlainTextEdit:disabled,
+QComboBox:disabled, QComboBox:disabled:hover,
+QSpinBox:disabled, QDoubleSpinBox:disabled {{
+    background-color: {t['surface']};
+    color: {disabled_text};
+    border: 1px dashed {t['border']};
+}}
+QComboBox::drop-down:disabled,
+QSpinBox::up-button:disabled, QSpinBox::down-button:disabled,
+QDoubleSpinBox::up-button:disabled, QDoubleSpinBox::down-button:disabled {{
+    background-color: {t['surface']};
+    border-color: {t['border']};
+}}
+QCheckBox:disabled, QRadioButton:disabled {{
+    color: {disabled_text};
+}}
+QSlider::handle:horizontal:disabled, QSlider::sub-page:horizontal:disabled {{
+    background-color: {t['text_secondary']};
+}}
 """

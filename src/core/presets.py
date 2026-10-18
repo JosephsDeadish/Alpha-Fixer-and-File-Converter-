@@ -4,8 +4,11 @@ Preset definitions and manager for the Alpha & RGBA Adjuster tool.
 Built-in presets cover common game-console alpha conventions.
 Users can create, save, and delete their own presets.
 """
+import logging
 from dataclasses import dataclass, asdict
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -263,5 +266,5 @@ class PresetManager:
                 p.builtin = False
                 loaded.append(p)
             except Exception:
-                pass
+                logger.warning("Ignoring malformed custom preset record: %r", d, exc_info=True)
         self._custom = loaded
