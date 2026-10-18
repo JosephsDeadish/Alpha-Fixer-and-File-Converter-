@@ -277,7 +277,7 @@ class _FrameEntry:
                  source_delay_ms: Optional[int] = None, source_kind: str = ""):
         self.source_path = source_path
         self.source_kind = source_kind
-        self.frame_index = frame_index  # 0-based index within source (>0 for animated GIF)
+        self.frame_index = frame_index  # 0-based index within a multi-frame source
         self._pil = pil_image           # RGBA PIL image; ownership transferred here
         self.delay_ms: Optional[int] = delay_ms  # None = use global delay
         self.source_delay_ms: Optional[int] = source_delay_ms if source_delay_ms is not None else delay_ms
@@ -316,6 +316,8 @@ def _frame_source_kind(path: str, source_frames: int = 1) -> str:
         return "video"
     if ext == ".gif" and source_frames > 1:
         return "animated gif"
+    if ext == ".webp" and source_frames > 1:
+        return "animated WebP"
     return "image"
 
 

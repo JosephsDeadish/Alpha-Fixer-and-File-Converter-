@@ -406,6 +406,7 @@ def test_animated_webp_enters_editor_with_source_timing_and_undo_redo(builder, f
     assert [entry.frame_index for entry in entries] == [0, 1, 2, 0]
     assert [entry.delay_ms for entry in entries] == [80, 140, 230, None]
     assert [entry.source_delay_ms for entry in entries] == [80, 140, 230, None]
+    assert [entry.source_kind for entry in entries] == ["animated WebP"] * 3 + ["image"]
     assert [entry._pil.getpixel((1, 1)) for entry in entries] == [
         (255, 0, 0, 255), (0, 255, 0, 128), (0, 0, 255, 255), (40, 50, 60, 255),
     ]

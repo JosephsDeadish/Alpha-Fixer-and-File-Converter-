@@ -3,7 +3,6 @@ from unittest.mock import patch
 import pytest
 from PIL import Image, features
 from PyQt6 import sip
-from PyQt6.QtCore import QCoreApplication, QEvent
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
 
@@ -28,7 +27,6 @@ def builder(app):
     widget._project._release_session()
     widget.close()
     sip.delete(widget)
-    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     app.processEvents()
 
 
@@ -89,21 +87,6 @@ def export(builder, path):
     return decoded_delays(path)
 
 
-def export_inline(builder, path):
-    def run_worker_inline(worker):
-        worker.run()
-        worker.finished.emit()
-
-    with patch("src.ui.gif_builder.QFileDialog.getSaveFileName", return_value=(str(path), "")), \
-            patch("src.ui.gif_builder.QMessageBox.information"), \
-            patch("src.ui.gif_builder.QMessageBox.critical") as error, \
-    patch("src.ui.gif_builder.GifExportWorker.start", new=run_worker_inline):
-        builder._export()
-        wait_for_gif_export(builder)
-        error.assert_not_called()
-    return decoded_delays(path)
-
-
 def test_composited_gif_frames_keep_individual_source_duration(tmp_path):
     source, _ = make_sources(tmp_path)
     frames = _load_pillow_rgba(str(source))
@@ -150,7 +133,7 @@ def test_import_preview_export_preserve_variable_animated_webp_timing(builder, t
         assert builder._preview_timer.interval() == delay
         builder._advance_preview()
     assert builder._preview_idx == 0
-    assert export_inline(builder, tmp_path / "webp-roundtrip.gif") == [80, 140, 230]
+    assert export(builder, tmp_path / "webp-roundtrip.gif") == [80, 140, 230]
     assert not builder._preview_timer.isActive()
 
 
