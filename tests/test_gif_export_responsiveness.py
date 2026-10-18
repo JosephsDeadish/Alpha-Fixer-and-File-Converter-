@@ -38,6 +38,9 @@ def builder(tmp_path):
         if widget._export_worker is not None:
             widget._cancel_export()
             wait_for_gif_export(widget)
+        widget._project.timer.stop()
+        widget._project._closing_approved = True
+        widget._project._release_session()
         widget.close()
         sip.delete(widget)
         sip.delete(parent)
@@ -64,6 +67,50 @@ def assert_closed(images):
     for image in images:
         with pytest.raises(ValueError, match="closed image"):
             image.getpixel((0, 0))
+
+
+@pytest.mark.parametrize("optimize", [False, True])
+def test_export_preserves_binary_transparency_and_clears_prior_frame(builder, optimize):
+    _, widget, output, _, info, error = builder
+    for entry in widget._frames:
+        entry.close()
+    frames = [Image.new("RGBA", (8, 6), (20, 30, 40, 0)) for _ in range(3)]
+    frames[0].paste((255, 0, 0, 255), (0, 0, 2, 2))
+    frames[1].paste((0, 255, 0, 255), (4, 0, 6, 2))
+    frames[2].paste((0, 0, 255, 255), (2, 2, 4, 4))
+    frames[2].putpixel((7, 5), (255, 255, 0, 127))
+    frames[2].putpixel((6, 5), (255, 255, 0, 128))
+    widget._frames = [
+        _FrameEntry("transparent.png", index, frame, delay_ms=100)
+        for index, frame in enumerate(frames)
+    ]
+    widget._update_count()
+    widget._optimize_check.setChecked(optimize)
+
+    widget._export()
+    wait_for_gif_export(widget)
+
+    info.assert_called_once()
+    error.assert_not_called()
+    with Image.open(output) as result:
+        assert result.n_frames == 3
+        actual = []
+        for index in range(result.n_frames):
+            result.seek(index)
+            with result.convert("RGBA") as frame:
+                actual.append(
+                    (frame.getpixel((0, 0)), frame.getpixel((4, 0)),
+                     frame.getpixel((2, 2)), frame.getpixel((7, 5)),
+                     frame.getpixel((6, 5)))
+                )
+    assert actual == [
+        ((255, 0, 0, 255), (0, 0, 0, 0), (0, 0, 0, 0),
+         (0, 0, 0, 0), (0, 0, 0, 0)),
+        ((0, 0, 0, 0), (0, 255, 0, 255), (0, 0, 0, 0),
+         (0, 0, 0, 0), (0, 0, 0, 0)),
+        ((0, 0, 0, 0), (0, 0, 0, 0), (0, 0, 255, 255),
+         (0, 0, 0, 0), (255, 255, 0, 255)),
+    ]
 
 
 def test_slow_encoding_keeps_event_loop_alive_and_blocks_duplicate_edit_import(builder):
@@ -145,12 +192,16 @@ def test_cancel_during_save_discards_output_and_defers_close(builder, cancel):
             elif cancel == "programmatic":
                 widget._export_progress.cancel()
             elif cancel == "public":
+                widget._project._closing_approved = True
                 widget.request_export_cancel()
             elif cancel == "close":
+                widget._project._closing_approved = True
                 assert not widget.close()
             elif cancel == "reject":
+                widget._project._closing_approved = True
                 widget.reject()
             else:
+                widget._project._closing_approved = True
                 widget.accept()
             wait_until(lambda: widget._export_canceling)
             assert worker.isRunning()
@@ -233,6 +284,7 @@ def test_cancel_before_snapshot_start_does_not_encode_or_publish(builder):
     with patch.object(Image.Image, "save") as save:
         widget._export()
         assert widget.is_exporting()
+        widget._project._closing_approved = True
         widget.request_export_cancel()
         wait_for_gif_export(widget)
     assert not widget.is_exporting()
@@ -325,6 +377,7 @@ def test_late_cancel_during_atomic_publish_does_not_block_gui(builder):
             # Publication has committed to replacing the destination: cancellation
             # must return immediately rather than wait on its filesystem lock.
             assert not worker.cancel()
+            widget._project._closing_approved = True
             widget.request_export_cancel()
             assert not widget._export_canceling
             heartbeat = []
@@ -350,6 +403,7 @@ def test_snapshot_error_during_shutdown_emits_safe_completion_without_modal(buil
     ))
 
     def fail_snapshot():
+        widget._project._closing_approved = True
         widget.request_export_cancel()
         raise OSError("snapshot failed during shutdown")
 
@@ -384,6 +438,7 @@ def test_real_main_window_close_waits_for_parented_gif_worker_cleanup(tmp_path):
         _FrameEntry("red.png", 0, Image.new("RGBA", (18, 12), "red"), delay_ms=80),
         _FrameEntry("blue.png", 0, Image.new("RGBA", (18, 12), "blue"), delay_ms=140),
     ]
+    widget._project._closing_approved = True
     widget._update_count()
     output = tmp_path / "parented.gif"
     output.write_bytes(b"old destination")
@@ -485,6 +540,7 @@ def test_shutdown_after_native_finish_before_queued_cleanup_never_opens_modal(bu
             assert worker.outcome == outcome
             assert worker.frames == ()
             assert widget.is_exporting()
+            widget._project._closing_approved = True
             widget.request_export_cancel()
             assert widget._close_after_export
             wait_for_gif_export(widget)

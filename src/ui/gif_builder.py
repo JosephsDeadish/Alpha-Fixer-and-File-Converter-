@@ -885,7 +885,10 @@ class GifBuilderDialog(QDialog):
         # Export row
         export_row = QHBoxLayout()
         self._btn_export = QPushButton("💾  Export GIF…")
-        self._btn_export.setToolTip("Export the current frame timeline as a GIF.  Shortcut: Ctrl+S")
+        self._btn_export.setToolTip(
+            "Export the current frame timeline as a GIF. GIF supports binary transparency; "
+            "pixels with alpha below 128 become transparent. Shortcut: Ctrl+S"
+        )
         self._btn_export.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._btn_export.clicked.connect(self._export)
         export_row.addStretch()

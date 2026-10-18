@@ -20,6 +20,62 @@ class _ExportCanceled(Exception):
     pass
 
 
+_GIF_TRANSPARENCY_INDEX = 255
+_GIF_ALPHA_THRESHOLD = 128
+
+
+def _has_gif_transparency(frame: Image.Image) -> bool:
+    rgba = frame if frame.mode == "RGBA" else frame.convert("RGBA")
+    owns_rgba = rgba is not frame
+    alpha = transparent = None
+    try:
+        alpha = rgba.getchannel("A")
+        transparent = alpha.point(
+            lambda value: 255 if value < _GIF_ALPHA_THRESHOLD else 0
+        )
+        return transparent.getbbox() is not None
+    finally:
+        if transparent is not None:
+            transparent.close()
+        if alpha is not None:
+            alpha.close()
+        if owns_rgba:
+            rgba.close()
+
+
+def _quantize_gif_frame(frame: Image.Image, *, reserve_transparency: bool) -> Image.Image:
+    rgba = frame if frame.mode == "RGBA" else frame.convert("RGBA")
+    owns_rgba = rgba is not frame
+    alpha = rgba.getchannel("A")
+    transparent = alpha.point(
+        lambda value: 255 if value < _GIF_ALPHA_THRESHOLD else 0
+    )
+    rgb = rgba.convert("RGB")
+    indexed = None
+    try:
+        if reserve_transparency:
+            rgb.paste((0, 0, 0), mask=transparent)
+        indexed = rgb.quantize(
+            colors=255 if reserve_transparency else 256,
+            method=Image.Quantize.FASTOCTREE,
+            dither=0,
+        )
+        if reserve_transparency:
+            indexed.paste(_GIF_TRANSPARENCY_INDEX, mask=transparent)
+            indexed.info["transparency"] = _GIF_TRANSPARENCY_INDEX
+        result = indexed
+        indexed = None
+        return result
+    finally:
+        if owns_rgba:
+            rgba.close()
+        alpha.close()
+        transparent.close()
+        rgb.close()
+        if indexed is not None:
+            indexed.close()
+
+
 class GifExportWorker(QThread):
     progress = pyqtSignal(int, str)
 
@@ -58,6 +114,12 @@ class GifExportWorker(QThread):
         durations = []
         settings = self.settings
         try:
+            has_transparency = False
+            for source, _ in self.frames:
+                self._checkpoint()
+                if _has_gif_transparency(source):
+                    has_transparency = True
+                    break
             for index, (source, delay) in enumerate(self.frames):
                 self._checkpoint()
                 self.progress.emit(index, f"Building GIF… frame {index + 1} / {len(self.frames)}")
@@ -69,9 +131,12 @@ class GifExportWorker(QThread):
                             Image.Resampling.LANCZOS,
                         )
                     self._checkpoint()
-                    prepared.append(frame.quantize(
-                        colors=255, method=Image.Quantize.FASTOCTREE, dither=0,
-                    ))
+                    prepared.append(
+                        _quantize_gif_frame(
+                            frame,
+                            reserve_transparency=has_transparency,
+                        )
+                    )
                 finally:
                     frame.close()
                 durations.append(delay)
@@ -85,11 +150,19 @@ class GifExportWorker(QThread):
             try:
                 with staged_output_path(settings.output) as staged_path:
                     self._checkpoint()
+                    transparency_options = {}
+                    if has_transparency:
+                        transparency_options = {
+                            "transparency": _GIF_TRANSPARENCY_INDEX,
+                            "background": _GIF_TRANSPARENCY_INDEX,
+                            "disposal": [2] * len(prepared),
+                        }
                     prepared[0].save(
                         staged_path, format="GIF", save_all=True,
                         append_images=prepared[1:],
                         duration=durations if len(prepared) > 1 else durations[0],
                         loop=settings.loop, optimize=settings.optimize,
+                        **transparency_options,
                     )
                     self._publish_lock.acquire()
                     locked = True
